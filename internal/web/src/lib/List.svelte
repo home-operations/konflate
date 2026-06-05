@@ -96,6 +96,9 @@
         <span class="spacer"></span>
         {#if pr.signals}
           <span class="badges">
+            {#if pr.refreshError}
+              <span class="badge caution" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
+            {/if}
             {#if pr.signals.danger}
               <span class="badge danger" title="danger warnings"><Icon path={mdiAlertOctagon} size={13} /> {pr.signals.danger}</span>
             {/if}

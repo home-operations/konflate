@@ -13,6 +13,7 @@ interface Store {
   diff: DiffResult | null;
   diffFor: number | null; // PR number the diff/loading belongs to
   diffError: string;
+  diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   loading: boolean;
   connected: boolean;
 }
@@ -25,6 +26,7 @@ export const store: Store = $state({
   diff: null,
   diffFor: null,
   diffError: '',
+  diffRefreshError: '',
   loading: false,
   connected: false,
 });
@@ -148,6 +150,7 @@ function applyEnvelope(env: DiffEnvelope): void {
     store.diff = env.diff;
     injectChroma(env.diff.chromaCss);
     store.diffError = '';
+    store.diffRefreshError = env.refreshError ?? '';
   } else if (env.status === 'error') {
     store.diffError = env.error ?? 'render failed';
   }

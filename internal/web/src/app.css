@@ -619,6 +619,17 @@ body {
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--merged) 30%, var(--border));
 }
+.refresh-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--caution-bg);
+  color: var(--caution);
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, var(--caution) 30%, var(--border));
+}
 .tabs {
   display: flex;
   gap: 4px;

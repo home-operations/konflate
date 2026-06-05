@@ -391,17 +391,52 @@ func TestStore_ClosedJobRejectsLateWrites(t *testing.T) {
 
 	// The stale in-flight render finishes after the PR was shelved.
 	st.setStatus(api.PR{Number: 1}, api.JobRunning)
-	st.setError(1, "engine: clone PR #1: gitclone: head ref no longer exists on remote")
+	if st.failRender(1, "engine: clone PR #1: gitclone: head ref no longer exists on remote") {
+		t.Error("failRender reported keeping a diff for a shelved PR")
+	}
 
 	env, _ := st.get(1)
 	if env.Status != api.JobReady {
 		t.Errorf("shelved PR status = %q, want ready (late writes ignored)", env.Status)
 	}
-	if env.Error != "" {
-		t.Errorf("shelved PR error = %q, want empty (late setError ignored)", env.Error)
+	if env.Error != "" || env.RefreshError != "" {
+		t.Errorf("shelved PR error = %q/%q, want empty (late failRender ignored)", env.Error, env.RefreshError)
 	}
 	if env.Diff == nil {
 		t.Error("shelved PR lost its frozen diff to a late write")
+	}
+}
+
+func TestStore_FailRenderKeepsLastGoodDiff(t *testing.T) {
+	t.Parallel()
+	st := newStore()
+	st.upsertPR(api.PR{Number: 1, Open: true})
+
+	// Never rendered → a failure flips it to the error state.
+	if st.failRender(1, "boom") {
+		t.Error("failRender kept a diff for a never-rendered PR")
+	}
+	if env, _ := st.get(1); env.Status != api.JobError || env.Error == "" {
+		t.Fatalf("never-rendered failure: status=%q err=%q, want error", env.Status, env.Error)
+	}
+
+	// After a good render, a failure keeps the diff and flags refreshError
+	// instead of clobbering it (a transient forge/git outage must not wipe it).
+	st.setResult(1, api.DiffResult{PRNumber: 1})
+	if !st.failRender(1, "forge down") {
+		t.Error("failRender dropped a good diff on a transient failure")
+	}
+	env, _ := st.get(1)
+	if env.Status != api.JobReady || env.Diff == nil {
+		t.Fatalf("kept-render: status=%q diff=%v, want ready+diff", env.Status, env.Diff)
+	}
+	if env.RefreshError != "forge down" {
+		t.Errorf("refreshError = %q, want %q", env.RefreshError, "forge down")
+	}
+	// A later success clears the refresh-error flag.
+	st.setResult(1, api.DiffResult{PRNumber: 1})
+	if env, _ := st.get(1); env.RefreshError != "" {
+		t.Errorf("refreshError = %q after success, want empty", env.RefreshError)
 	}
 }
 
