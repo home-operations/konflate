@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/home-operations/konflate/internal/config"
@@ -32,6 +33,9 @@ func TestParse(t *testing.T) {
 			`{"action":"synchronize","pull_request":{"number":9}}`, 9, false},
 		{"github non-PR event → relist", config.ForgeGitHub, hdr("X-GitHub-Event", "ping"), `{}`, 0, true},
 		{"github malformed → relist", config.ForgeGitHub, hdr("X-GitHub-Event", "pull_request"), `not json`, 0, true},
+		// GitHub's default content type wraps the JSON in a `payload=` form field.
+		{"github form-encoded synchronize → that PR", config.ForgeGitHub, hdr("X-GitHub-Event", "pull_request"),
+			"payload=" + url.QueryEscape(`{"action":"synchronize","number":7,"pull_request":{"number":7}}`), 7, false},
 
 		// Forgejo / Gitea
 		{"forgejo synchronized → that PR", config.ForgeForgejo, hdr("X-Gitea-Event", "pull_request"),

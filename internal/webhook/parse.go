@@ -1,10 +1,13 @@
 package webhook
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/home-operations/konflate/internal/config"
 )
@@ -23,6 +26,7 @@ type Event struct {
 // cannot confidently interpret yields Relist (a full re-list), which is always
 // safe — at worst it does more work than necessary.
 func Parse(forge config.ForgeKind, header http.Header, body []byte) Event {
+	body = unwrapFormPayload(header, body)
 	switch forge {
 	case config.ForgeGitHub:
 		return parsePullRequest(header.Get("X-GitHub-Event") == "pull_request", body)
@@ -32,6 +36,25 @@ func Parse(forge config.ForgeKind, header http.Header, body []byte) Event {
 		return parseMergeRequest(body)
 	}
 	return Event{Relist: true}
+}
+
+// unwrapFormPayload returns the JSON document from a webhook body. GitHub and
+// Gitea/Forgejo default to the application/x-www-form-urlencoded content type,
+// which wraps the JSON in a `payload=` form field; unwrap it so the parsers
+// always see raw JSON — otherwise a content event fails to parse and degrades to
+// a full re-list. Signature verification runs over the original body upstream,
+// so unwrapping here never affects authentication.
+func unwrapFormPayload(header http.Header, body []byte) []byte {
+	if !strings.HasPrefix(header.Get("Content-Type"), "application/x-www-form-urlencoded") &&
+		!bytes.HasPrefix(body, []byte("payload=")) {
+		return body
+	}
+	if v, err := url.ParseQuery(string(body)); err == nil {
+		if p := v.Get("payload"); p != "" {
+			return []byte(p)
+		}
+	}
+	return body
 }
 
 // parsePullRequest handles GitHub and Forgejo/Gitea, whose "pull_request"
