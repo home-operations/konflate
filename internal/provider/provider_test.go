@@ -19,7 +19,7 @@ const githubPullsJSON = `[
     "title": "feat: add widget",
     "state": "open",
     "draft": false,
-    "user": {"login": "octocat"},
+    "user": {"login": "octocat", "avatar_url": "https://avatars.example/u/octocat.png"},
     "head": {"ref": "feat/widget", "sha": "deadbeefcafe"},
     "base": {"ref": "main"},
     "labels": [{"name": "enhancement"}, {"name": "area/ui"}],
@@ -68,6 +68,9 @@ func TestGitHubProvider_ListPRs(t *testing.T) {
 	}
 	if got.URL != "https://github.com/acme/web/pull/7" {
 		t.Errorf("url = %q", got.URL)
+	}
+	if got.AuthorAvatar != "https://avatars.example/u/octocat.png" {
+		t.Errorf("authorAvatar = %q", got.AuthorAvatar)
 	}
 }
 

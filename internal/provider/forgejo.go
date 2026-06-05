@@ -63,23 +63,25 @@ func (p *forgejoProvider) GetPR(ctx context.Context, number int) (api.PR, error)
 }
 
 func forgejoToPR(pr *forgejo.PullRequest) api.PR {
-	var author string
+	var author, avatar string
 	if pr.Poster != nil {
 		author = pr.Poster.UserName
+		avatar = pr.Poster.AvatarURL
 	}
 	labels := make([]string, 0, len(pr.Labels))
 	for _, l := range pr.Labels {
 		labels = append(labels, l.Name)
 	}
 	out := api.PR{
-		Number: int(pr.Index),
-		Title:  pr.Title,
-		Author: author,
-		State:  string(pr.State),
-		Open:   string(pr.State) == stateOpen,
-		Merged: pr.HasMerged,
-		Labels: labels,
-		URL:    pr.HTMLURL,
+		Number:       int(pr.Index),
+		Title:        pr.Title,
+		Author:       author,
+		AuthorAvatar: avatar,
+		State:        string(pr.State),
+		Open:         string(pr.State) == stateOpen,
+		Merged:       pr.HasMerged,
+		Labels:       labels,
+		URL:          pr.HTMLURL,
 	}
 	if pr.Head != nil {
 		out.HeadRef, out.HeadSHA = pr.Head.Ref, pr.Head.Sha

@@ -59,6 +59,12 @@ body {
   vertical-align: -0.15em;
   flex: 0 0 auto;
 }
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: var(--panel-alt);
+}
 .add {
   color: var(--ok);
 }

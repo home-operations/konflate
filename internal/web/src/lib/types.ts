@@ -7,6 +7,7 @@ export interface PR {
   number: number;
   title: string;
   author: string;
+  authorAvatar?: string; // same-origin /api/avatar proxy path, or absent
   state: string;
   open: boolean; // normalized open flag (forge state strings differ)
   merged?: boolean; // closed via merge (vs abandoned)

@@ -4,6 +4,7 @@
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
+  import Avatar from './Avatar.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -11,7 +12,6 @@
     mdiAlertCircleOutline,
     mdiFileDocumentOutline,
     mdiClockOutline,
-    mdiAccountOutline,
     mdiTagOutline,
     mdiSourceBranch,
     mdiFilterOutline,
@@ -72,7 +72,7 @@
         {#if !pr.open}<span class="tag merged-tag"><Icon path={mdiSourceMerge} size={11} /> merged</span>{/if}
       </div>
       <div class="card-meta">
-        <span class="card-author"><Icon path={mdiAccountOutline} size={12} /> {pr.author || 'unknown'}</span>
+        <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if !pr.open && pr.closedAt}
           <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
         {:else if pr.updatedAt}

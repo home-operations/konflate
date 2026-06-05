@@ -14,6 +14,10 @@ export const samplePRs: PRStatus[] = [
     number: 142,
     title: 'feat(rook-ceph): bump operator to v1.15.0',
     author: 'renovate[bot]',
+    // Tiny inline PNG so the avatar renders in tests without a network round-trip
+    // (real instances get a same-origin /api/avatar path here).
+    authorAvatar:
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
     state: 'open',
     open: true,
     draft: false,

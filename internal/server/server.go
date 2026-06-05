@@ -8,6 +8,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -43,15 +44,20 @@ type Server struct {
 	metrics *metrics
 	queue   *queue
 	runCtx  context.Context
+
+	avatarKey []byte // HMAC key for signing the same-origin /api/avatar proxy URLs
 }
 
 // New assembles a Server. ui is the embedded UI filesystem (rooted at the
 // directory holding index.html). The queue is created in Run, bound to the run
 // context.
 func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *slog.Logger) *Server {
+	avatarKey := make([]byte, 32)
+	_, _ = rand.Read(avatarKey) // crypto/rand; signs the same-origin avatar-proxy URLs
 	return &Server{
 		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
 		store: newStore(), hub: newHub(log), metrics: newMetrics(),
+		avatarKey: avatarKey,
 	}
 }
 
@@ -157,6 +163,7 @@ func (s *Server) mainHandler() http.Handler {
 	mux.HandleFunc("GET /api/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/prs", s.handleListPRs)
 	mux.HandleFunc("GET /api/prs/{number}/diff", s.handleDiff)
+	mux.HandleFunc("GET /api/avatar", s.handleAvatar)
 	mux.HandleFunc("GET /ws", s.hub.serveWS)
 
 	// No manual-refresh endpoint: konflate auto-refreshes (per-PR staleness +

@@ -2,12 +2,17 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/webhook"
@@ -46,7 +51,11 @@ func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleListPRs(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.list())
+	list := s.store.list()
+	for i := range list {
+		list[i].AuthorAvatar = s.avatarProxyPath(list[i].AuthorAvatar)
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
@@ -60,12 +69,70 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{keyError: "unknown PR"})
 		return
 	}
+	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
 	// Ready and error are terminal (200); pending/running tell the UI to wait.
 	code := http.StatusOK
 	if env.Status == api.JobPending || env.Status == api.JobRunning {
 		code = http.StatusAccepted
 	}
 	writeJSON(w, code, env)
+}
+
+// avatarClient fetches author avatars with a tight timeout; responses are
+// size-capped and must be images (see handleAvatar).
+var avatarClient = &http.Client{Timeout: 8 * time.Second}
+
+const maxAvatarBytes = 2 << 20 // 2 MiB
+
+// avatarProxyPath rewrites a raw forge avatar URL into a signed, same-origin
+// /api/avatar path. The HMAC (a per-process key) means handleAvatar will only
+// fetch URLs konflate itself emitted, so the proxy can't be turned into an open
+// SSRF relay. Empty in, empty out.
+func (s *Server) avatarProxyPath(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, s.avatarKey)
+	mac.Write([]byte(raw))
+	return "/api/avatar?u=" + url.QueryEscape(raw) + "&s=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// handleAvatar proxies an author avatar so the browser loads it same-origin (the
+// CSP is img-src 'self'). Only URLs signed by avatarProxyPath are honored — the
+// HMAC check keeps this safe to expose publicly. Any failure returns an error
+// status, which the UI treats as "no avatar" and falls back to the person icon.
+func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query().Get("u")
+	mac := hmac.New(sha256.New, s.avatarKey)
+	mac.Write([]byte(raw))
+	got, err := hex.DecodeString(r.URL.Query().Get("s"))
+	if err != nil || !hmac.Equal(got, mac.Sum(nil)) {
+		writeJSON(w, http.StatusForbidden, map[string]string{keyError: "invalid avatar signature"})
+		return
+	}
+	if u, err := url.Parse(raw); err != nil || u.Scheme != "https" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{keyError: "avatar must be an https URL"})
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, raw, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar fetch failed"})
+		return
+	}
+	resp, err := avatarClient.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar fetch failed"})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	ct := resp.Header.Get("Content-Type")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(ct, "image/") {
+		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar unavailable"})
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = io.Copy(w, io.LimitReader(resp.Body, maxAvatarBytes))
 }
 
 // handlePush is the authenticated CI trigger to re-render a single PR. Guarded

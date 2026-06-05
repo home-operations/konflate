@@ -54,22 +54,24 @@ func (p *gitlabProvider) GetPR(ctx context.Context, number int) (api.PR, error) 
 }
 
 func gitlabToPR(mr *gitlab.BasicMergeRequest) api.PR {
-	author := ""
+	author, avatar := "", ""
 	if mr.Author != nil {
 		author = mr.Author.Username
+		avatar = mr.Author.AvatarURL
 	}
 	return api.PR{
-		Number:  int(mr.IID), // GitLab's per-project MR number
-		Title:   mr.Title,
-		Author:  author,
-		State:   mr.State,
-		Open:    mr.State == "opened", // GitLab's open state is "opened"
-		Merged:  mr.State == "merged", // and it exposes a distinct "merged" state
-		Draft:   mr.Draft,
-		HeadRef: mr.SourceBranch,
-		HeadSHA: mr.SHA,
-		BaseRef: mr.TargetBranch,
-		Labels:  []string(mr.Labels),
-		URL:     mr.WebURL,
+		Number:       int(mr.IID), // GitLab's per-project MR number
+		Title:        mr.Title,
+		Author:       author,
+		AuthorAvatar: avatar,
+		State:        mr.State,
+		Open:         mr.State == "opened", // GitLab's open state is "opened"
+		Merged:       mr.State == "merged", // and it exposes a distinct "merged" state
+		Draft:        mr.Draft,
+		HeadRef:      mr.SourceBranch,
+		HeadSHA:      mr.SHA,
+		BaseRef:      mr.TargetBranch,
+		Labels:       []string(mr.Labels),
+		URL:          mr.WebURL,
 	}
 }
