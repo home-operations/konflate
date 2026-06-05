@@ -31,7 +31,13 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.card')).toHaveCount(3);
   const card142 = page.locator('.card', { hasText: '#142' });
   await expect(card142.locator('.badge.danger').first()).toBeVisible();
-  await expect(card142.locator('.ago')).toHaveText(/ago|just now/); // humanized last-refresh
+  await expect(card142.locator('.ago').first()).toHaveText(/ago|just now/); // humanized timestamps
+  // Author avatar renders when present; a PR without one falls back to the icon.
+  await expect(card142.locator('img.avatar')).toBeVisible();
+  await expect(page.locator('.card', { hasText: '#138' }).locator('img.avatar')).toHaveCount(0);
+  // PR age ("opened …") and a colored label dot.
+  await expect(card142.locator('.ago', { hasText: 'opened' })).toBeVisible();
+  await expect(card142.locator('.label-dot')).toBeVisible();
 
   // Open a PR → summary-first Overview (URL deep-links).
   await card142.click();

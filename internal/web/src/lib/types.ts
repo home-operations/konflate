@@ -3,10 +3,17 @@
 
 export type JobStatus = 'pending' | 'running' | 'ready' | 'error';
 
+export interface Label {
+  name: string;
+  color?: string; // hex without '#'; absent when the forge gives no color
+}
+
 export interface PR {
   number: number;
   title: string;
   author: string;
+  authorAvatar?: string; // same-origin /api/avatar proxy path, or absent
+  createdAt?: string; // when the PR was opened on the forge
   state: string;
   open: boolean; // normalized open flag (forge state strings differ)
   merged?: boolean; // closed via merge (vs abandoned)
@@ -14,7 +21,7 @@ export interface PR {
   headRef: string;
   headSha: string;
   baseRef: string;
-  labels: string[] | null;
+  labels: Label[] | null;
   url: string;
 }
 

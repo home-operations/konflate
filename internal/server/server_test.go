@@ -164,6 +164,31 @@ func TestServer_RefreshListAndDiff(t *testing.T) {
 	}
 }
 
+func TestServer_AvatarProxy(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
+	h := s.mainHandler()
+
+	// /api/prs rewrites a raw forge avatar URL into a signed same-origin path.
+	s.store.upsertPR(api.PR{Number: 7, Open: true, AuthorAvatar: "https://avatars.example/u/octo.png"})
+	rec := do(h, "GET", "/api/prs", nil, nil)
+	var list []api.PRStatus
+	mustJSON(t, rec, &list)
+	if len(list) != 1 || !strings.HasPrefix(list[0].AuthorAvatar, "/api/avatar?u=") {
+		t.Fatalf("list avatar not proxied: %+v", list)
+	}
+
+	// A tampered signature is rejected — the proxy only fetches URLs it signed,
+	// so it can't be turned into an open SSRF relay.
+	if rec := do(h, "GET", list[0].AuthorAvatar+"deadbeef", nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("tampered signature: got %d, want 403", rec.Code)
+	}
+	// A correctly-signed but non-https URL is refused before any fetch.
+	if rec := do(h, "GET", s.avatarProxyPath("http://avatars.example/x.png"), nil, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("http avatar URL: got %d, want 400", rec.Code)
+	}
+}
+
 func TestServer_ClosedPRsMergedKeptAbandonedDropped(t *testing.T) {
 	t.Parallel()
 	open := func(n int, ref string) api.PR {
