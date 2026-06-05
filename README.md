@@ -11,26 +11,14 @@
 
 </div>
 
-A two-line image-tag bump in a `HelmRelease` can add, remove, or mutate dozens
-of Kubernetes resources. The file diff doesn't show that — konflate does. It
-renders the Flux cluster at the PR's **merge-base** and at its **head** using
-[flate](https://github.com/home-operations/flate), diffs the two, and presents
-the result as a GitHub-style review UI with the blast radius, container-image
-changes, render failures, and heuristic danger flags surfaced up front.
-
-## Contents
-
-- [How it works](#how-it-works)
-- [Quick start](#quick-start)
-- [Helm (Kubernetes)](#helm-kubernetes)
-- [Configuration](#configuration)
-- [The forge URI](#the-forge-uri)
-- [Authentication](#authentication)
-- [HTTP endpoints](#http-endpoints)
-- [Triggering re-renders](#triggering-re-renders)
-- [Metrics](#metrics)
-- [Development](#development)
-- [Security](#security)
+A one-line bump to a Flux resource — a `HelmRelease` chart version, an
+`OCIRepository` tag, a `Kustomization` edit — can add, remove, or mutate dozens
+of rendered Kubernetes resources. The git diff shows the line; it doesn't show
+that. konflate does: it renders the Flux cluster at the PR's **merge-base** and
+at its **head** using [flate](https://github.com/home-operations/flate), diffs
+the two, and presents the result as a GitHub-style review UI with the blast
+radius, image changes, render failures, and heuristic danger flags surfaced up
+front.
 
 ## How it works
 
