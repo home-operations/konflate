@@ -89,6 +89,13 @@ export const sampleDiff: DiffResult = {
       to: 'v1.15.0',
       refs: ['Deployment rook-ceph/rook-ceph-operator'],
     },
+    {
+      // Digest-pinned image: the full sha256 digests must be shortened in the UI.
+      name: 'ghcr.io/thelounge/thelounge:4.5.0',
+      from: 'sha256:9c3667236b1a82cf79b1b35e012ddf58e1e2de46f3596befbc699825c0793680',
+      to: 'sha256:7f2fff6e264411ce8608bd1fdf5142a3cd980677b0479e7e3702aadf18cd1abc',
+      refs: ['Deployment default/thelounge'],
+    },
   ],
   failures: [
     { parent: 'HelmRelease media/plex', message: "values don't meet the schema: .image.tag is required" },
