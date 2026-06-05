@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.6](https://github.com/home-operations/konflate/compare/0.1.5...0.1.6) (2026-06-05)
+
+
+### Features
+
+* add copyable per-forge merge command ([#19](https://github.com/home-operations/konflate/issues/19)) ([227b748](https://github.com/home-operations/konflate/commit/227b748328b9a707f259b38478abb775caf6033c))
+
+
+### Bug Fixes
+
+* bust asset caches on deploy with content-hashed bundles ([#20](https://github.com/home-operations/konflate/issues/20)) ([f878c8d](https://github.com/home-operations/konflate/commit/f878c8d63a5b3d189e1c4e19a1a113761420afa1))
+* keep the last-good diff when a re-render fails ([#17](https://github.com/home-operations/konflate/issues/17)) ([aff3193](https://github.com/home-operations/konflate/commit/aff3193fffe9f581211fd94dbb0ca26e08f8655d))
+
 ## [0.1.5](https://github.com/home-operations/konflate/compare/0.1.4...0.1.5) (2026-06-05)
 
 
