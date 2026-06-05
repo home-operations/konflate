@@ -275,8 +275,6 @@ Tests come in three tiers:
       mise run test-integration
     ```
 
-See [`docs/adr/0001-konflate.md`](docs/adr/0001-konflate.md) for the full design.
-
 ## Security
 
 konflate is designed to be safe to expose internally, and to leak nothing even
