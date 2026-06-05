@@ -124,12 +124,12 @@
   </div>
 
   {#if store.loaded && openPrs.length}
-    <p class="list-summary">
-      <strong>{summary.open}</strong> open
-      {#if summary.danger}<span class="sum-danger"> · {summary.danger} with danger</span>{/if}
-      {#if summary.failed}<span class="sum-danger"> · {summary.failed} failed to render</span>{/if}
-      {#if summary.rendering}<span class="sum-muted"> · {summary.rendering} rendering…</span>{/if}
-    </p>
+    <div class="list-summary">
+      <span class="sum-pill"><strong>{summary.open}</strong> open</span>
+      {#if summary.danger}<span class="sum-pill danger"><strong>{summary.danger}</strong> danger</span>{/if}
+      {#if summary.failed}<span class="sum-pill danger"><strong>{summary.failed}</strong> failed</span>{/if}
+      {#if summary.rendering}<span class="sum-pill"><strong>{summary.rendering}</strong> rendering</span>{/if}
+    </div>
   {/if}
 
   {#if !store.loaded}

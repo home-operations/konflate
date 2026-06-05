@@ -63,8 +63,7 @@ test('landing health summary + non-default base branch tag', async ({ page }) =>
   // to render, #138 still rendering.
   const summary = page.locator('.list-summary');
   await expect(summary).toContainText('3 open');
-  await expect(summary).toContainText('1 with danger');
-  await expect(summary).toContainText('1 failed to render');
+  await expect(summary.locator('.sum-pill.danger')).toContainText(['1 danger', '1 failed']);
   await expect(summary).toContainText('1 rendering');
 
   // Most PRs target main, so only #138 (→ staging) is flagged with a base tag.
