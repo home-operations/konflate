@@ -1,6 +1,8 @@
 // Package web embeds the built UI assets so konflate ships as a single binary.
-// The npm build writes hashed bundles into dist/; a placeholder index.html is
-// committed so the Go binary builds even without a prior UI build.
+// The npm build writes content-hashed bundles and the hash-referencing
+// index.html into dist/ (see vite.config.ts). Only the static favicon is
+// committed; it anchors the embed below so the Go binary builds even without a
+// prior UI build (the UI just isn't served until one runs).
 package web
 
 import (
