@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.5](https://github.com/home-operations/konflate/compare/0.1.4...0.1.5) (2026-06-05)
+
+
+### Features
+
+* author avatars via a signed same-origin proxy ([#16](https://github.com/home-operations/konflate/issues/16)) ([8447cfc](https://github.com/home-operations/konflate/commit/8447cfcc6e55319f96b0795a48f26b26a5593ff6))
+* log each PR refresh, and accept form-urlencoded webhooks ([#13](https://github.com/home-operations/konflate/issues/13)) ([65ee381](https://github.com/home-operations/konflate/commit/65ee38111d3c13ae1ba643486deb1c2592ac34a0))
+* **ui:** pill-style list summary (open/danger/failed/rendering/merged) + review-header meta icons ([#15](https://github.com/home-operations/konflate/issues/15)) ([bbfb4a1](https://github.com/home-operations/konflate/commit/bbfb4a19ebb8890ee9e0a893f0be53d27dfc5068))
+
 ## [0.1.4](https://github.com/home-operations/konflate/compare/0.1.3...0.1.4) (2026-06-05)
 
 
