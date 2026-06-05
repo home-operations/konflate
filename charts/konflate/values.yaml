@@ -42,7 +42,9 @@ config:
   # KONFLATE_CLOSED_PR_TTL — how long a merged PR is kept (Go duration, e.g.
   # "720h" = 30d). 0 disables the age cap. In-memory: a restart clears the shelf.
   closedPrTtl: 336h
-  # Extra raw env vars merged into the container (advanced), e.g. GOMEMLIMIT.
+  # Extra raw env vars merged into the container (advanced). konflate already
+  # derives GOMEMLIMIT from the cgroup memory limit (90%) and GOMAXPROCS from the
+  # CPU limit (Go runtime), so set those here only to override.
   extraEnv: []
   # - name: GOMEMLIMIT
   #   value: "900MiB"
@@ -149,6 +151,9 @@ persistence:
   size: 5Gi
   annotations: {}
 
+# A memory LIMIT drives GOMEMLIMIT (konflate sets it to 90% so the GC tightens
+# before an OOM-kill). A CPU LIMIT right-sizes GOMAXPROCS via the Go runtime;
+# with only a request, GOMAXPROCS falls back to the node's full core count.
 resources: {}
 # limits:
 #   memory: 1Gi
