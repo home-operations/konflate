@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/home-operations/konflate/compare/0.1.3...0.1.4) (2026-06-05)
+
+
+### Features
+
+* **ui:** landing health summary, non-default base tag, and meta icons ([#11](https://github.com/home-operations/konflate/issues/11)) ([9f351be](https://github.com/home-operations/konflate/commit/9f351be366e62565dc0ca951748f2f7a8a591d68))
+
 ## [0.1.3](https://github.com/home-operations/konflate/compare/0.1.2...0.1.3) (2026-06-05)
 
 
