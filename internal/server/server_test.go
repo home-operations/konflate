@@ -599,7 +599,7 @@ func TestServer_WebsocketStatusEvents(t *testing.T) {
 	s.queue.enqueue(pr)
 	close(release)
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
 			t.Fatalf("ws read: %v", err)
