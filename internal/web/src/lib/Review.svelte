@@ -5,6 +5,7 @@
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
+  import Avatar from './Avatar.svelte';
   import {
     mdiArrowLeft,
     mdiChevronLeft,
@@ -13,7 +14,6 @@
     mdiOpenInNew,
     mdiSourceMerge,
     mdiTrayFull,
-    mdiAccountOutline,
     mdiClockOutline,
   } from './icons';
   import Overview from './Overview.svelte';
@@ -46,7 +46,7 @@
               <code class="sha">{pr.headSha.slice(0, 7)}</code>
               <Copy text={pr.headSha} label="Copy full commit SHA" />
             </span>
-            <span class="rt-author"><Icon path={mdiAccountOutline} size={13} /> {pr.author}</span>
+            <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             {#if pr.updatedAt}
               <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}><Icon path={mdiClockOutline} size={13} /> {timeAgo(pr.updatedAt, clock.now)}</span>
             {/if}
