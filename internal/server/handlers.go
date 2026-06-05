@@ -54,6 +54,7 @@ func (s *Server) handleListPRs(w http.ResponseWriter, _ *http.Request) {
 	list := s.store.list()
 	for i := range list {
 		list[i].AuthorAvatar = s.avatarProxyPath(list[i].AuthorAvatar)
+		list[i].MergeCommand = s.mergeCommand(list[i].PR)
 	}
 	writeJSON(w, http.StatusOK, list)
 }
@@ -70,6 +71,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
+	env.MergeCommand = s.mergeCommand(env.PR)
 	// Ready and error are terminal (200); pending/running tell the UI to wait.
 	code := http.StatusOK
 	if env.Status == api.JobPending || env.Status == api.JobRunning {

@@ -311,6 +311,39 @@ test('copy buttons copy the full underlying value', async ({ page }) => {
   expect(copied2).toContain('Deployment rook-ceph/rook-ceph-operator');
 });
 
+test('merge command is copyable in the review header and on list cards', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __copied: string[] }).__copied = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (t: string) => {
+          (window as unknown as { __copied: string[] }).__copied.push(t);
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+  await stubApi(page);
+  const clipboard = () => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+
+  // Review header: the command is shown verbatim and copies as-is. (Read the
+  // recorder before navigating away — a full document load resets it.)
+  await page.goto('/#/pr/142');
+  const bar = page.locator('.merge-cmd');
+  await expect(bar.locator('code')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  await bar.locator('.copy-btn').click();
+  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+
+  // List: one copy affordance per open PR (the merged card carries none).
+  await page.goto('/');
+  await expect(page.locator('.card-actions')).toHaveCount(3);
+  const card = page.locator('.card-li', { hasText: '#142' });
+  await card.hover();
+  await card.locator('.card-actions .copy-btn').click();
+  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+});
+
 test('captures list + overview screenshots (light)', async ({ page }) => {
   await stubApi(page);
   await page.addInitScript(() => localStorage.setItem('konflate-theme', 'light'));

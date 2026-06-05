@@ -189,6 +189,74 @@ func TestServer_AvatarProxy(t *testing.T) {
 	}
 }
 
+func forgeCfg(kind config.ForgeKind, repo string) *config.Config {
+	return &config.Config{Forge: config.ForgeURI{Kind: kind, RepoPath: repo}}
+}
+
+func withMerge(cfg *config.Config, tmpl string) *config.Config {
+	cfg.MergeCommand = tmpl
+	return cfg
+}
+
+func TestMergeCommandRendering(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		pr   api.PR
+		want string
+	}{
+		{"github default", forgeCfg(config.ForgeGitHub, "acme/web"), api.PR{Number: 42, Open: true}, "gh pr merge 42 --repo acme/web"},
+		{"gitlab default uses glab", forgeCfg(config.ForgeGitLab, "grp/app"), api.PR{Number: 9, Open: true}, "glab mr merge 9 --repo grp/app"},
+		{"forgejo default uses tea", forgeCfg(config.ForgeForgejo, "me/ops"), api.PR{Number: 9, Open: true}, "tea pr merge 9 --repo me/ops"},
+		{"operator override", withMerge(forgeCfg(config.ForgeGitHub, "acme/web"), "gh pr merge {{.Number}} --repo {{.Repo}} --squash --delete-branch"), api.PR{Number: 42, Open: true}, "gh pr merge 42 --repo acme/web --squash --delete-branch"},
+		{"closed PR has no command", forgeCfg(config.ForgeGitHub, "acme/web"), api.PR{Number: 42, Open: false}, ""},
+		// Only {{.Number}} and {{.Repo}} are in scope; referencing an attacker-
+		// controlled field (or any typo) fails closed rather than rendering it.
+		{"unknown field fails closed", withMerge(forgeCfg(config.ForgeGitHub, "acme/web"), "gh pr merge {{.Number}} {{.Branch}}"), api.PR{Number: 42, Open: true}, ""},
+		{"invalid template disables the command", withMerge(forgeCfg(config.ForgeGitHub, "acme/web"), "gh pr merge {{.Number"), api.PR{Number: 42, Open: true}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Server{cfg: tc.cfg, mergeTmpl: newMergeTemplate(tc.cfg, discardLog())}
+			if got := s.mergeCommand(tc.pr); got != tc.want {
+				t.Errorf("mergeCommand = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestServer_MergeCommandEndpoints(t *testing.T) {
+	t.Parallel()
+	cfg := withMerge(ghCfg("tok"), "gh pr merge {{.Number}} --repo {{.Repo}} --squash")
+	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+	h := s.mainHandler()
+	s.store.upsertPR(api.PR{Number: 7, Open: true})
+
+	const want = "gh pr merge 7 --repo acme/web --squash"
+	var list []api.PRStatus
+	mustJSON(t, do(h, "GET", "/api/prs", nil, nil), &list)
+	if len(list) != 1 || list[0].MergeCommand != want {
+		t.Fatalf("list merge command = %+v, want %q", list, want)
+	}
+	var env api.DiffEnvelope
+	mustJSON(t, do(h, "GET", "/api/prs/7/diff", nil, nil), &env)
+	if env.MergeCommand != want {
+		t.Errorf("diff merge command = %q, want %q", env.MergeCommand, want)
+	}
+
+	// Once merged, neither endpoint offers a command. Decode into a fresh slice:
+	// the response omits the empty field (omitempty), and json.Unmarshal won't
+	// clear a reused element's stale value.
+	s.store.markClosed(7, s.store.now())
+	var merged []api.PRStatus
+	mustJSON(t, do(h, "GET", "/api/prs", nil, nil), &merged)
+	if merged[0].MergeCommand != "" {
+		t.Errorf("merged PR list merge command = %q, want empty", merged[0].MergeCommand)
+	}
+}
+
 func TestServer_ClosedPRsMergedKeptAbandonedDropped(t *testing.T) {
 	t.Parallel()
 	open := func(n int, ref string) api.PR {

@@ -40,6 +40,12 @@ config:
   # KONFLATE_CLOSED_PR_TTL — how long a merged PR is kept (Go duration, e.g.
   # "720h" = 30d). 0 disables the age cap. In-memory: a restart clears the shelf.
   closedPrTtl: 336h
+  # KONFLATE_MERGE_COMMAND — optional Go text/template for the "copy to merge"
+  # command shown on the review screen and PR list. konflate never runs it; the
+  # reviewer pastes it into their own shell. Empty = the forge default
+  # (gh / glab / tea). Only .Number and .Repo are available, both shell-safe.
+  # Example: "gh pr merge {{ .Number }} --repo {{ .Repo }} --squash --delete-branch"
+  mergeCommand: ""
   # Extra raw env vars merged into the container (advanced). konflate already
   # derives GOMEMLIMIT from the cgroup memory limit (90%) and GOMAXPROCS from the
   # CPU limit (Go runtime), so set those here only to override.

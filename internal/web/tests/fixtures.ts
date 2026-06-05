@@ -30,6 +30,7 @@ export const samplePRs: PRStatus[] = [
     status: 'ready',
     updatedAt: '2026-06-04T12:00:00Z',
     signals: { resources: 3, danger: 1, caution: 1, images: 1, failures: 1 },
+    mergeCommand: 'gh pr merge 142 --repo acme/home-ops',
   },
   {
     number: 138,
@@ -46,6 +47,7 @@ export const samplePRs: PRStatus[] = [
     url: 'https://github.com/acme/home-ops/pull/138',
     status: 'running',
     updatedAt: '2026-06-04T11:30:00Z',
+    mergeCommand: 'gh pr merge 138 --repo acme/home-ops',
   },
   {
     number: 131,
@@ -63,6 +65,7 @@ export const samplePRs: PRStatus[] = [
     status: 'error',
     error: 'render failed',
     updatedAt: '2026-06-04T10:00:00Z',
+    mergeCommand: 'gh pr merge 131 --repo acme/home-ops',
   },
   {
     number: 128,
@@ -202,4 +205,5 @@ export const diffEnvelope: DiffEnvelope = {
   status: 'ready',
   pr: samplePRs[0],
   diff: sampleDiff,
+  mergeCommand: 'gh pr merge 142 --repo acme/home-ops',
 };

@@ -65,6 +65,10 @@ spec:
               value: {{ .Values.config.closedPrMax | quote }}
             - name: KONFLATE_CLOSED_PR_TTL
               value: {{ .Values.config.closedPrTtl | quote }}
+            {{- with .Values.config.mergeCommand }}
+            - name: KONFLATE_MERGE_COMMAND
+              value: {{ . | quote }}
+            {{- end }}
             # Writable locations under the mounted volumes (readOnlyRootFilesystem).
             - name: KONFLATE_CACHE_DIR
               value: /var/cache/konflate
