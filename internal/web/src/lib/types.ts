@@ -40,6 +40,7 @@ export interface PRStatus extends PR {
   updatedAt: string;
   closedAt?: string; // set once merged; UI groups these below open PRs
   signals?: Signals;
+  mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
 }
 
 export interface DiffSummary {
@@ -150,6 +151,7 @@ export interface DiffEnvelope {
   diff?: DiffResult;
   error?: string;
   refreshError?: string; // last re-render failed; diff is the last-good render
+  mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
 }
 
 export interface WSEvent {

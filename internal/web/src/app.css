@@ -348,6 +348,31 @@ body {
 .card.merged:hover {
   opacity: 1;
 }
+/* Per-card "copy merge command" overlay. The card is itself a <button>, so the
+   copy (also a button) can't nest inside it — it's an absolutely-positioned
+   sibling, revealed on hover/focus to keep the list quiet (always shown on
+   touch, which has no hover; see the mobile block). Only open PRs carry a
+   command, so it never lands on the merged cards. */
+.card-li {
+  position: relative;
+}
+.card-actions {
+  position: absolute;
+  top: 9px;
+  right: 11px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.card-li:hover .card-actions,
+.card-li:focus-within .card-actions {
+  opacity: 1;
+}
+.card-actions .copy-btn {
+  opacity: 1;
+  padding: 4px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+}
 /* Collapsible "Recently merged" group header. */
 .group-head {
   display: flex;
@@ -629,6 +654,30 @@ body {
   font-size: 13px;
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--caution) 30%, var(--border));
+}
+/* The optional "copy to merge" command: a quiet bar below the status strips
+   (it's a convenience, not a status), with the command in a monospace chip. */
+.merge-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.merge-cmd code {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 9px;
 }
 .tabs {
   display: flex;
@@ -1113,6 +1162,15 @@ td.side-blank {
   .card-meta {
     flex-wrap: wrap;
     row-gap: 6px;
+  }
+  /* No hover on touch — keep the per-card copy-merge affordance visible, and
+     reserve a gutter so the top-row title/tags don't slide under it (cards are
+     narrow enough here that the title truncates and tags push to the edge). */
+  .card-actions {
+    opacity: 1;
+  }
+  .card-top {
+    padding-right: 26px;
   }
   /* The review header's meta row (sha · author · opened · refreshed · open) is
      too wide for a phone — let it wrap instead of overflowing. */

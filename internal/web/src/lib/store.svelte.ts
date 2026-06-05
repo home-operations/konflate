@@ -14,6 +14,7 @@ interface Store {
   diffFor: number | null; // PR number the diff/loading belongs to
   diffError: string;
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
+  diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
   loading: boolean;
   connected: boolean;
 }
@@ -27,6 +28,7 @@ export const store: Store = $state({
   diffFor: null,
   diffError: '',
   diffRefreshError: '',
+  diffMergeCommand: '',
   loading: false,
   connected: false,
 });
@@ -127,6 +129,7 @@ export function ensureDiff(n: number): void {
   store.diffFor = n;
   store.diff = null;
   store.diffError = '';
+  store.diffMergeCommand = '';
   store.loading = true;
   void loadDiff(n);
 }
@@ -145,6 +148,9 @@ async function loadDiff(n: number): Promise<void> {
 }
 
 function applyEnvelope(env: DiffEnvelope): void {
+  // Set on every envelope (the command depends only on the PR's open state, not
+  // the render), so a reviewer can copy it while the diff is still rendering.
+  store.diffMergeCommand = env.mergeCommand ?? '';
   store.loading = env.status === 'pending' || env.status === 'running';
   if (env.status === 'ready' && env.diff) {
     store.diff = env.diff;

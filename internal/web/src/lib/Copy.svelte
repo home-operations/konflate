@@ -9,8 +9,9 @@
     text: string;
     label?: string; // accessible label / tooltip, e.g. "Copy image reference"
     size?: number;
+    icon?: string; // idle glyph (defaults to the copy icon); e.g. a terminal icon for a shell command
   }
-  let { text, label = 'Copy', size = 13 }: Props = $props();
+  let { text, label = 'Copy', size = 13, icon = mdiContentCopy }: Props = $props();
 
   let copied = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -35,5 +36,5 @@
   title={copied ? 'Copied!' : label}
   aria-label={label}
 >
-  <Icon path={copied ? mdiCheck : mdiContentCopy} {size} />
+  <Icon path={copied ? mdiCheck : icon} {size} />
 </button>

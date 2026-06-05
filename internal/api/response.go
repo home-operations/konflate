@@ -28,6 +28,10 @@ type PRStatus struct {
 	// Signals is a compact summary of the rendered diff, populated once the job
 	// is ready, so the PR list can show triage badges without loading each diff.
 	Signals *Signals `json:"signals,omitempty"`
+	// MergeCommand is the rendered "copy to merge" CLI command, set only for open
+	// PRs when the feature is enabled. konflate never runs it — the reviewer
+	// pastes it into their own shell.
+	MergeCommand string `json:"mergeCommand,omitempty"`
 }
 
 // Signals is the at-a-glance review summary for one PR's rendered diff.
@@ -49,6 +53,9 @@ type DiffEnvelope struct {
 	// RefreshError is set when the last re-render failed but Diff is still the
 	// last-good render (the UI shows a "couldn't refresh" banner).
 	RefreshError string `json:"refreshError,omitempty"`
+	// MergeCommand is the rendered "copy to merge" CLI command, set only for open
+	// PRs when the feature is enabled (see PRStatus.MergeCommand).
+	MergeCommand string `json:"mergeCommand,omitempty"`
 }
 
 // Meta is the non-secret identity of this konflate instance, served at

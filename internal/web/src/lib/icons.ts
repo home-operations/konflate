@@ -17,6 +17,7 @@ export {
   mdiSourceMerge,
   mdiCheck,
   mdiContentCopy,
+  mdiConsoleLine,
   mdiCheckCircle,
   mdiCircleOutline,
   mdiFileDocumentOutline,

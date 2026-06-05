@@ -5,6 +5,7 @@
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
+  import Copy from './Copy.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -21,6 +22,7 @@
     mdiSourceMerge,
     mdiTrayFull,
     mdiLoading,
+    mdiConsoleLine,
   } from './icons';
 
   const prs = $derived(filteredPRs());
@@ -64,7 +66,7 @@
 </script>
 
 {#snippet prCard(pr: PRStatus)}
-  <li>
+  <li class="card-li">
     <button class="card" class:merged={!pr.open} onclick={() => openPR(pr.number)}>
       <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
@@ -124,6 +126,11 @@
         {/if}
       </div>
     </button>
+    {#if pr.mergeCommand}
+      <div class="card-actions">
+        <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
+      </div>
+    {/if}
   </li>
 {/snippet}
 

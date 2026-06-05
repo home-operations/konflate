@@ -16,6 +16,7 @@
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
+    mdiConsoleLine,
   } from './icons';
   import Overview from './Overview.svelte';
   import Diffs from './Diffs.svelte';
@@ -92,6 +93,14 @@
         1
           ? ` and ${danger.length - 1} more`
           : ''}
+      </div>
+    {/if}
+
+    {#if store.diffMergeCommand}
+      <div class="merge-cmd">
+        <Icon path={mdiConsoleLine} size={14} />
+        <code>{store.diffMergeCommand}</code>
+        <Copy text={store.diffMergeCommand} label="Copy merge command" />
       </div>
     {/if}
 

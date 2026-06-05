@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"text/template"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -45,7 +46,8 @@ type Server struct {
 	queue   *queue
 	runCtx  context.Context
 
-	avatarKey []byte // HMAC key for signing the same-origin /api/avatar proxy URLs
+	avatarKey []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
+	mergeTmpl *template.Template // renders the "copy to merge" command; nil disables it
 }
 
 // New assembles a Server. ui is the embedded UI filesystem (rooted at the
@@ -58,6 +60,7 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
 		store: newStore(), hub: newHub(log), metrics: newMetrics(),
 		avatarKey: avatarKey,
+		mergeTmpl: newMergeTemplate(cfg, log),
 	}
 }
 

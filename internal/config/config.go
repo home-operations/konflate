@@ -35,6 +35,12 @@ type Config struct {
 	// relative to that subdirectory.
 	ClusterPath string `env:"KONFLATE_CLUSTER_PATH"`
 
+	// MergeCommand is an optional Go text/template for the "copy to merge" command
+	// shown on the review screen and the PR list. Empty falls back to the forge's
+	// basic CLI default. The template sees {{.Number}} and {{.Repo}} only — both
+	// safe to paste into a shell (attacker-controlled PR fields are not exposed).
+	MergeCommand string `env:"KONFLATE_MERGE_COMMAND"`
+
 	// WebhookSecret is the per-forge verification secret:
 	//   GitHub/GHES  — HMAC-SHA256 key (X-Hub-Signature-256)
 	//   GitLab       — static token   (X-Gitlab-Token)
