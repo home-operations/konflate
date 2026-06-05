@@ -8,11 +8,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"runtime/debug"
-	"strconv"
 	"strings"
 	"syscall"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/engine"
 	"github.com/home-operations/konflate/internal/provider"
@@ -82,39 +81,17 @@ const memLimitRatio = 0.9
 // cgroup memory limit. Unlike GOMAXPROCS — cgroup-aware since Go 1.25 — the GC
 // never learns the cgroup limit on its own, so a hard memory limit can OOM-kill
 // a memory-heavy process (konflate holds every rendered diff in memory) before
-// the GC reacts. An explicit GOMEMLIMIT always wins; a missing limit, a
-// non-Linux host, or cgroup v1 is a safe no-op (this reads cgroup v2's
-// /sys/fs/cgroup/memory.max).
+// the GC reacts. automemlimit reads the cgroup (v1 or v2) limit and sets
+// GOMEMLIMIT to memLimitRatio of it. An explicit GOMEMLIMIT (or AUTOMEMLIMIT=off)
+// always wins; a missing limit or non-Linux host leaves the GC unbounded.
 func setMemoryLimit(log *slog.Logger) {
-	if v := os.Getenv("GOMEMLIMIT"); v != "" {
-		log.Debug("GOMEMLIMIT set explicitly; leaving as-is", "value", v)
-		return
+	limit, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithRatio(memLimitRatio))
+	switch {
+	case err != nil:
+		log.Debug("no cgroup memory limit detected; leaving the GC unbounded", "error", err)
+	case limit > 0:
+		log.Info("set GOMEMLIMIT from cgroup memory limit", "gomemlimit_bytes", limit, "ratio", memLimitRatio)
 	}
-	raw, err := os.ReadFile("/sys/fs/cgroup/memory.max")
-	if err != nil {
-		return // not cgroup v2 / not Linux — leave the GC unbounded
-	}
-	soft, ok := softMemLimit(string(raw))
-	if !ok {
-		return // "max" (no limit) or an unparsable value
-	}
-	debug.SetMemoryLimit(soft)
-	log.Info("set GOMEMLIMIT from cgroup memory limit", "gomemlimit_bytes", soft, "ratio", memLimitRatio)
-}
-
-// softMemLimit parses a cgroup v2 memory.max value and returns GOMEMLIMIT at
-// memLimitRatio of it. ok is false for "max" (no limit) or an unparsable/
-// non-positive value, in which case the GC is left unbounded.
-func softMemLimit(memMax string) (limit int64, ok bool) {
-	s := strings.TrimSpace(memMax)
-	if s == "max" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n <= 0 {
-		return 0, false
-	}
-	return int64(float64(n) * memLimitRatio), true
 }
 
 func newLogger(cfg *config.Config) *slog.Logger {
