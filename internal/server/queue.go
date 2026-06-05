@@ -109,6 +109,7 @@ func (q *queue) run(pr api.PR) {
 	for {
 		q.store.setStatus(pr, api.JobRunning)
 		q.emit(pr.Number, api.JobRunning, "")
+		q.log.Debug("rendering diff", "pr", pr.Number, "head", pr.HeadSHA)
 
 		start := time.Now()
 		res, err := q.renderWithRecover(pr)
@@ -131,6 +132,9 @@ func (q *queue) run(pr api.PR) {
 		} else {
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
 			q.store.setResult(pr.Number, res)
+			sig := computeSignals(&res)
+			q.log.Info("diff rendered", "pr", pr.Number, "duration", time.Since(start).Round(time.Millisecond),
+				"resources", sig.Resources, "danger", sig.Danger, "images", sig.Images, "failures", sig.Failures)
 			q.emit(pr.Number, api.JobReady, "")
 		}
 
