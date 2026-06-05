@@ -26,6 +26,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      # The Service is named "konflate", so the kubelet's legacy Docker-link
+      # service env vars would inject KONFLATE_PORT=tcp://<clusterIP>:8080 —
+      # colliding with konflate's own KONFLATE_PORT config var and crashing
+      # startup ("parsing tcp://… : invalid syntax"). konflate uses none of those
+      # link vars, so turn them off.
+      enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
