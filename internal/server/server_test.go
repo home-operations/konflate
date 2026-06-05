@@ -257,6 +257,35 @@ func TestServer_MergeCommandEndpoints(t *testing.T) {
 	}
 }
 
+func TestUIHandler_CacheControl(t *testing.T) {
+	t.Parallel()
+	ui := fstest.MapFS{
+		"index.html":           &fstest.MapFile{Data: []byte("<!doctype html><title>konflate</title>")},
+		"favicon.svg":          &fstest.MapFile{Data: []byte("<svg/>")},
+		"assets/app-9f8e7d.js": &fstest.MapFile{Data: []byte("console.log(1)")},
+	}
+	h := (&Server{ui: ui}).uiHandler()
+
+	cases := []struct{ path, want string }{
+		// Content-hashed bundle: cache hard, never revalidate (the URL changes on
+		// the next build, so a stale file is never requested).
+		{"/assets/app-9f8e7d.js", "public, max-age=31536000, immutable"},
+		// The entry point and the unhashed favicon must always revalidate so a
+		// redeploy is picked up immediately.
+		{"/", "no-cache"},
+		{"/favicon.svg", "no-cache"},
+	}
+	for _, tc := range cases {
+		rec := do(h, "GET", tc.path, nil, nil)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", tc.path, rec.Code)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != tc.want {
+			t.Errorf("%s: Cache-Control = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestServer_ClosedPRsMergedKeptAbandonedDropped(t *testing.T) {
 	t.Parallel()
 	open := func(n int, ref string) api.PR {

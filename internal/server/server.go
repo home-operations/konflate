@@ -184,7 +184,7 @@ func (s *Server) mainHandler() http.Handler {
 		mux.HandleFunc("POST /hooks", handleDisabled)
 	}
 
-	mux.Handle("GET /", http.FileServerFS(s.ui))
+	mux.Handle("GET /", s.uiHandler())
 
 	return s.recoverer(s.accessLog(s.securityHeaders(mux)))
 }

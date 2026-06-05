@@ -50,6 +50,25 @@ func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// uiHandler serves the embedded UI with cache headers tuned for content-hashed
+// assets. Fingerprinted files under /assets/ are immutable and cached for a
+// year — a new build changes their filename, so a stale one is never requested.
+// Everything else (index.html, the favicon) is no-cache so it always
+// revalidates and a redeploy is picked up immediately, even behind a CDN that
+// caches by extension (e.g. Cloudflare): the hashed URLs bust the edge cache on
+// their own, and the entry point is never served stale.
+func (s *Server) uiHandler() http.Handler {
+	fileServer := http.FileServerFS(s.ui)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) handleListPRs(w http.ResponseWriter, _ *http.Request) {
 	list := s.store.list()
 	for i := range list {
