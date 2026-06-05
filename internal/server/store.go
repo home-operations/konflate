@@ -145,20 +145,40 @@ func (s *store) activeNumbers() []int {
 	return out
 }
 
-// stalePRs returns the open PRs whose last render is at least interval old, so
-// the refresh loop can re-render them (the missed-webhook backstop). PRs that
-// have never rendered (in their initial render) and closed/merged PRs are
+// stalePRs returns the open PRs whose last render is older than their jittered
+// staleness deadline, so the refresh loop can re-render them (the missed-webhook
+// backstop). PRs still in their initial render and closed/merged PRs are
 // excluded. The queue coalesces, so returning one that is mid-render is safe.
+//
+// The deadline is interval ± a deterministic per-PR jitter (see staleJitter):
+// without it, the whole open set — all rendered together at startup — would go
+// stale on the same tick and re-render as one synchronized batch every interval
+// (a thundering herd on the forge and CPU). Jitter spreads them across the
+// window while keeping the average period ≈ interval.
 func (s *store) stalePRs(now time.Time, interval time.Duration) []api.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []api.PR
 	for _, j := range s.jobs {
-		if j.closedAt.IsZero() && !j.renderedAt.IsZero() && now.Sub(j.renderedAt) >= interval {
+		if j.closedAt.IsZero() && !j.renderedAt.IsZero() && now.Sub(j.renderedAt) >= interval+staleJitter(j.pr.Number, interval) {
 			out = append(out, j.pr)
 		}
 	}
 	return out
+}
+
+// staleJitter returns a deterministic per-PR offset in [-interval/4, +interval/4)
+// added to the staleness deadline. Deterministic (a 64-bit Fibonacci hash of the
+// PR number) so a PR's cadence is stable rather than oscillating, and symmetric
+// so the average refresh period stays ≈ interval while PRs rendered together are
+// pulled apart in time.
+func staleJitter(prNumber int, interval time.Duration) time.Duration {
+	spread := int64(interval / 2)
+	if spread <= 0 {
+		return 0
+	}
+	h := uint64(prNumber) * 11400714819323198485 // 2^64 / golden ratio
+	return time.Duration(int64(h%uint64(spread)) - spread/2)
 }
 
 // markClosed freezes a PR as merged: it keeps its last rendered diff but stamps

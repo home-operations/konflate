@@ -167,10 +167,15 @@ function injectChroma(css: string): void {
 
 // ---- websocket ------------------------------------------------------------
 
+let wsAttempt = 0;
+
 export function connectWS(): void {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.addEventListener('open', () => (store.connected = true));
+  ws.addEventListener('open', () => {
+    store.connected = true;
+    wsAttempt = 0; // reset the backoff once we're connected
+  });
   ws.addEventListener('message', (e) => {
     let ev: WSEvent;
     try {
@@ -182,7 +187,12 @@ export function connectWS(): void {
   });
   ws.addEventListener('close', () => {
     store.connected = false;
-    setTimeout(connectWS, 2000);
+    // Exponential backoff with jitter: every client otherwise reconnects in
+    // lockstep ~2s after a server restart (a thundering herd on the new pod).
+    // delay ∈ [base/2, base), base = 1s·2^attempt capped at 30s.
+    const base = Math.min(30_000, 1_000 * 2 ** wsAttempt);
+    wsAttempt++;
+    setTimeout(connectWS, base / 2 + Math.random() * (base / 2));
   });
   ws.addEventListener('error', () => ws.close());
 }

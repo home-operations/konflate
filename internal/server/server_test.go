@@ -263,6 +263,44 @@ func TestServer_Meta(t *testing.T) {
 	}
 }
 
+func TestStaleJitter_DeterministicAndBounded(t *testing.T) {
+	t.Parallel()
+	interval := 30 * time.Minute
+	bound := interval / 4 // |offset| < interval/4
+	for _, pr := range []int{1, 2, 7, 42, 999, 123456} {
+		if a, b := staleJitter(pr, interval), staleJitter(pr, interval); a != b {
+			t.Errorf("staleJitter(%d) not deterministic: %v vs %v", pr, a, b)
+		}
+		if j := staleJitter(pr, interval); j < -bound || j >= bound {
+			t.Errorf("staleJitter(%d) = %v, want within [-%v, %v)", pr, j, bound, bound)
+		}
+	}
+}
+
+func TestStore_StalePRsAreJittered(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	st := newStore()
+	st.now = func() time.Time { return base }
+	const n = 40
+	interval := 60 * time.Minute
+	for i := 1; i <= n; i++ { // all rendered at the same instant (the startup batch)
+		st.upsertPR(api.PR{Number: i, Open: true})
+		st.setResult(i, api.DiffResult{PRNumber: i})
+	}
+	count := func(d time.Duration) int { return len(st.stalePRs(base.Add(d), interval)) }
+
+	if c := count(interval / 2); c != 0 {
+		t.Errorf("at 0.5·interval: %d stale, want 0 (before the earliest jittered deadline)", c)
+	}
+	if c := count(interval); c == 0 || c == n {
+		t.Errorf("at the nominal interval: %d stale — jitter should split the herd, not fire all-at-once", c)
+	}
+	if c := count(2 * interval); c != n {
+		t.Errorf("at 2·interval: %d stale, want all %d", c, n)
+	}
+}
+
 func TestServer_RefreshStaleReRendersOpenOnly(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
