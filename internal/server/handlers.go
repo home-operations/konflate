@@ -81,7 +81,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{keyError: "invalid PR number"})
 		return
 	}
-	if err := s.refreshPR(r.Context(), number); err != nil {
+	if err := s.refreshPR(r.Context(), number, "push"); err != nil {
 		s.log.Warn("push: fetch PR failed", "pr", number, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "could not fetch PR from forge"})
 		return
@@ -92,7 +92,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 // refreshPR fetches a single PR from the forge and enqueues its diff. Shared by
 // the push endpoint (synchronous, surfaces fetch errors) and the webhook
 // (fire-and-forget).
-func (s *Server) refreshPR(ctx context.Context, number int) error {
+func (s *Server) refreshPR(ctx context.Context, number int, reason string) error {
 	pr, err := s.prov.GetPR(ctx, number)
 	if err != nil {
 		return err
@@ -104,6 +104,7 @@ func (s *Server) refreshPR(ctx context.Context, number int) error {
 		return nil
 	}
 	s.store.upsertPR(pr)
+	s.log.Info("queuing render", "pr", number, "reason", reason)
 	s.queue.enqueue(pr)
 	return nil
 }
@@ -127,7 +128,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	// open-PR set may have changed (opened/closed/...) or the payload is opaque.
 	if ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); ev.PR > 0 && !ev.Relist {
 		go func() {
-			if err := s.refreshPR(s.runCtx, ev.PR); err != nil {
+			if err := s.refreshPR(s.runCtx, ev.PR, "webhook"); err != nil {
 				s.log.Warn("webhook: refresh PR failed", "pr", ev.PR, "error", err)
 			}
 		}()
@@ -161,6 +162,11 @@ func (s *Server) refreshList(ctx context.Context) {
 		prev, known := s.store.get(pr.Number)
 		s.store.upsertPR(pr)
 		if !known || prev.PR.HeadSHA != pr.HeadSHA {
+			reason := "head advanced"
+			if !known {
+				reason = "new PR"
+			}
+			s.log.Info("queuing render", "pr", pr.Number, "reason", reason)
 			s.queue.enqueue(pr) // new PR, or its head advanced → (re)render now
 		}
 	}

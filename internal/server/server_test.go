@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -554,6 +555,32 @@ func TestServer_WebhookPerPR(t *testing.T) {
 	if _, ok := s.store.get(6); ok {
 		t.Error("webhook re-listed PRs (#6 appeared); expected a per-PR refresh of #5 only")
 	}
+}
+
+func TestServer_WebhookFormEncoded(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	cfg.WebhookSecret = "shh"
+	s := newTestServer(t, cfg, &fakeProvider{prs: []api.PR{{Number: 5, Open: true, HeadRef: "f5", BaseRef: "main"}}}, okEngine())
+	h := s.mainHandler()
+
+	// GitHub's default content type wraps the JSON in a `payload=` form field; the
+	// signature is over that raw form body. The per-PR path must still run rather
+	// than degrade to a full re-list.
+	body := "payload=" + url.QueryEscape(`{"action":"synchronize","number":5,"pull_request":{"number":5}}`)
+	mac := hmac.New(sha256.New, []byte("shh"))
+	mac.Write([]byte(body))
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	rec := do(h, "POST", "/hooks", strings.NewReader(body), map[string]string{
+		"X-GitHub-Event":      "pull_request",
+		"Content-Type":        "application/x-www-form-urlencoded",
+		"X-Hub-Signature-256": sig,
+	})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("webhook: got %d, want 202", rec.Code)
+	}
+	waitFor(t, s, 5) // rendered via the per-PR path despite the form content type
 }
 
 func TestServer_HealthAndSecurityHeaders(t *testing.T) {

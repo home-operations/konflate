@@ -140,6 +140,7 @@ func (s *Server) refreshLoop(ctx context.Context) {
 // refresh interval — the backstop for an inbound webhook that never arrived.
 func (s *Server) refreshStale(now time.Time) {
 	for _, pr := range s.store.stalePRs(now, s.cfg.RefreshInterval) {
+		s.log.Info("queuing render", "pr", pr.Number, "reason", "stale")
 		s.queue.enqueue(pr)
 	}
 }
