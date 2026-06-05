@@ -12,6 +12,7 @@
     mdiAlertCircleOutline,
     mdiFileDocumentOutline,
     mdiClockOutline,
+    mdiRefresh,
     mdiTagOutline,
     mdiSourceBranch,
     mdiFilterOutline,
@@ -55,6 +56,11 @@
   // pending/running render as icons below and ready carries signal badges, so
   // this fallback only labels the terminal error state.
   const statusLabel: Record<string, string> = { error: 'failed' };
+
+  // A '#'-prefixed color for a label dot, or '' when the forge gave no usable
+  // hex (e.g. GitLab) — validated so a stray value can't reach the style binding.
+  const labelColor = (l: { color?: string }) =>
+    l.color && /^[0-9a-fA-F]{3,8}$/.test(l.color) ? `#${l.color}` : '';
 </script>
 
 {#snippet prCard(pr: PRStatus)}
@@ -76,11 +82,16 @@
         <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if !pr.open && pr.closedAt}
           <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
-        {:else if pr.updatedAt}
-          <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}><Icon path={mdiClockOutline} size={12} /> {timeAgo(pr.updatedAt, clock.now)}</span>
+        {:else}
+          {#if pr.createdAt}
+            <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={12} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
+          {/if}
+          {#if pr.updatedAt}
+            <span class="ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={12} /> {timeAgo(pr.updatedAt, clock.now)}</span>
+          {/if}
         {/if}
         {#if pr.labels?.length}
-          <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{l}</span>{/each}</span>
+          <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{#if labelColor(l)}<span class="label-dot" style:background-color={labelColor(l)}></span>{/if}{l.name}</span>{/each}</span>
         {/if}
         <span class="spacer"></span>
         {#if pr.signals}

@@ -160,6 +160,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 12px;
   border: 1px solid var(--border);
@@ -230,11 +232,20 @@ body {
   gap: 4px;
 }
 .label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0 7px;
   color: var(--muted);
+}
+.label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }
 .dot {
   width: 8px;
@@ -1089,6 +1100,12 @@ td.side-blank {
     overflow-wrap: anywhere;
   }
   .card-meta {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* The review header's meta row (sha · author · opened · refreshed · open) is
+     too wide for a phone — let it wrap instead of overflowing. */
+  .rt-meta {
     flex-wrap: wrap;
     row-gap: 6px;
   }

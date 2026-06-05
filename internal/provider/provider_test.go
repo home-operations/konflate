@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-github/v88/github"
 
+	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
 )
 
@@ -19,10 +20,11 @@ const githubPullsJSON = `[
     "title": "feat: add widget",
     "state": "open",
     "draft": false,
+    "created_at": "2026-06-01T12:00:00Z",
     "user": {"login": "octocat", "avatar_url": "https://avatars.example/u/octocat.png"},
     "head": {"ref": "feat/widget", "sha": "deadbeefcafe"},
     "base": {"ref": "main"},
-    "labels": [{"name": "enhancement"}, {"name": "area/ui"}],
+    "labels": [{"name": "enhancement", "color": "a2eeef"}, {"name": "area/ui", "color": "d4c5f9"}],
     "html_url": "https://github.com/acme/web/pull/7"
   }
 ]`
@@ -63,7 +65,7 @@ func TestGitHubProvider_ListPRs(t *testing.T) {
 	if got.State != "open" || got.Draft {
 		t.Errorf("state/draft = %q/%v", got.State, got.Draft)
 	}
-	if !slices.Equal(got.Labels, []string{"enhancement", "area/ui"}) {
+	if !slices.Equal(got.Labels, []api.Label{{Name: "enhancement", Color: "a2eeef"}, {Name: "area/ui", Color: "d4c5f9"}}) {
 		t.Errorf("labels = %v", got.Labels)
 	}
 	if got.URL != "https://github.com/acme/web/pull/7" {
@@ -71,6 +73,9 @@ func TestGitHubProvider_ListPRs(t *testing.T) {
 	}
 	if got.AuthorAvatar != "https://avatars.example/u/octocat.png" {
 		t.Errorf("authorAvatar = %q", got.AuthorAvatar)
+	}
+	if got.CreatedAt.Format("2006-01-02") != "2026-06-01" {
+		t.Errorf("createdAt = %v", got.CreatedAt)
 	}
 }
 

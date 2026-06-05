@@ -21,6 +21,7 @@ export {
   mdiCircleOutline,
   mdiFileDocumentOutline,
   mdiClockOutline,
+  mdiRefresh,
   mdiAccountOutline,
   mdiTagOutline,
   mdiSourceBranch,

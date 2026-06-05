@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
@@ -68,15 +69,20 @@ func forgejoToPR(pr *forgejo.PullRequest) api.PR {
 		author = pr.Poster.UserName
 		avatar = pr.Poster.AvatarURL
 	}
-	labels := make([]string, 0, len(pr.Labels))
+	labels := make([]api.Label, 0, len(pr.Labels))
 	for _, l := range pr.Labels {
-		labels = append(labels, l.Name)
+		labels = append(labels, api.Label{Name: l.Name, Color: l.Color})
+	}
+	var created time.Time
+	if pr.Created != nil {
+		created = *pr.Created
 	}
 	out := api.PR{
 		Number:       int(pr.Index),
 		Title:        pr.Title,
 		Author:       author,
 		AuthorAvatar: avatar,
+		CreatedAt:    created,
 		State:        string(pr.State),
 		Open:         string(pr.State) == stateOpen,
 		Merged:       pr.HasMerged,

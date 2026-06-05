@@ -59,15 +59,16 @@ func (p *githubProvider) GetPR(ctx context.Context, number int) (api.PR, error) 
 }
 
 func githubToPR(pr *github.PullRequest) api.PR {
-	labels := make([]string, 0, len(pr.Labels))
+	labels := make([]api.Label, 0, len(pr.Labels))
 	for _, l := range pr.Labels {
-		labels = append(labels, l.GetName())
+		labels = append(labels, api.Label{Name: l.GetName(), Color: l.GetColor()})
 	}
 	return api.PR{
 		Number:       pr.GetNumber(),
 		Title:        pr.GetTitle(),
 		Author:       pr.GetUser().GetLogin(),
 		AuthorAvatar: pr.GetUser().GetAvatarURL(),
+		CreatedAt:    pr.GetCreatedAt().Time,
 		State:        pr.GetState(),
 		Open:         pr.GetState() == stateOpen,
 		Merged:       pr.GetMerged(),
