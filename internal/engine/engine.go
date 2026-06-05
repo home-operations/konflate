@@ -66,13 +66,22 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	}
 	defer clone.Cleanup()
 
-	// Render the base (merge-base) first so its fetched sources warm the shared
-	// cache for the head render.
-	base, err := e.render(ctx, joinPath(clone.BaseDir, e.clusterPath))
+	baseTree := joinPath(clone.BaseDir, e.clusterPath)
+	headTree := joinPath(clone.HeadDir, e.clusterPath)
+
+	// Changed-only mode (flate's PathOrig): each side reconciles only the
+	// resources whose source files differ between the merge-base and head trees,
+	// plus the dependency closure flate computes — not the whole cluster. This is
+	// the dominant cold-start cost saver: a one-file PR renders a handful of
+	// resources instead of every HelmRelease/Kustomization. pairChanges over the
+	// two scoped outputs yields the same diff a full render would (unchanged
+	// resources never enter either side). Render the base first so its fetched
+	// sources warm the shared cache for the head render.
+	base, err := e.render(ctx, baseTree, headTree)
 	if err != nil {
 		return api.DiffResult{}, fmt.Errorf("engine: render base of PR #%d: %w", pr.Number, err)
 	}
-	head, err := e.render(ctx, joinPath(clone.HeadDir, e.clusterPath))
+	head, err := e.render(ctx, headTree, baseTree)
 	if err != nil {
 		return api.DiffResult{}, fmt.Errorf("engine: render head of PR #%d: %w", pr.Number, err)
 	}
@@ -87,17 +96,22 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	})
 }
 
-// render runs one flate orchestrator over the cluster at path. Render is
-// flate's embed entry point (Bootstrap + Run + collect), so this is the whole
-// reconcile. Two flags harden it for a tool that may be exposed:
+// render runs one flate orchestrator over the cluster at path in changed-only
+// mode: origPath is the opposite (merge-base or head) tree, so flate reconciles
+// only the resources whose source files differ between the two — plus the
+// dependency closure it computes (substituteFrom producers, consumers of a
+// changed source, etc.) — instead of the whole cluster. Render is flate's embed
+// entry point (Bootstrap + Run + collect). Two flags harden it for a tool that
+// may be exposed:
 //   - WipeSecrets replaces Secret cleartext with placeholders, so no secret
 //     value can reach the diff (and thus a response) even if a manifest carries
 //     one in cleartext.
 //   - AllowMissingSecrets lets public/token-less renders proceed without the
 //     cluster's real secrets (missing auth secrets become skips).
-func (e *flateEngine) render(ctx context.Context, path string) (*orchestrator.Result, error) {
+func (e *flateEngine) render(ctx context.Context, path, origPath string) (*orchestrator.Result, error) {
 	o, err := orchestrator.New(orchestrator.Config{
 		Path:                path,
+		PathOrig:            origPath,
 		SourceCache:         e.cache,
 		WipeSecrets:         true,
 		AllowMissingSecrets: true,
