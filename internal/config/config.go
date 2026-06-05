@@ -28,9 +28,6 @@ type Config struct {
 	// Never included in any HTTP response or log line.
 	Token string `env:"KONFLATE_TOKEN"`
 
-	// BaseBranch is the base/target branch for pull requests.
-	BaseBranch string `env:"KONFLATE_BASE_BRANCH" envDefault:"main"`
-
 	// ClusterPath is the directory flate renders from — the GitRepository root
 	// that Flux Kustomization spec.path values resolve against. For the standard
 	// layout (root-relative paths like ./kubernetes/...) leave it empty (the repo
@@ -156,14 +153,8 @@ func Load() (*Config, error) {
 // limit), capped at 4 so a many-CPU host doesn't run too many memory-heavy
 // renders at once. Floored at 1.
 func defaultDiffConcurrency() int {
-	n := runtime.GOMAXPROCS(0)
-	if n > 4 {
-		n = 4
-	}
-	if n < 1 {
-		n = 1
-	}
-	return n
+	// clamp(GOMAXPROCS, 1, 4)
+	return max(min(runtime.GOMAXPROCS(0), 4), 1)
 }
 
 // xdgCacheHome returns $XDG_CACHE_HOME if set, otherwise ~/.cache (the XDG

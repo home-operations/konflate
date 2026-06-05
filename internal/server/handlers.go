@@ -97,6 +97,12 @@ func (s *Server) refreshPR(ctx context.Context, number int) error {
 	if err != nil {
 		return err
 	}
+	if !pr.Open {
+		// Merged/closed since we last saw it — reconcile it onto the shelf or drop
+		// it rather than enqueueing a render whose head branch may already be gone.
+		s.reconcileState(pr)
+		return nil
+	}
 	s.store.upsertPR(pr)
 	s.queue.enqueue(pr)
 	return nil
@@ -179,21 +185,42 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]bool) {
 			s.log.Warn("refresh: classify closed PR failed", "pr", number, "error", err)
 			continue // leave as-is; retry on the next refresh
 		}
-		switch {
-		case pr.Open:
-			// Still open — the list momentarily missed it (pagination/flake);
-			// keep it in the open group rather than dropping it.
-			s.store.upsertPR(pr)
-		case pr.Merged:
-			s.store.markClosed(number, s.store.now())
-		default:
-			s.store.remove(number)
-			s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: number})
-		}
+		s.reconcileState(pr)
 	}
 	for _, number := range s.store.pruneClosed(s.store.now(), s.cfg.ClosedRetention, s.cfg.ClosedRetentionMax) {
 		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: number})
 	}
+}
+
+// reconcileState applies a freshly-fetched PR's forge state to the store: a PR
+// found open is kept in the open group (the list momentarily missed it —
+// pagination/flake — or it was reopened), a merged PR is frozen onto the
+// "recently merged" shelf keeping its last rendered diff, and an abandoned
+// (closed-unmerged) PR is dropped and broadcast so clients remove it live.
+func (s *Server) reconcileState(pr api.PR) {
+	switch {
+	case pr.Open:
+		s.store.upsertPR(pr)
+	case pr.Merged:
+		s.store.markClosed(pr.Number, s.store.now())
+	default:
+		s.store.remove(pr.Number)
+		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: pr.Number})
+	}
+}
+
+// reconcileHeadGone is called by the queue when a render finds the PR's head
+// branch gone (merged/closed mid-render). It re-fetches the PR and reconciles
+// its state, so instead of a spurious render failure the PR lands on the merged
+// shelf (or is dropped). Best effort — a forge error just leaves it for the next
+// periodic refresh to reconcile.
+func (s *Server) reconcileHeadGone(number int) {
+	pr, err := s.prov.GetPR(s.runCtx, number)
+	if err != nil {
+		s.log.Warn("reconcile head-gone PR failed", "pr", number, "error", err)
+		return
+	}
+	s.reconcileState(pr)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

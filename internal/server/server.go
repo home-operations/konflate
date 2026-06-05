@@ -60,7 +60,7 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // signal-triggered shutdown.
 func (s *Server) Run(ctx context.Context) error {
 	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.metrics, s.log, s.cfg.MaxDiffConcurrency)
+	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, s.cfg.MaxDiffConcurrency)
 
 	mainSrv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.cfg.Port),
@@ -111,14 +111,12 @@ func serve(srv *http.Server, name string, log *slog.Logger) error {
 // refreshLoop is the background refresh. It wakes on a cadence and, once per
 // RefreshInterval, re-lists PRs (discovering newly opened ones and reconciling
 // closed ones); on every wake it re-renders any open PR whose render has gone
-// stale (older than RefreshInterval). This replaces a global cron with per-PR
-// staleness, so a PR a webhook just refreshed isn't needlessly re-rendered and
-// load staggers naturally across PRs. Returns when ctx is cancelled.
+// stale. Staleness deadlines are jittered per PR (see staleJitter) so the open
+// set — all rendered together at startup — doesn't re-render as one synchronized
+// batch every interval. A PR a webhook just refreshed isn't re-rendered until it
+// is genuinely stale. Returns when ctx is cancelled.
 func (s *Server) refreshLoop(ctx context.Context) {
-	cadence := min(s.cfg.RefreshInterval, 2*time.Minute)
-	if cadence < time.Second {
-		cadence = time.Second
-	}
+	cadence := max(min(s.cfg.RefreshInterval, 2*time.Minute), time.Second)
 	ticker := time.NewTicker(cadence)
 	defer ticker.Stop()
 

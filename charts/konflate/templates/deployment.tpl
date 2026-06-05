@@ -49,8 +49,6 @@ spec:
           env:
             - name: KONFLATE_REPO
               value: {{ required "config.repo is required — the forge URI of the repo to review" .Values.config.repo | quote }}
-            - name: KONFLATE_BASE_BRANCH
-              value: {{ .Values.config.baseBranch | quote }}
             {{- with .Values.config.clusterPath }}
             - name: KONFLATE_CLUSTER_PATH
               value: {{ . | quote }}

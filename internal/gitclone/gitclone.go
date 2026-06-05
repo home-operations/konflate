@@ -6,6 +6,7 @@ package gitclone
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
+
+// ErrHeadRefGone reports that the PR's head ref no longer exists on the remote —
+// typically the PR was merged or closed and its branch deleted between when a
+// render was enqueued and when it ran. Callers treat this as "the PR left the
+// open set", not a render failure.
+var ErrHeadRefGone = errors.New("gitclone: head ref no longer exists on remote")
 
 // Result holds the two extracted working trees plus a cleanup func that
 // removes them. Callers must call Cleanup.
@@ -69,6 +76,12 @@ func Clone(ctx context.Context, cloneURL, token, headRef, baseRef string) (_ *Re
 		RefSpecs: []gitconfig.RefSpec{headSpec},
 		Tags:     git.NoTags,
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
+		if errors.Is(err, git.NoMatchingRefSpecError{}) {
+			// The branch was deleted (merged/closed PR) — the remote no longer
+			// advertises the ref. Report it as gone so the caller reconciles the
+			// PR rather than surfacing a render failure.
+			return nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, ErrHeadRefGone)
+		}
 		return nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, err)
 	}
 

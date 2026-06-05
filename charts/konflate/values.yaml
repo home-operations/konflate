@@ -18,8 +18,6 @@ config:
   # KONFLATE_REPO — forge URI of the repository to review (required), e.g.
   # github://owner/repo, gitlab://group/repo, forgejo://git.example.com/owner/repo.
   repo: ""
-  # KONFLATE_BASE_BRANCH — default target branch when a PR doesn't specify one.
-  baseBranch: main
   # KONFLATE_CLUSTER_PATH — directory flate renders from (the GitRepository root
   # that Flux spec.path values resolve against). Empty = repo root, which is
   # correct for the standard layout (root-relative paths like ./kubernetes/...).
