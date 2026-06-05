@@ -79,6 +79,12 @@
       </div>
     {/if}
 
+    {#if store.diffRefreshError}
+      <div class="refresh-strip" title={store.diffRefreshError}>
+        <Icon path={mdiRefresh} size={15} /> Couldn't refresh — showing the last successful render
+      </div>
+    {/if}
+
     {#if danger.length}
       <div class="danger-strip">
         <Icon path={mdiAlertOctagon} size={15} />

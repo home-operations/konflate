@@ -36,6 +36,7 @@ export interface Signals {
 export interface PRStatus extends PR {
   status: JobStatus;
   error?: string;
+  refreshError?: string; // last re-render failed, but a prior diff is still shown
   updatedAt: string;
   closedAt?: string; // set once merged; UI groups these below open PRs
   signals?: Signals;
@@ -148,6 +149,7 @@ export interface DiffEnvelope {
   pr: PR;
   diff?: DiffResult;
   error?: string;
+  refreshError?: string; // last re-render failed; diff is the last-good render
 }
 
 export interface WSEvent {

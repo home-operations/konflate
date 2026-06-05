@@ -78,6 +78,28 @@ test('landing health summary + non-default base branch tag', async ({ page }) =>
   await expect(page.locator('.card', { hasText: '#142' }).locator('.base-tag')).toHaveCount(0);
 });
 
+test('a failed refresh keeps the diff and flags it (list badge + review strip)', async ({ page }) => {
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) =>
+    r.fulfill({ json: [{ ...samplePRs[0], refreshError: 'forge unreachable' }] }),
+  );
+  await page.route('**/api/prs/142/diff', (r) =>
+    r.fulfill({ json: { ...diffEnvelope, refreshError: 'forge unreachable' } }),
+  );
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+
+  // The card flags the failed refresh but still shows the last-good signal badges.
+  const card = page.locator('.card', { hasText: '#142' });
+  await expect(card.locator('.badge[title*="refresh"]')).toBeVisible();
+  await expect(card.locator('.badge.danger').first()).toBeVisible();
+
+  // The review shows a banner and still renders the kept diff.
+  await card.click();
+  await expect(page.locator('.refresh-strip')).toContainText("Couldn't refresh");
+  await expect(page.locator('.ov-res')).toHaveCount(3);
+});
+
 test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');

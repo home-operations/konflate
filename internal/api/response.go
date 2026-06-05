@@ -16,9 +16,12 @@ const (
 // element type of the GET /api/prs list that drives the UI's PR list.
 type PRStatus struct {
 	PR
-	Status    JobStatus `json:"status"`
-	Error     string    `json:"error,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Status JobStatus `json:"status"`
+	Error  string    `json:"error,omitempty"`
+	// RefreshError is set when a re-render failed but a previously rendered diff
+	// is still being shown; the UI flags it without dropping the diff.
+	RefreshError string    `json:"refreshError,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 	// ClosedAt is set once a PR leaves the forge's open set (merged); the UI
 	// groups these below the open PRs and shows "merged <ago>". Nil while open.
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
@@ -43,6 +46,9 @@ type DiffEnvelope struct {
 	PR     PR          `json:"pr"`
 	Diff   *DiffResult `json:"diff,omitempty"`
 	Error  string      `json:"error,omitempty"`
+	// RefreshError is set when the last re-render failed but Diff is still the
+	// last-good render (the UI shows a "couldn't refresh" banner).
+	RefreshError string `json:"refreshError,omitempty"`
 }
 
 // Meta is the non-secret identity of this konflate instance, served at

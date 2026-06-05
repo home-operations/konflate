@@ -25,6 +25,10 @@ type job struct {
 	// error), zero until the first render. The refresh loop re-renders an open PR
 	// once this is older than the refresh interval — the missed-webhook backstop.
 	renderedAt time.Time
+	// refreshErr holds the message from the most recent failed re-render while an
+	// earlier diff is still shown; empty after a success. Lets the UI flag
+	// "couldn't refresh" without discarding the last-good diff.
+	refreshErr string
 }
 
 // store is the in-memory, concurrency-safe record of every known PR and the
@@ -86,6 +90,7 @@ func (s *store) setResult(number int, result api.DiffResult) {
 		j.signals = computeSignals(&r)
 		j.status = api.JobReady
 		j.errMsg = ""
+		j.refreshErr = ""
 		j.updated = s.now()
 		j.renderedAt = j.updated
 	}
@@ -109,19 +114,28 @@ func computeSignals(d *api.DiffResult) *api.Signals {
 	return s
 }
 
-// setError marks the PR's diff as failed with msg. A PR already frozen on the
-// merged shelf is left untouched (see setStatus).
-func (s *store) setError(number int, msg string) {
+// failRender records a render failure. If the PR still has a previously rendered
+// diff, that diff is kept and the failure is flagged via refreshErr instead — so
+// a transient forge/git outage or a flaky source pull doesn't wipe a good render;
+// the UI keeps showing it with a "couldn't refresh" marker. Only a PR that never
+// rendered flips to the error state. Returns whether a prior diff was kept. A PR
+// frozen on the merged shelf is left untouched (see setStatus).
+func (s *store) failRender(number int, msg string) (kept bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if j := s.jobs[number]; j != nil && j.closedAt.IsZero() {
-		j.status = api.JobError
-		j.errMsg = msg
-		j.result = nil
-		j.signals = nil
-		j.updated = s.now()
-		j.renderedAt = j.updated
+	j := s.jobs[number]
+	if j == nil || !j.closedAt.IsZero() {
+		return false
 	}
+	j.updated = s.now()
+	j.renderedAt = j.updated
+	if j.result != nil {
+		j.refreshErr = msg // keep result/signals and the JobReady status
+		return true
+	}
+	j.status = api.JobError
+	j.errMsg = msg
+	return false
 }
 
 // get returns a snapshot of one PR's job, or false if unknown.
@@ -132,7 +146,7 @@ func (s *store) get(number int) (api.DiffEnvelope, bool) {
 	if j == nil {
 		return api.DiffEnvelope{}, false
 	}
-	return api.DiffEnvelope{Status: j.status, PR: j.pr, Diff: j.result, Error: j.errMsg}, true
+	return api.DiffEnvelope{Status: j.status, PR: j.pr, Diff: j.result, Error: j.errMsg, RefreshError: j.refreshErr}, true
 }
 
 // activeNumbers returns the PRs currently treated as open (not yet marked
@@ -253,7 +267,7 @@ func (s *store) list() []api.PRStatus {
 			c := j.closedAt
 			closedAt = &c
 		}
-		out = append(out, api.PRStatus{PR: j.pr, Status: j.status, Error: j.errMsg, UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals})
+		out = append(out, api.PRStatus{PR: j.pr, Status: j.status, Error: j.errMsg, RefreshError: j.refreshErr, UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals})
 	}
 	slices.SortFunc(out, func(a, b api.PRStatus) int { return cmp.Compare(b.Number, a.Number) }) // newest first
 	return out

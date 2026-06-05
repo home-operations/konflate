@@ -126,9 +126,15 @@ func (q *queue) run(pr api.PR) {
 			}
 		} else if err != nil {
 			q.metrics.diffTotal.WithLabelValues("error").Inc()
-			q.store.setError(pr.Number, err.Error())
-			q.emit(pr.Number, api.JobError, err.Error())
-			q.log.Error("diff render failed", "pr", pr.Number, "error", err)
+			if q.store.failRender(pr.Number, err.Error()) {
+				// A previously rendered diff is kept; flag the failed refresh
+				// instead of clobbering it (transient forge/git outage, flaky pull).
+				q.emit(pr.Number, api.JobReady, "")
+				q.log.Warn("diff refresh failed; kept last render", "pr", pr.Number, "error", err)
+			} else {
+				q.emit(pr.Number, api.JobError, err.Error())
+				q.log.Error("diff render failed", "pr", pr.Number, "error", err)
+			}
 		} else {
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
 			q.store.setResult(pr.Number, res)
