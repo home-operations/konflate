@@ -2,12 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/gitclone"
 )
 
 func waitTerminal(t *testing.T, st *store, number int) {
@@ -42,7 +44,7 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
 	pr := api.PR{Number: 1}
 
 	q.enqueue(pr)
@@ -85,7 +87,7 @@ func TestQueue_CoalesceUsesLatestMetadata(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
 
 	q.enqueue(api.PR{Number: 1, HeadSHA: "old"})
 	<-started // "old" is rendering
@@ -116,7 +118,7 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 	t.Parallel()
 	diff := func(context.Context, api.PR) (api.DiffResult, error) { panic("boom") }
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
 
 	st.upsertPR(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 1})
@@ -124,6 +126,39 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 
 	if env, _ := st.get(1); env.Status != api.JobError || !strings.Contains(env.Error, "panicked") {
 		t.Fatalf("a render panic should mark the PR errored, got status=%q err=%q", env.Status, env.Error)
+	}
+}
+
+// TestQueue_HeadRefGoneReconcilesNotErrors verifies that when a render fails
+// because the PR's head branch is gone (merged/closed mid-flight), the queue
+// reconciles the PR instead of marking it errored — and a diff rendered earlier
+// (while it was open) is left intact rather than clobbered.
+func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
+	t.Parallel()
+	diff := func(context.Context, api.PR) (api.DiffResult, error) {
+		return api.DiffResult{}, fmt.Errorf("engine: clone PR #1: %w", gitclone.ErrHeadRefGone)
+	}
+	reconciled := make(chan int, 1)
+	st := newStore()
+	st.upsertPR(api.PR{Number: 1})
+	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from when the PR was open
+	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1)
+
+	q.enqueue(api.PR{Number: 1})
+
+	select {
+	case n := <-reconciled:
+		if n != 1 {
+			t.Fatalf("reconcile called with PR %d, want 1", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a head-gone render never triggered reconcile")
+	}
+
+	if env, _ := st.get(1); env.Status == api.JobError {
+		t.Fatalf("head-gone render must not mark the PR errored, got status=%q err=%q", env.Status, env.Error)
+	} else if env.Diff == nil {
+		t.Fatal("head-gone render clobbered the previously rendered diff")
 	}
 }
 
@@ -142,7 +177,7 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
 
 	q.enqueue(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 2})

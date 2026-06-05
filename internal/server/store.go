@@ -56,11 +56,16 @@ func (s *store) upsertPR(pr api.PR) {
 	j.updated = s.now()
 }
 
-// setStatus transitions a PR to status, recording its metadata if new.
+// setStatus transitions a PR to status, recording its metadata if new. A PR
+// already frozen on the merged shelf is left untouched, so a render that was
+// enqueued before the PR merged cannot drag it back into a live state.
 func (s *store) setStatus(pr api.PR, status api.JobStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j := s.jobs[pr.Number]
+	if j != nil && !j.closedAt.IsZero() {
+		return
+	}
 	if j == nil {
 		j = &job{pr: pr}
 		s.jobs[pr.Number] = j
@@ -75,7 +80,7 @@ func (s *store) setStatus(pr api.PR, status api.JobStatus) {
 func (s *store) setResult(number int, result api.DiffResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if j := s.jobs[number]; j != nil {
+	if j := s.jobs[number]; j != nil && j.closedAt.IsZero() {
 		r := result
 		j.result = &r
 		j.signals = computeSignals(&r)
@@ -104,11 +109,12 @@ func computeSignals(d *api.DiffResult) *api.Signals {
 	return s
 }
 
-// setError marks the PR's diff as failed with msg.
+// setError marks the PR's diff as failed with msg. A PR already frozen on the
+// merged shelf is left untouched (see setStatus).
 func (s *store) setError(number int, msg string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if j := s.jobs[number]; j != nil {
+	if j := s.jobs[number]; j != nil && j.closedAt.IsZero() {
 		j.status = api.JobError
 		j.errMsg = msg
 		j.result = nil

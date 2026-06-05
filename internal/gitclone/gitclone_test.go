@@ -2,6 +2,7 @@ package gitclone
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -97,6 +98,21 @@ func TestWithinRoot(t *testing.T) {
 		if got := withinRoot(dir, tt.path); got != tt.want {
 			t.Errorf("withinRoot(%q, %q) = %v, want %v", dir, tt.path, got, tt.want)
 		}
+	}
+}
+
+// TestClone_HeadRefGone verifies that a head ref the remote no longer advertises
+// (the PR's branch was deleted after a merge) surfaces as ErrHeadRefGone, so the
+// server can reconcile the PR instead of recording a render failure.
+func TestClone_HeadRefGone(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+
+	// "master" (the base) exists; "feature" was deleted; fetching it must report
+	// the ref as gone rather than an opaque error.
+	_, err := Clone(context.Background(), src, "", "deleted-after-merge", "master")
+	if !errors.Is(err, ErrHeadRefGone) {
+		t.Fatalf("Clone with a missing head ref: got %v, want ErrHeadRefGone", err)
 	}
 }
 

@@ -70,11 +70,11 @@
               <Icon path={mdiFileDocumentOutline} size={13} /> {pr.signals.resources}
             </span>
           </span>
-        {:else if pr.status === 'running'}
+        {:else if pr.open && pr.status === 'running'}
           <span class="card-status running"><Spinner size={14} /> rendering</span>
-        {:else if pr.status === 'pending'}
+        {:else if pr.open && pr.status === 'pending'}
           <span class="card-status"><Icon path={mdiTrayFull} size={13} /> queued</span>
-        {:else}
+        {:else if pr.open}
           <span class="card-status s-{pr.status}">{statusLabel[pr.status] ?? pr.status}</span>
         {/if}
       </div>

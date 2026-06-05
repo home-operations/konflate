@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/gitclone"
 )
 
 // Websocket event types.
@@ -29,11 +31,12 @@ type diffFunc func(ctx context.Context, pr api.PR) (api.DiffResult, error)
 // render reflects the newest head SHA / title / labels rather than the snapshot
 // that was in flight when the burst began.
 type queue struct {
-	diff    diffFunc
-	store   *store
-	notify  func(api.Event)
-	metrics *metrics
-	log     *slog.Logger
+	diff      diffFunc
+	store     *store
+	notify    func(api.Event)
+	reconcile func(number int) // called when a render finds the PR's head branch gone
+	metrics   *metrics
+	log       *slog.Logger
 
 	ctx context.Context // cancelled on shutdown; threaded into every diff
 	sem chan struct{}
@@ -44,12 +47,12 @@ type queue struct {
 	pending  map[int]api.PR
 }
 
-func newQueue(ctx context.Context, diff diffFunc, st *store, notify func(api.Event), m *metrics, log *slog.Logger, concurrency int) *queue {
+func newQueue(ctx context.Context, diff diffFunc, st *store, notify func(api.Event), reconcile func(int), m *metrics, log *slog.Logger, concurrency int) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
 	return &queue{
-		diff: diff, store: st, notify: notify, metrics: m, log: log,
+		diff: diff, store: st, notify: notify, reconcile: reconcile, metrics: m, log: log,
 		ctx:      ctx,
 		sem:      make(chan struct{}, concurrency),
 		inflight: map[int]bool{},
@@ -111,7 +114,16 @@ func (q *queue) run(pr api.PR) {
 		res, err := q.renderWithRecover(pr)
 		q.metrics.diffDuration.Observe(time.Since(start).Seconds())
 
-		if err != nil {
+		if errors.Is(err, gitclone.ErrHeadRefGone) {
+			// The head branch vanished mid-flight: the PR was merged or closed and
+			// its branch deleted between enqueue and render. Not a failure — keep any
+			// diff already rendered and reconcile the PR (→ merged shelf / dropped).
+			q.metrics.diffTotal.WithLabelValues("gone").Inc()
+			q.log.Info("diff skipped: PR head ref gone (merged/closed mid-render)", "pr", pr.Number)
+			if q.reconcile != nil {
+				q.reconcile(pr.Number)
+			}
+		} else if err != nil {
 			q.metrics.diffTotal.WithLabelValues("error").Inc()
 			q.store.setError(pr.Number, err.Error())
 			q.emit(pr.Number, api.JobError, err.Error())

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
+	"github.com/home-operations/konflate/internal/gitclone"
 )
 
 // --- fakes ---------------------------------------------------------------
@@ -102,7 +104,7 @@ func newTestServer(t *testing.T, cfg *config.Config, prov *fakeProvider, eng Eng
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.metrics, s.log, cfg.MaxDiffConcurrency)
+	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency)
 	return s
 }
 
@@ -351,6 +353,62 @@ func TestServer_RefreshStaleReRendersOpenOnly(t *testing.T) {
 	}
 }
 
+// TestStore_ClosedJobRejectsLateWrites verifies the merged shelf is frozen: a
+// render still in flight when the PR merged cannot drag the shelved PR into a
+// running/errored state or wipe its frozen diff.
+func TestStore_ClosedJobRejectsLateWrites(t *testing.T) {
+	t.Parallel()
+	st := newStore()
+	st.upsertPR(api.PR{Number: 1, Open: true})
+	st.setResult(1, api.DiffResult{PRNumber: 1})
+	st.markClosed(1, st.now())
+
+	// The stale in-flight render finishes after the PR was shelved.
+	st.setStatus(api.PR{Number: 1}, api.JobRunning)
+	st.setError(1, "engine: clone PR #1: gitclone: head ref no longer exists on remote")
+
+	env, _ := st.get(1)
+	if env.Status != api.JobReady {
+		t.Errorf("shelved PR status = %q, want ready (late writes ignored)", env.Status)
+	}
+	if env.Error != "" {
+		t.Errorf("shelved PR error = %q, want empty (late setError ignored)", env.Error)
+	}
+	if env.Diff == nil {
+		t.Error("shelved PR lost its frozen diff to a late write")
+	}
+}
+
+// TestServer_HeadGoneMidRenderShelvesNotFails is the end-to-end of the merged-PR
+// race: a PR is enqueued while open, merges (branch deleted) before its render
+// runs, and the render fails to fetch the head ref. The PR must land on the
+// merged shelf, never shown as a failed render.
+func TestServer_HeadGoneMidRenderShelvesNotFails(t *testing.T) {
+	t.Parallel()
+	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		return api.DiffResult{}, fmt.Errorf("engine: clone PR #%d: %w", pr.Number, gitclone.ErrHeadRefGone)
+	}}
+	prov := &fakeProvider{}
+	// By the time konflate reconciles, the forge reports the PR merged.
+	prov.setDetail(api.PR{Number: 7, State: "merged", Merged: true, HeadRef: "renovate/x", BaseRef: "main"})
+	s := newTestServer(t, ghCfg("tok"), prov, eng)
+
+	s.store.upsertPR(api.PR{Number: 7, Open: true, HeadRef: "renovate/x", BaseRef: "main"})
+	s.queue.enqueue(api.PR{Number: 7, Open: true, HeadRef: "renovate/x", BaseRef: "main"})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if env, ok := s.store.get(7); ok && env.PR.Merged {
+			if env.Status == api.JobError {
+				t.Fatalf("merged-mid-render PR was marked errored: %q", env.Error)
+			}
+			return // reconciled onto the shelf, not failed
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("PR 7 was never reconciled onto the merged shelf after a head-gone render")
+}
+
 func TestServer_SignalsInList(t *testing.T) {
 	t.Parallel()
 	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
@@ -431,7 +489,7 @@ func TestServer_PushAuth(t *testing.T) {
 	t.Parallel()
 	cfg := ghCfg("tok")
 	cfg.PushToken = "s3cret"
-	pr := api.PR{Number: 9, HeadRef: "feat", BaseRef: "main"}
+	pr := api.PR{Number: 9, Open: true, HeadRef: "feat", BaseRef: "main"}
 	s := newTestServer(t, cfg, &fakeProvider{prs: []api.PR{pr}}, okEngine())
 	h := s.mainHandler()
 
@@ -475,7 +533,7 @@ func TestServer_WebhookPerPR(t *testing.T) {
 	cfg.WebhookSecret = "shh"
 	// The forge knows two PRs; a content webhook for #5 must touch only #5 and
 	// must not re-list (which would pull in #6).
-	prs := []api.PR{{Number: 5, HeadRef: "f5", BaseRef: "main"}, {Number: 6, HeadRef: "f6", BaseRef: "main"}}
+	prs := []api.PR{{Number: 5, Open: true, HeadRef: "f5", BaseRef: "main"}, {Number: 6, Open: true, HeadRef: "f6", BaseRef: "main"}}
 	s := newTestServer(t, cfg, &fakeProvider{prs: prs}, okEngine())
 	h := s.mainHandler()
 
