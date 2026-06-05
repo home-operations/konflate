@@ -1,0 +1,90 @@
+# mise is the single source of truth for the Go toolchain (and project tools)
+# across developer shells, CI, and the container build. The `go` version here
+# matches go.mod's `go` directive; Renovate keeps the two in lockstep via the
+# "Go Toolchain Group" rule in .renovaterc.json5. The Dockerfile and release
+# workflow read it with `mise config get tools.go` (see docs/adr/0001).
+#
+# `mise tasks` lists tasks; `mise run <task>` runs one.
+
+[tools]
+go = "1.26.4"
+golangci-lint = "2.12.2"
+helm = "4.2.0"
+lefthook = "2.1.9"
+node = "24.16.0"
+oxfmt = "0.53.0"
+zizmor = "1.25.2"
+
+[tasks.build]
+description = "Compile the binary (and the whole module)"
+run = "go build ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.test]
+description = "Run the unit test suite with coverage"
+run = "go test ./... -coverprofile cover.out"
+
+[tasks.fmt]
+description = "Format the code in place"
+run = "go fmt ./..."
+
+[tasks.fmt-check]
+description = "Verify formatting without changing files (CI gate)"
+run = "test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }"
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run"
+
+[tasks.lint-fix]
+description = "Run golangci-lint with --fix"
+run = "golangci-lint run --fix"
+
+[tasks.tidy-check]
+description = "Fail if go.mod/go.sum are not tidy (CI gate)"
+run = """
+go mod tidy
+git diff --exit-code go.mod go.sum
+"""
+
+[tasks.test-integration]
+description = "Run env-gated integration tests (needs KONFLATE_REPO + KONFLATE_INTEGRATION_PR)"
+run = "go test -tags integration -timeout 10m ./test/integration/..."
+
+[tasks.ui-install]
+description = "Install UI dependencies (npm ci)"
+dir = "internal/web"
+run = "npm ci"
+
+[tasks.ui-typecheck]
+description = "Type-check the UI"
+dir = "internal/web"
+run = "npm run typecheck"
+
+[tasks.ui-build]
+description = "Build the UI bundles into internal/web/dist"
+dir = "internal/web"
+run = "npm run build"
+
+[tasks.ui-test]
+description = "Run the Playwright headless-Chromium UI tests"
+dir = "internal/web"
+run = "npm run test:e2e"
+
+[tasks.helm-lint]
+description = "Lint the Helm chart"
+run = "helm lint charts/konflate"
+
+[tasks.helm-template]
+description = "Render the Helm chart with example values"
+run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"
+
+[tasks.dev]
+description = "Run konflate locally (set KONFLATE_REPO=... first)"
+run = "go run ./cmd/konflate"
+
+[hooks]
+postinstall = "lefthook install"

@@ -1,0 +1,12 @@
+# Go
+/cover.out
+*.out
+/konflate
+/dist/
+
+# UI build (committed: package.json/lock + src; ignored: deps + generated bundle)
+/ui/node_modules/
+/ui/dist/
+
+# Editor / OS
+.DS_Store

@@ -1,0 +1,23 @@
+---
+apiVersion: v2
+name: konflate
+description: A web UI for reviewing GitOps pull requests as rendered Flux diffs
+type: application
+# version + appVersion are overridden at package time from the release tag.
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://github.com/home-operations/konflate
+icon: https://raw.githubusercontent.com/home-operations/konflate/main/internal/web/public/favicon.svg
+sources:
+  - https://github.com/home-operations/konflate
+maintainers:
+  - name: home-operations
+    email: contact@home-operations.com
+keywords:
+  - flux
+  - gitops
+  - kubernetes
+  - pull-request
+  - diff
+annotations:
+  category: Infrastructure

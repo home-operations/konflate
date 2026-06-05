@@ -1,0 +1,24 @@
+konflate is reviewing {{ .Values.config.repo }}.
+
+Open the UI:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "konflate.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  # then browse http://localhost:{{ .Values.service.port }}
+
+{{ if .Values.ingress.enabled -}}
+Or via ingress:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{ end -}}
+
+{{- if not (include "konflate.secretName" .) }}
+No forge token is configured, so konflate is in ANONYMOUS (read-only) mode:
+manual refresh and the webhook/push endpoints are disabled.
+{{- if not .Values.config.schedule }}
+Set `config.schedule` (e.g. "@every 15m") so it stays up to date, or set
+`secret.token` for an authenticated instance.
+{{- else }}
+It will re-render on the schedule: {{ .Values.config.schedule }}
+{{- end }}
+{{- end }}

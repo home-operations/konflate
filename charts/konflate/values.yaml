@@ -1,0 +1,190 @@
+---
+# Default values for konflate.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/home-operations/konflate
+  pullPolicy: IfNotPresent
+  # Overrides the image tag; defaults to the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# konflate configuration (the non-secret KONFLATE_* environment variables).
+config:
+  # KONFLATE_REPO — forge URI of the repository to review (required), e.g.
+  # github://owner/repo, gitlab://group/repo, forgejo://git.example.com/owner/repo.
+  repo: ""
+  # KONFLATE_BASE_BRANCH — default target branch when a PR doesn't specify one.
+  baseBranch: main
+  # KONFLATE_CLUSTER_PATH — directory flate renders from (the GitRepository root
+  # that Flux spec.path values resolve against). Empty = repo root, which is
+  # correct for the standard layout (root-relative paths like ./kubernetes/...).
+  clusterPath: ""
+  # KONFLATE_REFRESH_INTERVAL — how often each open PR re-renders if no webhook
+  # refreshed it sooner, and how often the open-PR list is reconciled (Go
+  # duration, e.g. "15m"). The missed-webhook backstop.
+  refreshInterval: 30m
+  # KONFLATE_LOG_LEVEL — debug | info | warn | error.
+  logLevel: info
+  # KONFLATE_LOG_FORMAT — json | text.
+  logFormat: json
+  # KONFLATE_MAX_DIFF_CONC — max concurrent diff renders. 0 = auto (derived from
+  # the pod's CPU limit via GOMAXPROCS, capped at 4).
+  maxDiffConcurrency: 0
+  # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
+  # KONFLATE_CLOSED_PR_MAX — cap on retained merged PRs (most-recent win); this
+  # count, not the age, is what bounds memory. 0 disables the cap.
+  closedPrMax: 25
+  # KONFLATE_CLOSED_PR_TTL — how long a merged PR is kept (Go duration, e.g.
+  # "720h" = 30d). 0 disables the age cap. In-memory: a restart clears the shelf.
+  closedPrTtl: 336h
+  # Extra raw env vars merged into the container (advanced), e.g. GOMEMLIMIT.
+  extraEnv: []
+  # - name: GOMEMLIMIT
+  #   value: "900MiB"
+
+# Sensitive settings (forge token + inbound secrets). Provide them inline and a
+# Secret is created, or point at an existing Secret whose keys are the KONFLATE_*
+# variable names. Leave everything empty for anonymous, read-only mode.
+secret:
+  # Pre-existing Secret with keys KONFLATE_TOKEN / KONFLATE_WEBHOOK_SECRET /
+  # KONFLATE_PUSH_TOKEN. Takes precedence over the inline values below.
+  existingSecret: ""
+  # KONFLATE_TOKEN — forge API token. Empty ⇒ anonymous mode.
+  token: ""
+  # KONFLATE_WEBHOOK_SECRET — enables POST /hooks (authenticated mode).
+  webhookSecret: ""
+  # KONFLATE_PUSH_TOKEN — enables POST /api/prs/{n}/refresh (authenticated mode).
+  pushToken: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  # UI / API / websocket port.
+  port: 8080
+  # Operational /metrics port.
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: konflate.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: konflate-tls
+  #   hosts:
+  #     - konflate.example.com
+
+# Gateway API HTTPRoute — an alternative to `ingress` for clusters using the
+# Gateway API. Renders one HTTPRoute pointing at the UI service port. Named
+# `httpRoute` (not `route`) to avoid confusion with the OpenShift Route kind.
+httpRoute:
+  enabled: false
+  # Defaults to gateway.networking.k8s.io/v1 / HTTPRoute when left empty.
+  apiVersion: ""
+  kind: ""
+  annotations: {}
+  labels: {}
+  # Gateways (and listeners) this route attaches to.
+  parentRefs: []
+  #  - name: gateway
+  #    namespace: gateway
+  #    sectionName: https
+  # Hostnames matched against the Host header (templated).
+  hostnames: []
+  #  - konflate.example.com
+  # Custom rules prepended before the default rule (templated).
+  additionalRules: []
+  # Filters applied to the default rule.
+  filters: []
+  # Match conditions for the default rule.
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+  # Redirect HTTP→HTTPS (301) instead of routing to the backend. Requires a
+  # Gateway with both HTTP and HTTPS listeners; matches/filters are ignored.
+  httpsRedirect: false
+
+# Persist the flate source cache (Helm charts / OCI layers / git objects) across
+# restarts. When disabled, an emptyDir is used and the cache is rebuilt on
+# restart. The per-diff clone dir is always ephemeral.
+persistence:
+  enabled: false
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  annotations: {}
+
+resources: {}
+# limits:
+#   memory: 1Gi
+# requests:
+#   cpu: 50m
+#   memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 20
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+monitoring:
+  serviceMonitor:
+    # Requires the Prometheus Operator CRDs.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    labels: {}
+    annotations: {}
+    metricRelabelings: []
+    relabelings: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Additional volumes / mounts on the Deployment.
+volumes: []
+volumeMounts: []
