@@ -13,6 +13,8 @@
     mdiOpenInNew,
     mdiSourceMerge,
     mdiTrayFull,
+    mdiAccountOutline,
+    mdiClockOutline,
   } from './icons';
   import Overview from './Overview.svelte';
   import Diffs from './Diffs.svelte';
@@ -44,9 +46,9 @@
               <code class="sha">{pr.headSha.slice(0, 7)}</code>
               <Copy text={pr.headSha} label="Copy full commit SHA" />
             </span>
-            <span>{pr.author}</span>
+            <span class="rt-author"><Icon path={mdiAccountOutline} size={13} /> {pr.author}</span>
             {#if pr.updatedAt}
-              <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}>{timeAgo(pr.updatedAt, clock.now)}</span>
+              <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}><Icon path={mdiClockOutline} size={13} /> {timeAgo(pr.updatedAt, clock.now)}</span>
             {/if}
           {/if}
           {#if forgeUrl}
