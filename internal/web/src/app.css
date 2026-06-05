@@ -424,6 +424,13 @@ body {
 .sum-pill.danger strong {
   color: var(--danger);
 }
+.sum-pill.merged {
+  color: var(--merged);
+  border-color: color-mix(in srgb, var(--merged) 40%, var(--border));
+}
+.sum-pill.merged strong {
+  color: var(--merged);
+}
 .badges {
   display: flex;
   align-items: center;
@@ -506,6 +513,11 @@ body {
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
+}
+.rt-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 .sha {
   font-family: ui-monospace, monospace;

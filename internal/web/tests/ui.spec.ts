@@ -65,6 +65,7 @@ test('landing health summary + non-default base branch tag', async ({ page }) =>
   await expect(summary).toContainText('3 open');
   await expect(summary.locator('.sum-pill.danger')).toContainText(['1 danger', '1 failed']);
   await expect(summary).toContainText('1 rendering');
+  await expect(summary.locator('.sum-pill.merged')).toContainText('1 merged');
 
   // Most PRs target main, so only #138 (→ staging) is flagged with a base tag.
   await expect(page.locator('.card', { hasText: '#138' }).locator('.base-tag')).toContainText('staging');

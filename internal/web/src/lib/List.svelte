@@ -32,6 +32,7 @@
     danger: openPrs.filter((p) => (p.signals?.danger ?? 0) > 0).length,
     failed: openPrs.filter((p) => p.status === 'error').length,
     rendering: openPrs.filter((p) => p.status === 'pending' || p.status === 'running').length,
+    merged: mergedPrs.length,
   }));
 
   // The default base branch is whatever most open PRs target. A PR whose base
@@ -129,6 +130,7 @@
       {#if summary.danger}<span class="sum-pill danger"><strong>{summary.danger}</strong> danger</span>{/if}
       {#if summary.failed}<span class="sum-pill danger"><strong>{summary.failed}</strong> failed</span>{/if}
       {#if summary.rendering}<span class="sum-pill"><strong>{summary.rendering}</strong> rendering</span>{/if}
+      {#if summary.merged}<span class="sum-pill merged"><strong>{summary.merged}</strong> merged</span>{/if}
     </div>
   {/if}
 
