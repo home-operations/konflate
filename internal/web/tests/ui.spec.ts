@@ -55,6 +55,23 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.progress')).toContainText('1/3 viewed');
 });
 
+test('landing health summary + non-default base branch tag', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // One-line health summary over the open set: 3 open, #142 danger, #131 failed
+  // to render, #138 still rendering.
+  const summary = page.locator('.list-summary');
+  await expect(summary).toContainText('3 open');
+  await expect(summary).toContainText('1 with danger');
+  await expect(summary).toContainText('1 failed to render');
+  await expect(summary).toContainText('1 rendering');
+
+  // Most PRs target main, so only #138 (→ staging) is flagged with a base tag.
+  await expect(page.locator('.card', { hasText: '#138' }).locator('.base-tag')).toContainText('staging');
+  await expect(page.locator('.card', { hasText: '#142' }).locator('.base-tag')).toHaveCount(0);
+});
+
 test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');

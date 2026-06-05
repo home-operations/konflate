@@ -10,6 +10,11 @@
     mdiPackageVariantClosed,
     mdiAlertCircleOutline,
     mdiFileDocumentOutline,
+    mdiClockOutline,
+    mdiAccountOutline,
+    mdiTagOutline,
+    mdiSourceBranch,
+    mdiFilterOutline,
     mdiChevronRight,
     mdiChevronDown,
     mdiSourceMerge,
@@ -20,6 +25,26 @@
   const prs = $derived(filteredPRs());
   const openPrs = $derived(prs.filter((p) => p.open));
   const mergedPrs = $derived(prs.filter((p) => !p.open));
+
+  // At-a-glance health of the open set, shown above the list.
+  const summary = $derived.by(() => ({
+    open: openPrs.length,
+    danger: openPrs.filter((p) => (p.signals?.danger ?? 0) > 0).length,
+    failed: openPrs.filter((p) => p.status === 'error').length,
+    rendering: openPrs.filter((p) => p.status === 'pending' || p.status === 'running').length,
+  }));
+
+  // The default base branch is whatever most open PRs target. A PR whose base
+  // differs is flagged on its card so a non-default target (konflate reviews all
+  // open PRs regardless of base) isn't mistaken for one against the default.
+  const defaultBase = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const p of openPrs) if (p.baseRef) counts.set(p.baseRef, (counts.get(p.baseRef) ?? 0) + 1);
+    let best = '';
+    let max = 0;
+    for (const [ref, c] of counts) if (c > max) [best, max] = [ref, c];
+    return best;
+  });
 
   // The "recently merged" shelf is collapsed by default; expand on click, or
   // automatically while a filter is active so a search can reach merged PRs.
@@ -39,17 +64,22 @@
         <span class="pr-num">#{pr.number}</span>
         <span class="card-title">{pr.title}</span>
         {#if pr.draft}<span class="tag">draft</span>{/if}
+        {#if pr.baseRef && defaultBase && pr.baseRef !== defaultBase}
+          <span class="tag base-tag" title={`Targets ${pr.baseRef}, not the default branch`}>
+            <Icon path={mdiSourceBranch} size={11} /> {pr.baseRef}
+          </span>
+        {/if}
         {#if !pr.open}<span class="tag merged-tag"><Icon path={mdiSourceMerge} size={11} /> merged</span>{/if}
       </div>
       <div class="card-meta">
-        <span class="card-author">{pr.author || 'unknown'}</span>
+        <span class="card-author"><Icon path={mdiAccountOutline} size={12} /> {pr.author || 'unknown'}</span>
         {#if !pr.open && pr.closedAt}
-          <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}>merged {timeAgo(pr.closedAt, clock.now)}</span>
+          <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
         {:else if pr.updatedAt}
-          <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}>{timeAgo(pr.updatedAt, clock.now)}</span>
+          <span class="ago" title={`Last refreshed ${absolute(pr.updatedAt)}`}><Icon path={mdiClockOutline} size={12} /> {timeAgo(pr.updatedAt, clock.now)}</span>
         {/if}
         {#if pr.labels?.length}
-          <span class="labels">{#each pr.labels.slice(0, 4) as l}<span class="label">{l}</span>{/each}</span>
+          <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{l}</span>{/each}</span>
         {/if}
         <span class="spacer"></span>
         {#if pr.signals}
@@ -83,12 +113,24 @@
 {/snippet}
 
 <div class="list-screen">
-  <input
-    class="pr-search"
-    placeholder="Filter pull requests…"
-    bind:value={store.query}
-    aria-label="Filter pull requests"
-  />
+  <div class="pr-search-wrap">
+    <Icon path={mdiFilterOutline} size={16} />
+    <input
+      class="pr-search"
+      placeholder="Filter pull requests…"
+      bind:value={store.query}
+      aria-label="Filter pull requests"
+    />
+  </div>
+
+  {#if store.loaded && openPrs.length}
+    <p class="list-summary">
+      <strong>{summary.open}</strong> open
+      {#if summary.danger}<span class="sum-danger"> · {summary.danger} with danger</span>{/if}
+      {#if summary.failed}<span class="sum-danger"> · {summary.failed} failed to render</span>{/if}
+      {#if summary.rendering}<span class="sum-muted"> · {summary.rendering} rendering…</span>{/if}
+    </p>
+  {/if}
 
   {#if !store.loaded}
     <p class="empty"><Icon path={mdiLoading} spin /> Loading pull requests…</p>

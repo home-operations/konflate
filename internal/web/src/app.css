@@ -205,14 +205,21 @@ body {
   font-weight: 600;
 }
 .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0 6px;
   color: var(--muted);
 }
+.base-tag {
+  color: var(--accent);
+}
 .labels {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 4px;
 }
@@ -263,21 +270,33 @@ body {
   min-height: 0;
   overflow: auto;
 }
-.pr-search {
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  padding: 10px 16px;
-  font-size: 13px;
+.pr-search-wrap {
   position: sticky;
   top: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.pr-search-wrap:focus-within {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.pr-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  padding: 10px 0;
+  font-size: 13px;
 }
 .pr-search:focus {
   outline: none;
-  border-bottom-color: var(--accent);
 }
 .cards {
   list-style: none;
@@ -362,11 +381,33 @@ body {
   color: var(--muted);
 }
 .card-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   flex: 0 0 auto;
 }
 .ago {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--muted);
   white-space: nowrap;
+}
+.list-summary {
+  margin: -2px 0 12px;
+  padding: 0 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.list-summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.sum-danger {
+  color: var(--danger);
+}
+.sum-muted {
+  color: var(--muted);
 }
 .badges {
   display: flex;

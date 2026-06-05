@@ -35,7 +35,7 @@ export const samplePRs: PRStatus[] = [
     draft: true,
     headRef: 'chore/scale-web',
     headSha: 'f6e5d4c3',
-    baseRef: 'main',
+    baseRef: 'staging',
     labels: [],
     url: 'https://github.com/acme/home-ops/pull/138',
     status: 'running',
