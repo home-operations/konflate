@@ -14,6 +14,7 @@
     mdiAccountOutline,
     mdiTagOutline,
     mdiSourceBranch,
+    mdiFilterOutline,
     mdiChevronRight,
     mdiChevronDown,
     mdiSourceMerge,
@@ -112,12 +113,15 @@
 {/snippet}
 
 <div class="list-screen">
-  <input
-    class="pr-search"
-    placeholder="Filter pull requests…"
-    bind:value={store.query}
-    aria-label="Filter pull requests"
-  />
+  <div class="pr-search-wrap">
+    <Icon path={mdiFilterOutline} size={16} />
+    <input
+      class="pr-search"
+      placeholder="Filter pull requests…"
+      bind:value={store.query}
+      aria-label="Filter pull requests"
+    />
+  </div>
 
   {#if store.loaded && openPrs.length}
     <p class="list-summary">

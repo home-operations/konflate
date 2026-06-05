@@ -24,6 +24,7 @@ export {
   mdiAccountOutline,
   mdiTagOutline,
   mdiSourceBranch,
+  mdiFilterOutline,
   mdiTrayFull,
   mdiUnfoldMoreHorizontal,
   mdiUnfoldLessHorizontal,
