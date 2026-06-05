@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/home-operations/konflate/compare/0.1.2...0.1.3) (2026-06-05)
+
+
+### Features
+
+* changed-only rendering, plus merged-PR fix and flate bump ([#9](https://github.com/home-operations/konflate/issues/9)) ([d60d46d](https://github.com/home-operations/konflate/commit/d60d46dea8c95a3968556cd0e284ca5d4d9b68f6))
+
 ## [0.1.2](https://github.com/home-operations/konflate/compare/0.1.1...0.1.2) (2026-06-05)
 
 
