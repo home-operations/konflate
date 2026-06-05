@@ -400,20 +400,42 @@ body {
   white-space: nowrap;
 }
 .list-summary {
-  margin: -2px 0 12px;
-  padding: 0 2px;
-  font-size: 13px;
-  color: var(--muted);
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 960px;
+  margin: 12px auto 4px;
+  padding: 0 16px;
 }
-.list-summary strong {
+.sum-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+}
+.sum-pill strong {
   color: var(--text);
   font-weight: 600;
 }
-.sum-danger {
+.sum-pill.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+.sum-pill.danger strong {
   color: var(--danger);
 }
-.sum-muted {
-  color: var(--muted);
+.sum-pill.merged {
+  color: var(--merged);
+  border-color: color-mix(in srgb, var(--merged) 40%, var(--border));
+}
+.sum-pill.merged strong {
+  color: var(--merged);
 }
 .badges {
   display: flex;
@@ -497,6 +519,11 @@ body {
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
+}
+.rt-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 .sha {
   font-family: ui-monospace, monospace;
