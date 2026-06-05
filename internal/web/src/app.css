@@ -641,18 +641,41 @@ body {
   font-size: 12px;
   margin-top: 3px;
 }
-.img-table {
-  border-collapse: collapse;
+/* Each image change is a stacked block (name / from→to / refs) rather than a
+   table row, so a long digest wraps instead of forcing horizontal overflow. */
+.img-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   font-size: 12px;
-  width: 100%;
 }
-.img-table td {
-  padding: 3px 10px 3px 0;
-  vertical-align: top;
+.img-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.img-name,
-.img-ver {
+.img-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.img-name {
   font-family: ui-monospace, monospace;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.img-delta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+}
+.img-ver {
+  overflow-wrap: anywhere;
 }
 .img-ver.from {
   color: var(--danger);
@@ -660,19 +683,12 @@ body {
 .img-ver.to {
   color: var(--ok);
 }
-/* Keep the version and its copy button on one line (the button is inline-flex
-   and would otherwise wrap below the version in the narrow cell). */
-.ver-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
 .img-arrow {
   color: var(--muted);
 }
 .img-refs {
   color: var(--muted);
-  width: 100%;
+  overflow-wrap: anywhere;
 }
 .failure {
   padding: 4px 0;

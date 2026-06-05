@@ -19,6 +19,23 @@
   function open(id: string) {
     if (router.route.name === 'review') openDiffs(router.route.pr, id);
   }
+
+  // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
+  // digest-pinned image doesn't blow out the layout; tags are short already and
+  // shown in full. The full value stays in the title tooltip and the copy button.
+  function shortVer(v: string): string {
+    if (!v) return '∅';
+    const i = v.indexOf(':');
+    if (i < 0) return v; // a tag — no algo prefix
+    const hex = v.slice(i + 1);
+    return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
+  }
+
+  // Reconstruct a pullable reference for the copy button: a digest joins the name
+  // with '@' (a tag can never contain ':', so a ':' in the version means digest).
+  function imageRef(name: string, ver: string): string {
+    return ver.includes(':') ? `${name}@${ver}` : `${name}:${ver}`;
+  }
 </script>
 
 <div class="overview">
@@ -53,26 +70,24 @@
   {#if d.images?.length}
     <section class="ov-section">
       <h3><Icon path={mdiPackageVariantClosed} size={15} /> Image changes</h3>
-      <table class="img-table">
-        <tbody>
-          {#each d.images as img}
-            <tr>
-              <td class="img-name">{img.name}</td>
-              <td class="img-ver from">{img.from || '∅'}</td>
-              <td class="img-arrow">→</td>
-              <td class="img-ver to">
-                <span class="ver-copy"
-                  >{img.to || '∅'}{#if img.to}<Copy
-                      text={`${img.name}:${img.to}`}
-                      label="Copy image reference"
-                    />{/if}</span
-                >
-              </td>
-              <td class="img-refs">{img.refs?.join(', ') ?? ''}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <ul class="img-list">
+        {#each d.images as img}
+          <li class="img-change">
+            <div class="img-head">
+              <span class="img-name">{img.name}</span>
+              {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
+            </div>
+            <div class="img-delta">
+              <span class="img-ver from" title={img.from || undefined}>{shortVer(img.from)}</span>
+              <span class="img-arrow">→</span>
+              <span class="img-ver to" title={img.to || undefined}>{shortVer(img.to)}</span>
+            </div>
+            {#if img.refs?.length}
+              <div class="img-refs">{img.refs.join(', ')}</div>
+            {/if}
+          </li>
+        {/each}
+      </ul>
     </section>
   {/if}
 

@@ -39,7 +39,7 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.danger-strip')).toContainText('danger');
   await expect(page.locator('.impact')).toContainText('resources');
   await expect(page.locator('.warning.danger')).toContainText('StatefulSet');
-  await expect(page.locator('.img-table')).toContainText('ghcr.io/rook/ceph');
+  await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.failure')).toContainText('plex');
   await expect(page.locator('.ov-res')).toHaveCount(3);
 
@@ -187,6 +187,40 @@ test('filter narrows the PR list', async ({ page }) => {
   await expect(page.locator('.card')).toContainText('#131');
 });
 
+test('image changes shorten digest versions (full value on hover + correct copy)', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __copied: string[] }).__copied = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (t: string) => {
+          (window as unknown as { __copied: string[] }).__copied.push(t);
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+  await stubApi(page);
+  await page.goto('/#/pr/142');
+
+  const block = page.locator('.img-change', { hasText: 'thelounge' });
+  // Displayed as sha256:<12 hex>…, never the full 64-hex digest (which blew out the width).
+  await expect(block.locator('.img-ver.to')).toHaveText('sha256:7f2fff6e2644…');
+  await expect(block.locator('.img-ver.from')).toHaveText('sha256:9c3667236b1a…');
+  await expect(block.locator('.img-ver.to')).not.toContainText('aadf18cd1abc'); // the truncated tail
+  // Full digest preserved on hover.
+  await expect(block.locator('.img-ver.to')).toHaveAttribute(
+    'title',
+    'sha256:7f2fff6e264411ce8608bd1fdf5142a3cd980677b0479e7e3702aadf18cd1abc',
+  );
+  // Copy reconstructs a digest reference with '@' (not a malformed second ':').
+  await block.locator('.copy-btn').click();
+  const copied = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+  expect(copied).toContain(
+    'ghcr.io/thelounge/thelounge:4.5.0@sha256:7f2fff6e264411ce8608bd1fdf5142a3cd980677b0479e7e3702aadf18cd1abc',
+  );
+});
+
 test('mobile: diff header title is not crushed to one char per line (regression)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
@@ -220,7 +254,7 @@ test('copy buttons copy the full underlying value', async ({ page }) => {
   // Head SHA copies the full SHA, not the 7-char display.
   await page.locator('.sha-wrap .copy-btn').click();
   // Image-change row copies the full name:tag reference.
-  await page.locator('.img-table .copy-btn').first().click();
+  await page.locator('.img-change .copy-btn').first().click();
   const copied = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
   expect(copied).toContain('a1b2c3d4e5f6');
   expect(copied).toContain('ghcr.io/rook/ceph:v1.15.0');
