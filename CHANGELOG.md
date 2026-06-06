@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/home-operations/konflate/compare/0.1.12...0.1.13) (2026-06-06)
+
+
+### Features
+
+* **ui:** redesign the diff review page ([#40](https://github.com/home-operations/konflate/issues/40)) ([5b78eaa](https://github.com/home-operations/konflate/commit/5b78eaab1cf90c207c515d8eaf9c7f9007d6d8c5))
+
 ## [0.1.12](https://github.com/home-operations/konflate/compare/0.1.11...0.1.12) (2026-06-06)
 
 
