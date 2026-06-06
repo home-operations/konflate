@@ -4,8 +4,7 @@ import { router } from './router.svelte';
 import { adjacentPR, adjacentResource, goList, openSel } from './store.svelte';
 
 // The shortcuts help overlay — toggled by '?' (and the topbar button), closed
-// by Escape or a backdrop click. Lives here so the key handler and the App
-// share one source of truth.
+// by Escape or a backdrop click.
 export const help = $state({ open: false });
 export function toggleHelp(): void {
   help.open = !help.open;
@@ -20,8 +19,8 @@ export function initKeyboard(): void {
   window.addEventListener('keydown', (e) => {
     if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
 
-    // The help overlay first: '?' toggles it on any screen; while it's open,
-    // Escape closes it (instead of leaving the review underneath).
+    // '?' toggles the help on any screen; while open, Escape closes it
+    // (instead of leaving the review underneath).
     if (e.key === '?') {
       toggleHelp();
       e.preventDefault();

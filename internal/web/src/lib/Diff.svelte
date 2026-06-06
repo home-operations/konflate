@@ -48,8 +48,7 @@
   <span class="res-status status-{resource.status}">{resource.status}</span>
   <span class="res-title">{resource.title}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  <!-- Zero counts are hidden, matching the tree rail (a green +0 on a removed
-       resource reads as noise). -->
+  <!-- Zero counts are hidden, matching the tree rail. -->
   <span class="res-counts"
     >{#if resource.add}<span class="add">+{resource.add}</span>{/if}{#if resource.del}<span class="del">-{resource.del}</span>{/if}</span
   >

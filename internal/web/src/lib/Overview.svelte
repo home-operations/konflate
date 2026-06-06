@@ -13,9 +13,8 @@
   function warningTarget(resource: string): string | null {
     return d.resources?.find((r) => r.title === resource)?.id ?? null;
   }
-  function openWarning(resource: string): void {
-    const id = warningTarget(resource);
-    if (id && router.route.name === 'review') openSel(router.route.pr, id);
+  function openWarning(id: string): void {
+    if (router.route.name === 'review') openSel(router.route.pr, id);
   }
 
   // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
@@ -53,7 +52,7 @@
     {#if d.impact.namespaces?.length}
       <span class="impact-pill"><strong>{d.impact.namespaces.length}</strong> namespaces</span>
     {/if}
-    <!-- Zero counts stay neutral — a tinted "+0 added" draws the eye to nothing. -->
+    <!-- Zero counts stay neutral; a tinted "+0" is noise. -->
     <span class="impact-pill" class:add={d.summary.added > 0}>+{d.summary.added} added</span>
     <span class="impact-pill" class:chg={d.summary.changed > 0}>{d.summary.changed} changed</span>
     <span class="impact-pill" class:del={d.summary.removed > 0}>−{d.summary.removed} removed</span>
@@ -63,10 +62,10 @@
     <section class="ov-section">
       <h3>Warnings</h3>
       {#each d.warnings as w}
-        <!-- A warning whose resource rendered into the diff is a button that
-             jumps to that diff; otherwise it stays inert text. -->
-        {#if warningTarget(w.resource)}
-          <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(w.resource)}>
+        {@const target = warningTarget(w.resource)}
+        <!-- Warnings whose resource rendered into the diff deep-link to it. -->
+        {#if target}
+          <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
             {@render warningBody(w)}
           </button>
         {:else}

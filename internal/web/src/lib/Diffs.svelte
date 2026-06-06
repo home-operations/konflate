@@ -24,13 +24,24 @@
 
   // The selection the scrollspy last derived. Navigation (tree click, j/k,
   // deep link) only scrolls when the route disagrees with it, so scroll-driven
-  // route updates never re-scroll under the reader.
+  // route updates never re-scroll under the reader. Diffs remounts per PR (the
+  // loading state unmounts it), so this never carries across PRs.
   let spySel = 'summary';
 
   $effect(() => {
     const target = sel;
     if (!pane || target === spySel) return;
-    pane.querySelector(`[data-sel="${target}"]`)?.scrollIntoView({ block: 'start' });
+    // CSS.escape: `sel` comes from the URL hash, and an unescaped quote/bracket
+    // would make querySelector throw inside the effect.
+    const section = pane.querySelector(`[data-sel="${CSS.escape(target)}"]`);
+    if (!section) {
+      // Stale deep link — the resource is gone from the re-rendered diff. Land
+      // on the Summary and fix the URL so it doesn't claim a missing resource.
+      spySel = 'summary';
+      if (router.route.name === 'review') replace({ name: 'review', pr: router.route.pr, sel: null });
+      return;
+    }
+    section.scrollIntoView({ block: 'start' });
     spySel = target; // the scroll event re-derives it if the section can't reach the top
   });
 

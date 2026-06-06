@@ -1,8 +1,6 @@
 <script lang="ts">
   // Project footer for the list screen (non-sticky — it scrolls with the
-  // cards): the konflate GitHub link (moved out of the topbar), the
-  // home-operations Discord, the license, and the running version from
-  // /api/meta. The review screens stay footer-free; their chrome is precious.
+  // cards). The review screens stay footer-free; their chrome is precious.
   import { store } from './store.svelte';
   import Icon from './Icon.svelte';
   import {

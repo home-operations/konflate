@@ -123,8 +123,8 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* When the repo is a link to its forge page: quiet until hovered, then the
-   accent + underline + external-link glyph make the affordance unmistakable. */
+/* Repo-link affordance: muted until hovered, then accent + underline + the
+   external-link glyph. */
 a.repo {
   text-decoration: none;
 }
@@ -171,8 +171,7 @@ a.repo:focus-visible .repo-ext {
   cursor: default;
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
-   treatment — this is a keyboard-driven UI, so tab focus must be visible
-   everywhere. Inset so it never clips inside scroll containers. */
+   treatment. Inset so it never clips inside scroll containers. */
 :is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .pr-search):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -227,7 +226,7 @@ a.repo:focus-visible .repo-ext {
   padding: 16px;
   color: var(--muted);
 }
-/* An empty review queue is the success state — celebrate it quietly. */
+/* An empty review queue is the success state, not an error. */
 .all-clear {
   display: flex;
   flex-direction: column;
@@ -383,8 +382,8 @@ a.repo:focus-visible .repo-ext {
 .card:hover {
   border-color: var(--accent);
 }
-/* Triage salience: a card carrying danger warnings shows a red edge so risk
-   reads before the badges do. Inset shadow, not a border, so layout is stable. */
+/* Cards carrying danger warnings show a red edge. Inset shadow, not a
+   border, so layout is stable. */
 .card.danger {
   box-shadow: inset 3px 0 0 var(--danger);
 }
@@ -1339,7 +1338,7 @@ kbd {
 @media (max-width: 640px) {
   /* Reclaim the topbar for the repo name (otherwise truncated to "ac…"): drop
      the wordmark to the logo, the auto-refresh pill to its clock icon, and the
-     shortcuts-help button entirely (keyboard shortcuts mean nothing on touch). */
+     shortcuts-help button entirely (no keyboard on touch). */
   .wordmark,
   .auto-text,
   .kbd-btn {

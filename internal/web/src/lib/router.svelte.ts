@@ -45,7 +45,12 @@ export function navigate(to: Route): void {
 // replaceState fires no hashchange, so the store is updated directly.
 export function replace(to: Route): void {
   router.route = to;
-  history.replaceState(null, '', toHash(to));
+  try {
+    history.replaceState(null, '', toHash(to));
+  } catch {
+    // Safari rate-limits replaceState (SecurityError past ~100 calls/30s).
+    // The in-memory route is already updated; the URL syncs on the next call.
+  }
 }
 
 export function initRouter(): void {

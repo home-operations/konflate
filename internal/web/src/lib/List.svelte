@@ -68,7 +68,6 @@
 </script>
 
 {#snippet allClear()}
-  <!-- An empty review queue is the success state — inbox zero, not an error. -->
   <div class="all-clear">
     <Icon path={mdiCheckCircleOutline} size={36} />
     <p>All caught up — no open pull requests.</p>
@@ -77,7 +76,6 @@
 
 {#snippet prCard(pr: PRStatus)}
   <li class="card-li">
-    <!-- Open PRs with danger warnings get a red edge (see .card.danger). -->
     <button
       class="card"
       class:merged={!pr.open}

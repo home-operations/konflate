@@ -17,6 +17,7 @@
   import Icon from './lib/Icon.svelte';
   import List from './lib/List.svelte';
   import Review from './lib/Review.svelte';
+  import type { Meta } from './lib/types';
 
   onMount(() => {
     initTheme();
@@ -47,6 +48,12 @@
     return `${sec}s`;
   }
   const autoLabel = $derived(store.meta ? fmtInterval(store.meta.refreshIntervalSeconds) : '');
+
+  // Move focus into the help dialog when it opens (screen readers announce it;
+  // Escape works from anywhere via the global key handler).
+  function focusOnMount(node: HTMLElement): void {
+    node.focus();
+  }
 </script>
 
 <div class="app">
@@ -57,10 +64,13 @@
       <span class="conn" class:on={store.connected} title={store.connected ? 'live' : 'reconnecting…'}></span>
     </a>
 
+    {#snippet repoChip(meta: Meta)}
+      {#if forge}<Icon path={forge.path} label={meta.forge} size={15} />{/if}
+      <span>{meta.repo}</span>
+    {/snippet}
+
     {#if store.meta}
       {#if store.meta.repoUrl}
-        <!-- The reviewed repo's name links to its forge page. The external-link
-             glyph appears on hover so the affordance is clear but quiet. -->
         <a
           class="repo"
           href={store.meta.repoUrl}
@@ -68,15 +78,11 @@
           rel="noopener noreferrer"
           title={`Open ${store.meta.repo} on ${store.meta.forge}`}
         >
-          {#if forge}<Icon path={forge.path} label={store.meta.forge} size={15} />{/if}
-          <span>{store.meta.repo}</span>
+          {@render repoChip(store.meta)}
           <span class="repo-ext"><Icon path={mdiOpenInNew} size={12} /></span>
         </a>
       {:else}
-        <div class="repo">
-          {#if forge}<Icon path={forge.path} label={store.meta.forge} size={15} />{/if}
-          <span>{store.meta.repo}</span>
-        </div>
+        <div class="repo">{@render repoChip(store.meta)}</div>
       {/if}
     {:else}
       <div class="spacer"></div>
@@ -88,7 +94,7 @@
           <Icon path={mdiClockOutline} size={15} /> <span class="auto-text">auto · {autoLabel}</span>
         </span>
       {/if}
-      <!-- Hidden on phones (see the mobile block) — shortcuts mean nothing on touch. -->
+      <!-- Hidden on phones (see the mobile block). -->
       <button class="btn btn-icon kbd-btn" onclick={toggleHelp} title="Keyboard shortcuts (?)">
         <Icon path={mdiKeyboardOutline} label="Keyboard shortcuts" />
       </button>
@@ -105,11 +111,10 @@
   {/if}
 
   {#if help.open}
-    <!-- The backdrop is a real button (not a click-handled div) so closing is
-         keyboard- and screen-reader-reachable without extra wiring. -->
+    <!-- The backdrop is a real button so closing is keyboard-reachable. -->
     <div class="help-overlay">
       <button class="help-backdrop" aria-label="Close keyboard shortcuts" onclick={toggleHelp}></button>
-      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts">
+      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount>
         <h2>Keyboard shortcuts</h2>
         <dl class="help-keys">
           <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
