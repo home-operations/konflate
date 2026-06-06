@@ -335,9 +335,13 @@ test('mobile: topbar keeps the repo name and icon buttons are tappable', async (
   await expect(page.locator('.brand .wordmark')).toBeHidden();
   await expect(page.locator('.auto .auto-text')).toBeHidden();
   await expect(page.locator('.auto svg')).toBeVisible(); // the clock icon stays
-  // Icon buttons are ≥40px tall for thumbs.
-  const box = await page.locator('.actions .btn-icon').last().boundingBox();
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+  // Icon buttons are ≥40px tall for thumbs, and the auto-refresh pill matches
+  // them (same box size) once it collapses to just the clock icon.
+  const btn = await page.locator('.actions .btn-icon').last().boundingBox();
+  const auto = await page.locator('.actions .auto').boundingBox();
+  expect(btn?.height ?? 0).toBeGreaterThanOrEqual(40);
+  expect(Math.abs((auto?.height ?? 0) - (btn?.height ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((auto?.width ?? 0) - (btn?.width ?? 0))).toBeLessThanOrEqual(1);
 });
 
 test('copy buttons copy the full underlying value', async ({ page }) => {

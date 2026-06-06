@@ -1209,8 +1209,10 @@ td.side-blank {
     display: none;
   }
   /* Thumb-friendly hit areas for the icon buttons (back, prev/next, theme, the
-     resource nav, etc.). */
-  .btn-icon {
+     resource nav, etc.) — and the same 40px box for the auto-refresh pill so it
+     matches the GitHub/theme buttons once collapsed to just its clock icon. */
+  .btn-icon,
+  .auto {
     min-width: 40px;
     min-height: 40px;
     justify-content: center;
