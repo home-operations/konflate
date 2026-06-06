@@ -22,6 +22,8 @@
     mdiClose,
     mdiFilterOutline,
     mdiSortVariant,
+    mdiSortAscending,
+    mdiSortDescending,
     mdiChevronRight,
     mdiChevronDown,
     mdiCheckCircleOutline,
@@ -55,6 +57,19 @@
   // A pill renders while it counts something — or while it's the active
   // filter, so it can't strand itself unclickable when its count hits zero.
   const showPill = (count: number, f: StatusFilter): boolean => count > 0 || store.statusFilter === f;
+
+  // Picking a sort field resets to its natural direction (time newest-first,
+  // name A→Z); the direction button then flips it.
+  function onSortKeyChange(): void {
+    store.sortDir = store.sort === 'name' ? 'asc' : 'desc';
+  }
+  function toggleSortDir(): void {
+    store.sortDir = store.sortDir === 'asc' ? 'desc' : 'asc';
+  }
+  const sortDirLabel = $derived.by(() => {
+    if (store.sort === 'name') return store.sortDir === 'asc' ? 'A → Z' : 'Z → A';
+    return store.sortDir === 'desc' ? 'newest first' : 'oldest first';
+  });
 
   // The default base branch is whatever most open PRs target. A PR whose base
   // differs is flagged on its card so a non-default target (konflate reviews all
@@ -194,14 +209,19 @@
       {/if}
       <span class="key-hint"><kbd>/</kbd></span>
     </label>
-    <label class="sort" title="Sort pull requests">
-      <Icon path={mdiSortVariant} size={15} />
-      <select bind:value={store.sort} aria-label="Sort pull requests">
-        <option value="created">created</option>
-        <option value="refreshed">refreshed</option>
-        <option value="name">name</option>
-      </select>
-    </label>
+    <div class="sort">
+      <label class="sort-field" title="Sort field">
+        <Icon path={mdiSortVariant} size={15} />
+        <select bind:value={store.sort} onchange={onSortKeyChange} aria-label="Sort field">
+          <option value="created">created</option>
+          <option value="refreshed">refreshed</option>
+          <option value="name">name</option>
+        </select>
+      </label>
+      <button class="sort-dir" onclick={toggleSortDir} title={`Sort: ${sortDirLabel}`} aria-label={`Sort: ${sortDirLabel}`}>
+        <Icon path={store.sortDir === 'asc' ? mdiSortAscending : mdiSortDescending} size={15} />
+      </button>
+    </div>
   </div>
 
   {#if store.loaded && openAll.length}

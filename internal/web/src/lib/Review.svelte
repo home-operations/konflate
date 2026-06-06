@@ -103,16 +103,21 @@
     {/if}
 
     <div class="review-body">
-      {#if store.loading || pr?.status === 'running'}
-        <div class="loading-center"><Smasher size={130} /><p>Rendering the diff…</p></div>
-      {:else if pr?.status === 'pending'}
-        <div class="loading-center"><Icon path={mdiTrayFull} size={38} /><p>Queued — waiting to render…</p></div>
-      {:else if store.diffError}
+      {#if store.diffError}
         <p class="error-box">{store.diffError}</p>
-      {:else if !store.diff}
-        <p class="empty">No diff available.</p>
-      {:else}
+      {:else if store.diff}
         <Diffs />
+      {:else if store.loadingSlow}
+        {#if pr?.status === 'pending'}
+          <div class="loading-center"><Icon path={mdiTrayFull} size={38} /><p>Queued — waiting to render…</p></div>
+        {:else}
+          <div class="loading-center"><Smasher size={130} /><p>Rendering the diff…</p></div>
+        {/if}
+      {:else if store.loading}
+        <!-- Brief pre-spinner window: keep the pane blank so a fast load (an
+             already-rendered diff, or a reload) never flashes the spinner. -->
+      {:else}
+        <p class="empty">No diff available.</p>
       {/if}
     </div>
   </div>

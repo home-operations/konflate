@@ -32,6 +32,8 @@ export {
   mdiTagOutline,
   mdiScaleBalance,
   mdiSortVariant,
+  mdiSortAscending,
+  mdiSortDescending,
   mdiSourceBranch,
   mdiSourcePull,
   mdiFilterOutline,

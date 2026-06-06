@@ -482,9 +482,14 @@ a.repo:focus-visible .repo-ext {
 .sort {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex: 0 0 auto;
   color: var(--muted);
+}
+.sort-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .sort select {
   border: none;
@@ -499,6 +504,26 @@ a.repo:focus-visible .repo-ext {
   color: var(--text);
 }
 .sort select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Direction toggle (asc/desc) beside the sort field. */
+.sort-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+}
+.sort-dir:hover {
+  color: var(--text);
+  background: var(--panel-alt);
+}
+.sort-dir:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }

@@ -7,8 +7,10 @@ import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = all).
 export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged';
-// List sort orders: newest first, recently refreshed first, or by title.
+// List sort: the field to order by, and the direction. The comparator is
+// defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
+export type SortDir = 'asc' | 'desc';
 
 interface Store {
   meta: Meta | null;
@@ -17,12 +19,14 @@ interface Store {
   query: string;
   statusFilter: StatusFilter;
   sort: SortKey;
+  sortDir: SortDir;
   diff: DiffResult | null;
   diffFor: number | null; // PR number the diff/loading belongs to
   diffError: string;
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
-  loading: boolean;
+  loading: boolean; // a diff fetch/render is in flight
+  loadingSlow: boolean; // …and has lasted long enough to show the spinner (anti-flash)
   connected: boolean;
 }
 
@@ -33,12 +37,14 @@ export const store: Store = $state({
   query: '',
   statusFilter: '',
   sort: 'created',
+  sortDir: 'desc',
   diff: null,
   diffFor: null,
   diffError: '',
   diffRefreshError: '',
   diffMergeCommand: '',
   loading: false,
+  loadingSlow: false,
   connected: false,
 });
 
@@ -136,14 +142,21 @@ const ts = (iso?: string): number => {
   return Number.isNaN(v) ? 0 : v;
 };
 
-// sortPRs orders a list by the selected sort: created/refreshed newest first,
-// name A→Z. Returns a copy — the store's array stays in server order.
+// sortPRs orders a list by the selected key and direction. The comparator is
+// ascending (name A→Z, time oldest-first); 'desc' (the default) reverses it, so
+// created/refreshed read newest-first and name Z→A. Returns a copy — the store's
+// array stays in server order.
 export function sortPRs(list: PRStatus[]): PRStatus[] {
-  const key = store.sort;
+  const { sort: key, sortDir } = store;
+  const dir = sortDir === 'asc' ? 1 : -1;
   return [...list].sort((a, b) => {
-    if (key === 'name') return a.title.localeCompare(b.title);
-    if (key === 'refreshed') return ts(b.updatedAt) - ts(a.updatedAt);
-    return ts(b.createdAt) - ts(a.createdAt);
+    const asc =
+      key === 'name'
+        ? a.title.localeCompare(b.title)
+        : key === 'refreshed'
+          ? ts(a.updatedAt) - ts(b.updatedAt)
+          : ts(a.createdAt) - ts(b.createdAt);
+    return dir * asc;
   });
 }
 
@@ -221,6 +234,31 @@ export async function loadPRs(): Promise<void> {
   }
 }
 
+// The diff spinner only appears once a fetch/render has been in flight this
+// long, so an already-rendered diff (a PR switch, or a page reload) resolves
+// first and never flashes it.
+const SPINNER_DELAY_MS = 200;
+let slowTimer: ReturnType<typeof setTimeout> | undefined;
+
+// beginLoading marks a fetch in flight and arms the delayed spinner.
+function beginLoading(n: number): void {
+  store.loading = true;
+  store.loadingSlow = false;
+  clearTimeout(slowTimer);
+  slowTimer = setTimeout(() => {
+    if (store.loading && store.diffFor === n) store.loadingSlow = true;
+  }, SPINNER_DELAY_MS);
+}
+
+// settleLoading applies the loading state from a resolved fetch: a still-
+// rendering PR shows the spinner at once (we now know it's slow); a ready or
+// errored one clears it.
+function settleLoading(rendering: boolean): void {
+  clearTimeout(slowTimer);
+  store.loading = rendering;
+  store.loadingSlow = rendering;
+}
+
 // ensureDiff loads PR n's diff if it isn't already the current one. Called by
 // the App whenever the route points at a review.
 export function ensureDiff(n: number): void {
@@ -229,7 +267,7 @@ export function ensureDiff(n: number): void {
   store.diff = null;
   store.diffError = '';
   store.diffMergeCommand = '';
-  store.loading = true;
+  beginLoading(n);
   void loadDiff(n);
 }
 
@@ -240,7 +278,7 @@ async function loadDiff(n: number): Promise<void> {
     applyEnvelope(env);
   } catch (err) {
     if (store.diffFor === n) {
-      store.loading = false;
+      settleLoading(false);
       store.diffError = String(err);
     }
   }
@@ -250,7 +288,7 @@ function applyEnvelope(env: DiffEnvelope): void {
   // Set on every envelope (the command depends only on the PR's open state, not
   // the render), so a reviewer can copy it while the diff is still rendering.
   store.diffMergeCommand = env.mergeCommand ?? '';
-  store.loading = env.status === 'pending' || env.status === 'running';
+  settleLoading(env.status === 'pending' || env.status === 'running');
   if (env.status === 'ready' && env.diff) {
     store.diff = env.diff;
     injectChroma(env.diff.chromaCss);

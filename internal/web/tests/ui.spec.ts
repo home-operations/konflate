@@ -394,6 +394,39 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await expect(page.locator('.empty')).toContainText('match your filter');
 });
 
+test('list sort: direction toggle, and changing field resets to its natural order', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  const ids = page.locator('.cards .pr-id');
+  const dir = page.locator('.sort-dir');
+
+  // created desc (default) → newest first.
+  await expect(ids.nth(0)).toContainText('#138');
+  await expect(dir).toHaveAttribute('aria-label', 'Sort: newest first');
+
+  // Toggle → ascending (oldest first) → the order reverses.
+  await dir.click();
+  await expect(dir).toHaveAttribute('aria-label', 'Sort: oldest first');
+  await expect(ids.nth(0)).toContainText('#131');
+  await expect(ids.nth(2)).toContainText('#138');
+
+  // Switching field resets to that field's natural direction: name → A→Z.
+  await page.locator('.sort select').selectOption('name');
+  await expect(dir).toHaveAttribute('aria-label', 'Sort: A → Z');
+  // A→Z by title: "chore…"(#138) < "feat…"(#142) < "fix…"(#131).
+  await expect(ids.nth(0)).toContainText('#138');
+  await expect(ids.nth(2)).toContainText('#131');
+});
+
+test('opening an already-rendered PR does not flash the loading spinner', async ({ page }) => {
+  await stubApi(page);
+  // The stubbed (instant) ready diff resolves before the spinner delay, so the
+  // Summary renders and the loading mascot never appears.
+  await page.goto('/#/pr/142');
+  await expect(page.locator('[data-sel="summary"] .impact')).toBeVisible();
+  await expect(page.locator('.loading-center')).toHaveCount(0);
+});
+
 test('image changes shorten digest versions (full value on hover + correct copy)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __copied: string[] }).__copied = [];
