@@ -7,6 +7,7 @@
   import Avatar from './Avatar.svelte';
   import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
+  import Smasher from './Smasher.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -25,7 +26,6 @@
     mdiChevronDown,
     mdiCheckCircleOutline,
     mdiTrayFull,
-    mdiLoading,
     mdiConsoleLine,
   } from './icons';
 
@@ -223,7 +223,7 @@
   {/if}
 
   {#if !store.loaded}
-    <p class="empty"><Icon path={mdiLoading} spin /> Loading pull requests…</p>
+    <div class="loading-center"><Smasher size={130} /><p>Loading pull requests…</p></div>
   {:else if shown.length === 0}
     {#if filterActive}
       <p class="empty">No pull requests match your filter.</p>

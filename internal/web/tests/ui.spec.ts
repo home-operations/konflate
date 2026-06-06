@@ -200,6 +200,20 @@ test('list shows a spinner for rendering PRs and a queued icon for pending', asy
   await expect(page.locator('.card', { hasText: 'waiting pr' })).toContainText('queued');
 });
 
+test('the PR list loading state shows the smasher, then the list arrives', async ({ page }) => {
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', async (r) => {
+    await new Promise((res) => setTimeout(res, 800)); // hold the list briefly
+    await r.fulfill({ json: samplePRs });
+  });
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+
+  await expect(page.locator('.list-screen .smasher')).toBeVisible();
+  await expect(page.locator('.loading-center')).toContainText('Loading pull requests');
+  await expect(page.locator('.card')).toHaveCount(3); // and the data still lands
+});
+
 test('review body shows a big spinner while a diff is still rendering', async ({ page }) => {
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', (r) =>

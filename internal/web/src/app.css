@@ -209,8 +209,8 @@ a.repo:focus-visible .repo-ext {
   animation: spin 1.8s linear infinite;
 }
 /* ---- loading smasher --------------------------------------------------
-   Percussive maintenance while a diff renders: wind-up (0–35%), swing
-   (35–48%), impact at 48% (sparks + screen jolt + crack), recover. */
+   Percussive maintenance while something loads: wind-up (0–35%), swing
+   (35–48%), impact at 48% (sparks + wheel jolt + crack), recover. */
 .smash-arm {
   transform-origin: 90px 38px;
   animation: smash-swing 1.3s ease-in-out infinite;
@@ -231,8 +231,8 @@ a.repo:focus-visible .repo-ext {
     transform: rotate(70deg);
   }
 }
-.smash-screen {
-  transform-origin: 30px 66px;
+.smash-wheel {
+  transform-origin: 30px 80px; /* rocks on its contact point with the ground */
   animation: smash-jolt 1.3s linear infinite;
 }
 @keyframes smash-jolt {
@@ -277,7 +277,7 @@ a.repo:focus-visible .repo-ext {
 }
 @media (prefers-reduced-motion: reduce) {
   .smash-arm,
-  .smash-screen,
+  .smash-wheel,
   .smash-sparks {
     animation: none;
   }
