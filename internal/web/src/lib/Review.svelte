@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from './router.svelte';
-  import { store, currentPR, goList, setTab, adjacentPR } from './store.svelte';
+  import { store, currentPR, goList, adjacentPR } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
@@ -18,7 +18,6 @@
     mdiRefresh,
     mdiConsoleLine,
   } from './icons';
-  import Overview from './Overview.svelte';
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
 
@@ -27,7 +26,6 @@
   const forgeUrl = $derived(pr && /^https?:\/\//i.test(pr.url) ? pr.url : null);
   const merged = $derived(pr ? !pr.open : false);
   const danger = $derived(store.diff?.warnings?.filter((w) => w.level === 'danger') ?? []);
-  const total = $derived(store.diff?.resources?.length ?? 0);
 </script>
 
 {#if route}
@@ -41,7 +39,7 @@
           <span class="rt-name">{pr?.title ?? ''}</span>
         </div>
         <div class="rt-meta">
-          <span class="pr-id"><Icon path={mdiSourcePull} size={14} /> #{route.pr}</span>
+          <span class="pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
             <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             <span class="sha-wrap">
@@ -102,14 +100,7 @@
       </div>
     {/if}
 
-    <div class="tabs">
-      <button class:active={route.tab === 'overview'} onclick={() => setTab('overview')}>Overview</button>
-      <button class:active={route.tab === 'diffs'} onclick={() => setTab('diffs')}>
-        Diffs{#if total}<span class="count">{total}</span>{/if}
-      </button>
-    </div>
-
-    <div class="review-body" class:full={route.tab === 'diffs'}>
+    <div class="review-body">
       {#if store.loading || pr?.status === 'running'}
         <div class="loading-center"><Spinner size={46} label="Rendering" /><p>Rendering the diff…</p></div>
       {:else if pr?.status === 'pending'}
@@ -118,8 +109,6 @@
         <p class="error-box">{store.diffError}</p>
       {:else if !store.diff}
         <p class="empty">No diff available.</p>
-      {:else if route.tab === 'overview'}
-        <Overview />
       {:else}
         <Diffs />
       {/if}

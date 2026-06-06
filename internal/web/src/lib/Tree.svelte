@@ -1,22 +1,32 @@
 <script lang="ts">
   import { router } from './router.svelte';
-  import { store, openDiffs } from './store.svelte';
+  import { store, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
-  import { mdiAlertOctagon } from './icons';
+  import { mdiAlertOctagon, mdiFileDocumentOutline } from './icons';
 
   const d = $derived(store.diff!);
-  const sel = $derived(router.route.name === 'review' ? router.route.resource : null);
+  // A null selection (bare #/pr/N) defaults to the Summary node.
+  const sel = $derived(router.route.name === 'review' ? (router.route.sel ?? 'summary') : null);
   // Resources carrying a danger warning, keyed by their "Kind ns/name" label.
   const dangerLabels = $derived(
     new Set((d.warnings ?? []).filter((w) => w.level === 'danger').map((w) => w.resource)),
   );
+  const dangerCount = $derived((d.warnings ?? []).filter((w) => w.level === 'danger').length);
 
   function open(id: string) {
-    if (router.route.name === 'review') openDiffs(router.route.pr, id);
+    if (router.route.name === 'review') openSel(router.route.pr, id);
   }
 </script>
 
 <div class="tree">
+  <button class="tree-summary" class:selected={sel === 'summary'} onclick={() => open('summary')}>
+    <Icon path={mdiFileDocumentOutline} size={14} />
+    <span class="leaf-name">Summary</span>
+    {#if dangerCount}
+      <span class="summary-danger"><Icon path={mdiAlertOctagon} size={13} label="has danger warnings" /></span>
+    {/if}
+  </button>
+
   {#each d.tree ?? [] as parent}
     <div class="tree-parent">
       <div class="tree-parent-label">{parent.label}</div>

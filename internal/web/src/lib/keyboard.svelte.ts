@@ -1,7 +1,7 @@
 // Keyboard-first navigation. Active only outside text inputs and without
 // modifier keys, so it never fights the browser or the filter box.
 import { router } from './router.svelte';
-import { adjacentPR, adjacentResource, goList, setTab } from './store.svelte';
+import { adjacentPR, adjacentResource, goList, openSel } from './store.svelte';
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
@@ -20,7 +20,7 @@ export function initKeyboard(): void {
         goList();
         break;
       case 'j':
-        adjacentResource(1); // also jumps into the Diffs tab
+        adjacentResource(1); // step down through Summary + resources
         break;
       case 'k':
         adjacentResource(-1);
@@ -32,7 +32,7 @@ export function initKeyboard(): void {
         adjacentPR(1);
         break;
       case 'o':
-        setTab(r.tab === 'overview' ? 'diffs' : 'overview');
+        openSel(r.pr, 'summary'); // jump to the Summary panel
         break;
       default:
         return;

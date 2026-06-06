@@ -210,14 +210,12 @@ body {
   font-size: 12px;
 }
 /* The PR number, shown first in the meta row (list + review) behind a
-   pull-request glyph. Kept at full text weight so it reads as the card's
-   identifier amid the muted meta. */
+   pull-request glyph. Styled like its siblings (author, sha, opened, refreshed)
+   — muted and normal weight — so the whole meta row reads uniformly. */
 .pr-id {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-weight: 600;
-  color: var(--text);
   flex: 0 0 auto;
 }
 .tag {
@@ -675,46 +673,14 @@ body {
   border-radius: 6px;
   padding: 3px 9px;
 }
-.tabs {
-  display: flex;
-  gap: 4px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-}
-.tabs button {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.tabs button.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-.tabs .count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 6px;
-}
 .review-body {
   flex: 1 1 auto;
   min-height: 0;
+  /* The single-page review (.diffs) is height:100% and scrolls internally — the
+     rail and diff pane each own their scroll — so it never overflows here. auto
+     (not hidden) lets the transient loading/error/empty states scroll instead of
+     clipping a long render error. */
   overflow: auto;
-}
-.review-body.full {
-  overflow: hidden;
 }
 
 /* ---- overview -------------------------------------------------------- */
@@ -873,59 +839,6 @@ body {
   font-size: 11px;
   white-space: pre-wrap;
 }
-.ov-parent {
-  font-weight: 600;
-  font-size: 12px;
-  margin: 10px 0 2px;
-}
-.ov-res {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.ov-res:hover {
-  background: var(--panel-alt);
-}
-/* Status marker: changed (accent) by default, green added, red removed. */
-.ov-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  background: var(--accent);
-}
-.ov-dot.status-added {
-  background: var(--ok);
-}
-.ov-dot.status-removed {
-  background: var(--danger);
-}
-.ov-kind {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--muted);
-  flex: 0 0 auto;
-}
-.ov-name {
-  font-family: ui-monospace, monospace;
-  word-break: break-all;
-}
-.ov-name.status-added {
-  color: var(--ok);
-}
-.ov-name.status-removed {
-  color: var(--danger);
-}
-
 /* ---- diffs (rail + diff) --------------------------------------------- */
 .diffs {
   height: 100%;
@@ -939,15 +852,85 @@ body {
   background: var(--panel);
   min-height: 0;
 }
+.diff-main {
+  /* Column wrapper so the mobile switcher bar can sit above the scrolling pane. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel);
+}
 .diff-pane {
+  flex: 1 1 auto;
   overflow: auto;
   min-height: 0;
+}
+/* Mobile-only resource switcher. The tree rail is the navigator on wide screens;
+   where it's hidden (the ≤900px media query) this bar takes over, cycling
+   Summary + every resource — the touch counterpart to the j/k keys. */
+.diff-switcher {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
   background: var(--panel);
+}
+.switcher-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.switcher-pos {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.switcher-name {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---- tree rail ------------------------------------------------------- */
 .tree {
   padding: 6px 0 24px;
+}
+/* The Summary node — first entry, set apart from the resource leaves by a rule
+   and a document icon. Selecting it shows the impact/warnings/images panel. */
+.tree-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  margin-bottom: 4px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.tree-summary:hover {
+  background: var(--panel-alt);
+}
+.tree-summary.selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.summary-danger {
+  display: inline-flex;
+  color: var(--danger);
 }
 .tree-parent {
   margin-top: 6px;
@@ -1016,22 +999,6 @@ body {
   top: 0;
   background: var(--panel);
   z-index: 1;
-}
-/* Prev/next resource nav in the diff header. Hidden by default — the tree rail
-   is the navigator on wide screens — and revealed where the rail is hidden (see
-   the media queries). The j/k actions are surfaced as buttons for touch. */
-.res-nav {
-  display: none;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-}
-.res-pos {
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  min-width: 2.5em;
-  text-align: center;
 }
 .res-title {
   font-family: ui-monospace, monospace;
@@ -1188,9 +1155,9 @@ td.side-blank {
   .rail {
     display: none;
   }
-  /* With the tree rail gone, the diff header carries the resource navigation. */
-  .res-nav {
-    display: inline-flex;
+  /* With the tree rail gone, the switcher bar carries the resource navigation. */
+  .diff-switcher {
+    display: flex;
   }
   .review-head {
     flex-wrap: wrap;
