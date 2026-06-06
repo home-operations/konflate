@@ -245,13 +245,23 @@ func unionKeys[K comparable, V any](ms ...map[K]V) []K {
 // They rotate on every Helm chart bump (the chart version, value checksums) and
 // carry no review-relevant signal, so leaving them in surfaces a spurious
 // change on every resource a touched chart renders — even resources the PR
-// doesn't change. Mirrors flate's diff defaults.
+// doesn't change. Mirrors flate's diff defaults (defaultStripAttrs); a trailing
+// "/" is a prefix match, so "checksum/" drops checksum/config, checksum/secret,
+// and any other checksum/<x> a chart emits.
 var stripAttrs = []string{
 	"helm.sh/chart",
-	"checksum/config",
-	"checksum/secret",
+	"checksum/",
 	"app.kubernetes.io/version",
 	"chart",
+}
+
+// stripFields are dotted spec field-paths whose value a chart templates from the
+// render clock, so it rotates on every render. Mirrors flate's diff defaults
+// (defaultStripFields): volsync's spec.restic.unlock ({{ now }}, via the
+// TrueCharts common library) would otherwise show a spurious change on every
+// backed-up app whenever the two sides render a moment apart.
+var stripFields = []string{
+	"spec.restic.unlock",
 }
 
 // normalize rewrites a rendered manifest in place so render-time noise doesn't
@@ -260,10 +270,10 @@ var stripAttrs = []string{
 // as a phantom change on every PR that touches a neighbouring chart. Three
 // classes are scrubbed:
 //
-//   - Chart-bump attributes (helm.sh/chart, checksum/*, …) — stripped from
-//     metadata and nested pod/CronJob/volumeClaimTemplate metadata. Mirrors
-//     flate's own pre-diff normalization (manifest.StripResourceAttributes is
-//     the routine its diff backend uses).
+//   - Chart-bump attributes (helm.sh/chart, checksum/*, …) and render-clock
+//     spec field-paths (spec.restic.unlock) — dropped via flate's
+//     manifest.StripResourceAttributes / StripResourceFields, mirroring its own
+//     pre-diff normalization defaults.
 //   - ConfigMap binaryData — opaque base64 blobs collapsed to a content
 //     summary; the review signal is "did the bytes change", not which base64
 //     character flipped.
@@ -273,6 +283,7 @@ var stripAttrs = []string{
 //     the Secrets it reads for auth, not the ones a chart renders into output.
 func normalize(m map[string]any) {
 	manifest.StripResourceAttributes(m, stripAttrs)
+	manifest.StripResourceFields(m, stripFields)
 	switch manifest.DocKind(m) {
 	case manifest.KindConfigMap:
 		summarizeBinaryData(m)
