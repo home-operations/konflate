@@ -1,9 +1,11 @@
 <script lang="ts">
   // The loading mascot: a figure applying percussive maintenance to the
-  // Kubernetes wheel (when reconciliation is too slow). Pure CSS keyframes
-  // (see "loading smasher" in app.css) — the arm swings, the wheel jolts and
+  // Kubernetes logo (when reconciliation is too slow). Pure CSS keyframes
+  // (see "loading smasher" in app.css) — the arm swings, the logo jolts and
   // cracks, sparks fly on impact. Inherits currentColor like the other
   // loaders; sparks tint caution.
+  import { kubernetesMark } from './icons';
+
   let { size = 120, label = 'Loading' }: { size?: number; label?: string } = $props();
 </script>
 
@@ -23,22 +25,16 @@
   <!-- ground line -->
   <line x1="6" y1="80" x2="114" y2="80" opacity="0.35" />
 
-  <!-- the long-suffering Kubernetes wheel (the favicon, grounded) -->
+  <!-- the long-suffering Kubernetes logo (the official heptagon-helm mark) -->
   <g class="smash-wheel">
-    <circle cx="30" cy="65" r="15" />
-    <circle cx="30" cy="65" r="3.2" fill="currentColor" stroke="none" />
-    <g stroke-width="2">
-      <line x1="30" y1="54" x2="30" y2="59" />
-      <line x1="30" y1="71" x2="30" y2="76" />
-      <line x1="19" y1="65" x2="24" y2="65" />
-      <line x1="36" y1="65" x2="41" y2="65" />
-      <line x1="22.2" y1="57.2" x2="25.8" y2="60.8" />
-      <line x1="34.2" y1="69.2" x2="37.8" y2="72.8" />
-      <line x1="37.8" y1="57.2" x2="34.2" y2="60.8" />
-      <line x1="25.8" y1="69.2" x2="22.2" y2="72.8" />
-    </g>
-    <!-- crack, revealed on impact -->
-    <path class="smash-sparks" d="M34 52 l3 5 l-4 4" stroke-width="1.5" />
+    <path
+      d={kubernetesMark.path}
+      transform="translate(14 48) scale(1.3333)"
+      fill="currentColor"
+      stroke="none"
+    />
+    <!-- crack, revealed on impact — panel-colored so it reads through the fill -->
+    <path class="smash-sparks smash-crack" d="M31 50 l3 6 l-5 5 l4 5" stroke-width="1.5" />
   </g>
 
   <!-- impact sparks -->

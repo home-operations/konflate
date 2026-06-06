@@ -261,6 +261,9 @@ a.repo:focus-visible .repo-ext {
 .spark-tint {
   stroke: var(--caution);
 }
+.smash-crack {
+  stroke: var(--panel); /* a crack through the solid logo fill */
+}
 @keyframes smash-flash {
   0%,
   46% {
