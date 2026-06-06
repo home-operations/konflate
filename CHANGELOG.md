@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.8](https://github.com/home-operations/konflate/compare/0.1.7...0.1.8) (2026-06-06)
+
+
+### Features
+
+* **ui:** merge Overview/Diffs tabs into a single-page review ([#28](https://github.com/home-operations/konflate/issues/28)) ([b8e74f3](https://github.com/home-operations/konflate/commit/b8e74f37d57cc2914ed910baff44d25db38ed5a7))
+
+
+### Bug Fixes
+
+* **ui:** match the auto-refresh pill to the icon buttons on mobile ([#27](https://github.com/home-operations/konflate/issues/27)) ([21f8e99](https://github.com/home-operations/konflate/commit/21f8e995d80ea85f97d9dfafd37270a296570c68))
+
 ## [0.1.7](https://github.com/home-operations/konflate/compare/0.1.6...0.1.7) (2026-06-06)
 
 
