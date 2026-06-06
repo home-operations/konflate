@@ -3,8 +3,9 @@ package diff
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/Masterminds/semver/v3"
 
 	"github.com/home-operations/konflate/internal/api"
 )
@@ -187,24 +188,18 @@ func isMajorBump(from, to string) bool {
 	return ok1 && ok2 && fm != tm
 }
 
-// majorOf extracts the semver major from a tag, tolerating a leading "v". It
-// returns false for anything that isn't "<major>.<minor>…" (a digest, "latest",
-// a bare integer) and for an implausibly large major (a calendar/date tag like
-// 20240131), so those never read as a "major bump".
-func majorOf(v string) (int, bool) {
-	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
-	i := 0
-	for i < len(v) && v[i] >= '0' && v[i] <= '9' {
-		i++
-	}
-	if i == 0 || i >= len(v) || v[i] != '.' {
-		return 0, false // need "<digits>.<…>"
-	}
-	n, err := strconv.Atoi(v[:i])
-	if err != nil || n >= 1000 {
+// majorOf parses a tag/version's semver major, tolerating the shapes container
+// images and Helm charts use (a leading "v", partials like "1.2", and
+// prerelease/build metadata). It returns false for non-semver values (digests,
+// "latest", name-only tags) and for an implausibly large major — a calendar or
+// date tag like 20240131, or a calver year — so those never read as a major
+// bump. (A bare integer such as a postgres:16 tag does parse, by design.)
+func majorOf(v string) (uint64, bool) {
+	ver, err := semver.NewVersion(strings.TrimSpace(v))
+	if err != nil || ver.Major() >= 1000 {
 		return 0, false
 	}
-	return n, true
+	return ver.Major(), true
 }
 
 // resourceLabel renders "Kind ns/name", or "Kind name" for cluster-scoped

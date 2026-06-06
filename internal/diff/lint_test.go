@@ -214,17 +214,19 @@ func TestMajorOf(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		in   string
-		want int
+		want uint64
 		ok   bool
 	}{
 		{"1.15.0", 1, true},
 		{"v2.0.0", 2, true},
 		{"1.2.3-rc1", 1, true},
+		{"1.2", 1, true}, // partial
 		{"latest", 0, false},
 		{"sha256:deadbeef", 0, false},
-		{"20240131", 0, false},   // date tag (no dot)
+		{"20240131", 0, false},   // date tag (huge major)
 		{"2024.01.31", 0, false}, // calver (major too large)
-		{"3", 0, false},          // bare major (no minor)
+		{"3", 3, true},           // bare major now parses (postgres:16-style tags)
+		{"16", 16, true},
 		{"", 0, false},
 	}
 	for _, c := range cases {
@@ -236,7 +238,7 @@ func TestMajorOf(t *testing.T) {
 
 func TestIsMajorBump(t *testing.T) {
 	t.Parallel()
-	bump := [][2]string{{"v1.0.0", "v2.0.0"}, {"1.9.9", "2.0.0"}, {"2.0.0", "1.0.0"}}
+	bump := [][2]string{{"v1.0.0", "v2.0.0"}, {"1.9.9", "2.0.0"}, {"2.0.0", "1.0.0"}, {"16", "17"}}
 	noBump := [][2]string{{"1.2.0", "1.3.0"}, {"v1.0.0", "v1.0.1"}, {"latest", "1.0.0"}, {"1.0.0", "sha256:x"}, {"1.0.0", "1.0.0"}}
 	for _, p := range bump {
 		if !isMajorBump(p[0], p[1]) {
