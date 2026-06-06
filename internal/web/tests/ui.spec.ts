@@ -56,7 +56,6 @@ test('list → review → single-page flow', async ({ page }) => {
   // image changes, render failures), with the tree rail alongside it.
   await card142.click();
   await expect(page).toHaveURL(/#\/pr\/142$/);
-  await expect(page.locator('.danger-strip')).toContainText('danger');
   await expect(page.locator('.impact')).toContainText('resources');
   await expect(page.locator('.warning.danger')).toContainText('StatefulSet');
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');

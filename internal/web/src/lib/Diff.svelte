@@ -69,16 +69,18 @@
 
 <div class="res-header">
   <span class="res-status status-{resource.status}">{resource.status}</span>
-  <span class="res-title">{resource.title}</span>
+  <!-- The kind reads quieter than the ns/name it qualifies; both come from the
+       server's structured fields (title is exactly "kind name"). -->
+  <span class="res-title"><span class="res-kind">{resource.kind}</span> {resource.name}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
   {#if dangers.length}
     <span class="badge danger" title={detail(dangers)}>
-      <Icon path={mdiAlertOctagon} size={13} /> {dangers.length > 1 ? dangers.length : ''}
+      <Icon path={mdiAlertOctagon} size={13} /> danger{dangers.length > 1 ? ` ${dangers.length}` : ''}
     </span>
   {/if}
   {#if cautions.length}
     <span class="badge caution" title={detail(cautions)}>
-      <Icon path={mdiAlert} size={13} /> {cautions.length > 1 ? cautions.length : ''}
+      <Icon path={mdiAlert} size={13} /> caution{cautions.length > 1 ? ` ${cautions.length}` : ''}
     </span>
   {/if}
   <!-- Zero counts are hidden, matching the tree rail. -->
