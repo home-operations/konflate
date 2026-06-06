@@ -521,6 +521,13 @@ test('a warning deep-links to the flagged resource diff', async ({ page }) => {
   await page.locator('.warning.danger').click();
   await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
   await expect(page.locator('[data-sel="r2"] .res-title')).toContainText('StatefulSet default/postgres');
+
+  // The warning also rides along in that resource's sticky header (the global
+  // danger strip scrolls away in the stacked view); clean resources carry none.
+  const headerBadge = page.locator('[data-sel="r2"] .res-header .badge.danger');
+  await expect(headerBadge).toBeVisible();
+  await expect(headerBadge).toHaveAttribute('title', /PersistentVolumeClaims/);
+  await expect(page.locator('[data-sel="r0"] .res-header .badge')).toHaveCount(0);
 });
 
 test('zero counts stay neutral (impact pills) and hidden (diff header)', async ({ page }) => {

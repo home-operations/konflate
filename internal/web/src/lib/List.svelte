@@ -175,14 +175,18 @@
 {/snippet}
 
 <div class="list-screen">
-  <div class="pr-search-wrap">
-    <Icon path={mdiFilterOutline} size={16} />
-    <input
-      class="pr-search"
-      placeholder="Filter pull requests…"
-      bind:value={store.query}
-      aria-label="Filter pull requests"
-    />
+  <!-- The toolbar lives in the body, sharing the cards' 960px column and left
+       edge — it's the list's filter, not app chrome. -->
+  <div class="list-toolbar">
+    <label class="search-box">
+      <Icon path={mdiFilterOutline} size={15} />
+      <input
+        class="pr-search"
+        placeholder="Filter pull requests…"
+        bind:value={store.query}
+        aria-label="Filter pull requests"
+      />
+    </label>
     <label class="sort" title="Sort pull requests">
       <Icon path={mdiSortVariant} size={15} />
       <select bind:value={store.sort} aria-label="Sort pull requests">

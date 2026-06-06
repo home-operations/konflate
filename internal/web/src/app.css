@@ -105,6 +105,9 @@ body {
   height: 7px;
   border-radius: 50%;
   background: var(--muted);
+  /* Optical alignment: flex centers on the 24px line box, but the lowercase
+     wordmark's x-height center sits ~1px higher. */
+  transform: translateY(-1px);
 }
 .brand .conn.on {
   background: var(--ok);
@@ -172,7 +175,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .pr-search, .sum-pill):focus-visible {
+:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -328,20 +331,33 @@ a.repo:focus-visible .repo-ext {
   display: flex;
   flex-direction: column;
 }
-.pr-search-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+/* The toolbar (search box + sort) lives in the body, on the page background,
+   constrained to the cards' 960px column — it's list furniture, not chrome. */
+.list-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 16px;
+  width: 100%;
+  max-width: 960px;
+  margin: 16px auto 0;
+  padding: 0 12px;
+}
+/* A real bordered box, so the input has a visible shape and click target —
+   panel on bg, like the cards below it. */
+.search-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  padding: 0 10px;
   color: var(--muted);
 }
-.pr-search-wrap:focus-within {
-  border-bottom-color: var(--accent);
+.search-box:focus-within {
+  border-color: var(--accent);
   color: var(--accent);
 }
 .pr-search {
@@ -350,13 +366,13 @@ a.repo:focus-visible .repo-ext {
   border: none;
   background: none;
   color: var(--text);
-  padding: 10px 0;
+  padding: 7px 0;
   font-size: 13px;
 }
 .pr-search:focus {
   outline: none;
 }
-/* Sort selector at the right edge of the filter row — quiet text control. */
+/* Sort selector at the right edge of the toolbar — quiet text control. */
 .sort {
   display: flex;
   align-items: center;
@@ -370,7 +386,7 @@ a.repo:focus-visible .repo-ext {
   color: var(--muted);
   font: inherit;
   font-size: 12px;
-  padding: 10px 0;
+  padding: 7px 0;
   cursor: pointer;
 }
 .sort select:hover {
@@ -384,6 +400,7 @@ a.repo:focus-visible .repo-ext {
   list-style: none;
   margin: 0 auto;
   padding: 12px;
+  width: 100%; /* flex items with margin:auto shrink-wrap without it */
   max-width: 960px;
   display: flex;
   flex-direction: column;
@@ -505,14 +522,16 @@ a.repo:focus-visible .repo-ext {
   color: var(--muted);
   white-space: nowrap;
 }
+/* Left-aligned with the toolbar and cards — the three rows share one edge,
+   which is what makes the column read as one composition. */
 .list-summary {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%; /* flex items with margin:auto shrink-wrap without it */
   max-width: 960px;
   margin: 12px auto 4px;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 .sum-pill {
   display: inline-flex;

@@ -22,11 +22,20 @@
 
 <script lang="ts">
   import type { DiffResource, SideCell } from './types';
+  import { store } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import { mdiAlertOctagon, mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
   let { resource }: { resource: DiffResource } = $props();
+
+  // This resource's lint warnings, shown in its sticky header — in the stacked
+  // scroll the global danger strip scrolls away, so the warning rides along
+  // with the diff it belongs to. Matched the way Overview deep-links them.
+  const warns = $derived((store.diff?.warnings ?? []).filter((w) => w.resource === resource.title));
+  const dangers = $derived(warns.filter((w) => w.level === 'danger'));
+  const cautions = $derived(warns.filter((w) => w.level !== 'danger'));
+  const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
   // ("g0") across different resources never collide, and each resource keeps its
@@ -48,6 +57,16 @@
   <span class="res-status status-{resource.status}">{resource.status}</span>
   <span class="res-title">{resource.title}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
+  {#if dangers.length}
+    <span class="badge danger" title={detail(dangers)}>
+      <Icon path={mdiAlertOctagon} size={13} /> {dangers.length > 1 ? dangers.length : ''}
+    </span>
+  {/if}
+  {#if cautions.length}
+    <span class="badge caution" title={detail(cautions)}>
+      <Icon path={mdiAlert} size={13} /> {cautions.length > 1 ? cautions.length : ''}
+    </span>
+  {/if}
   <!-- Zero counts are hidden, matching the tree rail. -->
   <span class="res-counts"
     >{#if resource.add}<span class="add">+{resource.add}</span>{/if}{#if resource.del}<span class="del">-{resource.del}</span>{/if}</span
