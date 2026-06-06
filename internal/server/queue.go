@@ -43,11 +43,14 @@ type queue struct {
 	wg  sync.WaitGroup
 
 	mu       sync.Mutex
-	inflight map[int]bool
+	inflight map[int]struct{}
 	pending  map[int]api.PR
 }
 
-func newQueue(ctx context.Context, diff diffFunc, st *store, notify func(api.Event), reconcile func(int), m *metrics, log *slog.Logger, concurrency int) *queue {
+func newQueue(
+	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
+	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
+) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -55,7 +58,7 @@ func newQueue(ctx context.Context, diff diffFunc, st *store, notify func(api.Eve
 		diff: diff, store: st, notify: notify, reconcile: reconcile, metrics: m, log: log,
 		ctx:      ctx,
 		sem:      make(chan struct{}, concurrency),
-		inflight: map[int]bool{},
+		inflight: map[int]struct{}{},
 		pending:  map[int]api.PR{},
 	}
 }
@@ -64,12 +67,12 @@ func newQueue(ctx context.Context, diff diffFunc, st *store, notify func(api.Eve
 // same PR number.
 func (q *queue) enqueue(pr api.PR) {
 	q.mu.Lock()
-	if q.inflight[pr.Number] {
+	if _, ok := q.inflight[pr.Number]; ok {
 		q.pending[pr.Number] = pr // coalesce; remember the freshest metadata
 		q.mu.Unlock()
 		return
 	}
-	q.inflight[pr.Number] = true
+	q.inflight[pr.Number] = struct{}{}
 	q.setDepthLocked()
 	q.mu.Unlock()
 

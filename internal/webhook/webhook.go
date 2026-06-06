@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,14 +20,10 @@ import (
 
 // Verification outcomes. Callers map any non-nil error to HTTP 401.
 var (
-	ErrNoSecret          = errorString("webhook: no secret configured")
-	ErrMissingSignature  = errorString("webhook: missing signature header")
-	ErrSignatureMismatch = errorString("webhook: signature mismatch")
+	ErrNoSecret          = errors.New("webhook: no secret configured")
+	ErrMissingSignature  = errors.New("webhook: missing signature header")
+	ErrSignatureMismatch = errors.New("webhook: signature mismatch")
 )
-
-type errorString string
-
-func (e errorString) Error() string { return string(e) }
 
 // Verify reports whether an inbound webhook request is authentic for forge,
 // given the configured secret, the request headers, and the raw body. It

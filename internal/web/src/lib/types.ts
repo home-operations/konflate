@@ -154,12 +154,12 @@ export interface DiffEnvelope {
   mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
 }
 
-export interface WSEvent {
-  type: 'status' | 'removed';
-  number: number;
-  status?: JobStatus;
-  error?: string;
-}
+// Discriminated on `type`: a "status" event always carries a status (and maybe
+// an error); a "removed" event is just the PR number. This lets the handler
+// narrow on `ev.type` instead of asserting `status` is present.
+export type WSEvent =
+  | { type: 'status'; number: number; status: JobStatus; error?: string }
+  | { type: 'removed'; number: number };
 
 export interface Meta {
   forge: string;

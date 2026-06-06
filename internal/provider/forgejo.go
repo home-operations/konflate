@@ -38,6 +38,10 @@ func newForgejo(cfg *config.Config) (*forgejoProvider, error) {
 }
 
 func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
+	// The Forgejo SDK's list/get calls take no context.Context, so cancellation
+	// can't be threaded through; ctx is accepted only to satisfy the Provider
+	// interface and is intentionally unused.
+	_ = ctx
 	prs, _, err := p.client.ListRepoPullRequests(p.owner, p.repo, forgejo.ListPullRequestsOptions{
 		State:       forgejo.StateOpen,
 		Sort:        "recentupdate",
@@ -46,7 +50,6 @@ func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	if err != nil {
 		return nil, fmt.Errorf("forgejo: list PRs: %w", err)
 	}
-	_ = ctx
 	out := make([]api.PR, 0, len(prs))
 	for _, pr := range prs {
 		out = append(out, forgejoToPR(pr))
@@ -55,11 +58,11 @@ func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 }
 
 func (p *forgejoProvider) GetPR(ctx context.Context, number int) (api.PR, error) {
+	_ = ctx // see ListPRs: the Forgejo SDK can't take a context.
 	pr, _, err := p.client.GetPullRequest(p.owner, p.repo, int64(number))
 	if err != nil {
 		return api.PR{}, fmt.Errorf("forgejo: get PR #%d: %w", number, err)
 	}
-	_ = ctx
 	return forgejoToPR(pr), nil
 }
 

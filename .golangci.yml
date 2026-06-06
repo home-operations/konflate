@@ -23,6 +23,8 @@ linters:
   settings:
     goconst:
       ignore-tests: true
+    lll:
+      line-length: 140
     revive:
       rules:
         - name: comment-spacings
@@ -34,9 +36,11 @@ linters:
         linters:
           - goconst
           - dupl
+          - lll
+      # dupl is noisy on the structurally-parallel provider/handler code; lll now
+      # runs on internal/ (see settings.lll) to keep production lines in check.
       - linters:
           - dupl
-          - lll
         path: internal/*
     paths:
       - third_party$

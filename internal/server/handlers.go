@@ -35,9 +35,7 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 // handleDisabled is mounted on an inbound endpoint whose secret is not
 // configured, so it is turned off.
 func handleDisabled(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		keyError: "endpoint disabled: konflate is running without the required secret",
-	})
+	writeError(w, http.StatusNotImplemented, "endpoint disabled: konflate is running without the required secret")
 }
 
 // handleMeta serves the instance's non-secret identity (forge + repo + refresh
@@ -81,12 +79,12 @@ func (s *Server) handleListPRs(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	number, err := strconv.Atoi(r.PathValue("number"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{keyError: "invalid PR number"})
+		writeError(w, http.StatusBadRequest, "invalid PR number")
 		return
 	}
 	env, ok := s.store.get(number)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{keyError: "unknown PR"})
+		writeError(w, http.StatusNotFound, "unknown PR")
 		return
 	}
 	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
@@ -128,27 +126,27 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 	mac.Write([]byte(raw))
 	got, err := hex.DecodeString(r.URL.Query().Get("s"))
 	if err != nil || !hmac.Equal(got, mac.Sum(nil)) {
-		writeJSON(w, http.StatusForbidden, map[string]string{keyError: "invalid avatar signature"})
+		writeError(w, http.StatusForbidden, "invalid avatar signature")
 		return
 	}
 	if u, err := url.Parse(raw); err != nil || u.Scheme != "https" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{keyError: "avatar must be an https URL"})
+		writeError(w, http.StatusBadRequest, "avatar must be an https URL")
 		return
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, raw, nil)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar fetch failed"})
+		writeError(w, http.StatusBadGateway, "avatar fetch failed")
 		return
 	}
 	resp, err := avatarClient.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar fetch failed"})
+		writeError(w, http.StatusBadGateway, "avatar fetch failed")
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	ct := resp.Header.Get("Content-Type")
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(ct, "image/") {
-		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "avatar unavailable"})
+		writeError(w, http.StatusBadGateway, "avatar unavailable")
 		return
 	}
 	w.Header().Set("Content-Type", ct)
@@ -161,17 +159,17 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 // enabled (authenticated mode + push token set).
 func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	if !s.authorizedPush(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{keyError: "unauthorized"})
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	number, err := strconv.Atoi(r.PathValue("number"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{keyError: "invalid PR number"})
+		writeError(w, http.StatusBadRequest, "invalid PR number")
 		return
 	}
 	if err := s.refreshPR(r.Context(), number, "push"); err != nil {
 		s.log.Warn("push: fetch PR failed", "pr", number, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{keyError: "could not fetch PR from forge"})
+		writeError(w, http.StatusBadGateway, "could not fetch PR from forge")
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{keyStatus: "accepted"})
@@ -203,12 +201,12 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBody))
 	if err != nil {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{keyError: "payload too large"})
+		writeError(w, http.StatusRequestEntityTooLarge, "payload too large")
 		return
 	}
 	if err := webhook.Verify(s.cfg.Forge.Kind, s.cfg.WebhookSecret, r.Header, body); err != nil {
 		s.log.Warn("webhook verification failed", "error", err)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{keyError: "signature verification failed"})
+		writeError(w, http.StatusUnauthorized, "signature verification failed")
 		return
 	}
 
@@ -244,9 +242,9 @@ func (s *Server) refreshList(ctx context.Context) {
 		return
 	}
 	s.metrics.prsKnown.Set(float64(len(prs)))
-	open := make(map[int]bool, len(prs))
+	open := make(map[int]struct{}, len(prs))
 	for _, pr := range prs {
-		open[pr.Number] = true
+		open[pr.Number] = struct{}{}
 		prev, known := s.store.get(pr.Number)
 		s.store.upsertPR(pr)
 		if !known || prev.PR.HeadSHA != pr.HeadSHA {
@@ -269,9 +267,9 @@ func (s *Server) refreshList(ctx context.Context) {
 // trimmed to the retention bounds (KONFLATE_CLOSED_PR_MAX / _TTL). Every removal
 // is broadcast so connected clients drop the PR live without a reload. open is
 // the set of currently-open PR numbers from the just-completed list.
-func (s *Server) reconcileClosed(ctx context.Context, open map[int]bool) {
+func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 	for _, number := range s.store.activeNumbers() {
-		if open[number] {
+		if _, ok := open[number]; ok {
 			continue
 		}
 		pr, err := s.prov.GetPR(ctx, number)
@@ -321,4 +319,9 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeError writes a JSON error body ({"error": msg}) with the given status.
+func writeError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{keyError: msg})
 }
