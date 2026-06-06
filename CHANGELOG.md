@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.11](https://github.com/home-operations/konflate/compare/0.1.10...0.1.11) (2026-06-06)
+
+
+### Features
+
+* **diff:** warn on large change-sets and major image/chart bumps ([#37](https://github.com/home-operations/konflate/issues/37)) ([0cbe6e2](https://github.com/home-operations/konflate/commit/0cbe6e2b9b7d76351246b5b2ee5469c78fd613a9))
+* **ui:** list sort direction toggle and a flash-free loading spinner ([f2786f1](https://github.com/home-operations/konflate/commit/f2786f106af5a190739255d2ebf360193a6695dd))
+
+
+### Bug Fixes
+
+* **ui:** manage modal focus and guard stale deep links ([#35](https://github.com/home-operations/konflate/issues/35)) ([fcef0c3](https://github.com/home-operations/konflate/commit/fcef0c325ea99254bb9579140897e4128413dc4e))
+
 ## [0.1.10](https://github.com/home-operations/konflate/compare/0.1.9...0.1.10) (2026-06-06)
 
 
