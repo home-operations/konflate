@@ -72,8 +72,8 @@ test('list → review → single-page flow', async ({ page }) => {
   await page.locator('.tree .tree-item').first().click();
   await expect(page).toHaveURL(/#\/pr\/142\/r0$/);
   await expect(page.locator('.tree .tree-summary')).not.toHaveClass(/selected/);
-  await expect(page.locator('table.diff tr.row-add')).toBeVisible();
-  await expect(page.locator('table.diff tr.row-del')).toBeVisible();
+  await expect(page.locator('table.diff tr.row-add').first()).toBeVisible();
+  await expect(page.locator('table.diff tr.row-del').first()).toBeVisible();
 
   // Click the Summary node → back to the overview panel.
   await page.locator('.tree .tree-summary').click();
@@ -150,8 +150,8 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
 test('split diff renders two balanced columns (regression)', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142/r0');
-  await page.getByRole('button', { name: 'Split' }).click();
-  await expect(page.locator('table.diff.split')).toBeVisible();
+  await page.getByRole('button', { name: 'Split' }).first().click();
+  await expect(page.locator('table.diff.split').first()).toBeVisible();
   // Both code columns must have real width — the bug collapsed the right cell to
   // ~0 (one character per line) because both claimed width:100%.
   const codeCells = page.locator('table.diff.split td.code');
@@ -164,7 +164,7 @@ test('split diff renders two balanced columns (regression)', async ({ page }) =>
 test('unified view: word-level highlight + expandable folded context', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142/r0');
-  await page.getByRole('button', { name: 'Unified' }).click();
+  await page.getByRole('button', { name: 'Unified' }).first().click();
 
   // Word-level highlight: only the changed part of the line is wrapped in .wd.
   await expect(page.locator('table.diff.unified tr.row-add .wd')).toHaveText('15.0');
@@ -221,8 +221,8 @@ test('review body shows a big spinner while a diff is still rendering', async ({
 test('deep link opens a specific resource diff', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142/r0');
-  await expect(page.locator('.res-title')).toContainText('rook-ceph-operator');
-  await expect(page.locator('table.diff tr.row-add')).toBeVisible();
+  await expect(page.locator('[data-sel="r0"] .res-title')).toContainText('rook-ceph-operator');
+  await expect(page.locator('[data-sel="r0"] table.diff tr.row-add')).toBeVisible();
 });
 
 test('keyboard: j steps from Summary into resources, o returns to Summary', async ({ page }) => {
@@ -297,7 +297,7 @@ test('mobile: diff header title is not crushed to one char per line (regression)
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
   await page.goto('/#/pr/142/r0');
-  const title = page.locator('.res-title');
+  const title = page.locator('[data-sel="r0"] .res-title');
   await title.waitFor();
   const box = await title.boundingBox();
   // The bug squeezed the title into a ~0-width flex column, so break-all stacked
@@ -353,7 +353,7 @@ test('mobile: split view is unavailable; diffs render unified', async ({ page })
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
   await page.goto('/#/pr/142/r0');
-  await expect(page.locator('table.diff.unified')).toBeVisible();
+  await expect(page.locator('table.diff.unified').first()).toBeVisible();
   await expect(page.locator('table.diff.split')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Split' })).toHaveCount(0);
 });
@@ -403,7 +403,7 @@ test('copy buttons copy the full underlying value', async ({ page }) => {
 
   // Resource identifier copies from the diff header.
   await page.goto('/#/pr/142/r0');
-  await page.locator('.res-header .copy-btn').click();
+  await page.locator('[data-sel="r0"] .res-header .copy-btn').click();
   const copied2 = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
   expect(copied2).toContain('Deployment rook-ceph/rook-ceph-operator');
 });
@@ -441,6 +441,35 @@ test('merge command is copyable in the review header and on list cards', async (
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 });
 
+test('the review is one scrollable document; scrolling drives the selection', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/#/pr/142');
+
+  // Summary + every resource render stacked — reviewing means scrolling, not
+  // clicking each resource.
+  await expect(page.locator('.diff-section')).toHaveCount(4);
+  await expect(page.locator('[data-sel="r1"] .res-title')).toContainText('rook-config');
+
+  // Scrolling to the bottom lands on the last resource: the tree selection and
+  // the URL follow (replaceState — no history spam).
+  await page.locator('.diff-pane').evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
+  await expect(page.locator('.tree-item.selected')).toContainText('default/postgres');
+
+  // Scrolling back to the top re-selects the Summary.
+  await page.locator('.diff-pane').evaluate((el) => (el.scrollTop = 0));
+  await expect(page.locator('.tree .tree-summary')).toHaveClass(/selected/);
+
+  // A tree click still jumps: the section scrolls to the pane top.
+  await page.locator('.tree .tree-item').nth(1).click();
+  await expect(page).toHaveURL(/#\/pr\/142\/r1$/);
+  const paneTop = await page.locator('.diff-pane').evaluate((el) => el.getBoundingClientRect().top);
+  const secTop = await page
+    .locator('[data-sel="r1"]')
+    .evaluate((el) => el.getBoundingClientRect().top);
+  expect(Math.abs(secTop - paneTop)).toBeLessThanOrEqual(2);
+});
+
 test('a warning deep-links to the flagged resource diff', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142');
@@ -449,7 +478,7 @@ test('a warning deep-links to the flagged resource diff', async ({ page }) => {
   // jumps straight to that diff.
   await page.locator('.warning.danger').click();
   await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
-  await expect(page.locator('.res-title')).toContainText('StatefulSet default/postgres');
+  await expect(page.locator('[data-sel="r2"] .res-title')).toContainText('StatefulSet default/postgres');
 });
 
 test('zero counts stay neutral (impact pills) and hidden (diff header)', async ({ page }) => {
@@ -468,8 +497,8 @@ test('zero counts stay neutral (impact pills) and hidden (diff header)', async (
 
   // The removed StatefulSet (+0 −5): the header hides the zero, like the tree.
   await page.goto('/#/pr/142/r2');
-  await expect(page.locator('.res-counts .del')).toHaveText('-5');
-  await expect(page.locator('.res-counts .add')).toHaveCount(0);
+  await expect(page.locator('[data-sel="r2"] .res-counts .del')).toHaveText('-5');
+  await expect(page.locator('[data-sel="r2"] .res-counts .add')).toHaveCount(0);
 });
 
 test('an open PR with danger warnings carries a red card edge', async ({ page }) => {
@@ -568,7 +597,7 @@ test('captures diffs screenshot (dark, deep-linked)', async ({ page }) => {
   await stubApi(page);
   await page.addInitScript(() => localStorage.setItem('konflate-theme', 'dark'));
   await page.goto('/#/pr/142/r0');
-  await expect(page.locator('table.diff tr.row-add')).toBeVisible();
+  await expect(page.locator('table.diff tr.row-add').first()).toBeVisible();
   await expect(page.locator('html.dark')).toBeAttached();
   await page.screenshot({ path: 'screenshots/konflate-diffs-dark.png' });
 });

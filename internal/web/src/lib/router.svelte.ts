@@ -40,6 +40,14 @@ export function navigate(to: Route): void {
   }
 }
 
+// replace updates the route without a history entry — for scroll-driven
+// selection, where every wheel tick would otherwise pollute the back button.
+// replaceState fires no hashchange, so the store is updated directly.
+export function replace(to: Route): void {
+  router.route = to;
+  history.replaceState(null, '', toHash(to));
+}
+
 export function initRouter(): void {
   window.addEventListener('hashchange', () => {
     router.route = parse(location.hash);

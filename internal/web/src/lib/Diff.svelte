@@ -1,5 +1,26 @@
+<script lang="ts" module>
+  // View mode is shared module state: every resource renders stacked in one
+  // pane, so the toggle in any sticky header switches them all at once.
+  // Default to split on wide screens, unified on narrow; remember the override.
+  function defaultMode(): 'unified' | 'split' {
+    const saved = localStorage.getItem('konflate-diffmode');
+    if (saved === 'unified' || saved === 'split') return saved;
+    return window.innerWidth >= 1400 ? 'split' : 'unified';
+  }
+  const view = $state<{ mode: 'unified' | 'split' }>({ mode: defaultMode() });
+  function setMode(m: 'unified' | 'split') {
+    view.mode = m;
+    localStorage.setItem('konflate-diffmode', m);
+  }
+
+  // Side-by-side split is unreadable at phone width — force unified there (and
+  // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
+  const mq = window.matchMedia('(max-width: 640px)');
+  const vp = $state({ narrow: mq.matches });
+  mq.addEventListener('change', () => (vp.narrow = mq.matches));
+</script>
+
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { DiffResource, SideCell } from './types';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
@@ -18,28 +39,7 @@
   const expandLabel = (count?: number): string =>
     `Expand ${count} unchanged ${count === 1 ? 'line' : 'lines'}`;
 
-  // Default to split on wide screens, unified on narrow; remember the override.
-  function defaultMode(): 'unified' | 'split' {
-    const saved = localStorage.getItem('konflate-diffmode');
-    if (saved === 'unified' || saved === 'split') return saved;
-    return window.innerWidth >= 1400 ? 'split' : 'unified';
-  }
-  let mode = $state<'unified' | 'split'>(defaultMode());
-  function setMode(m: 'unified' | 'split') {
-    mode = m;
-    localStorage.setItem('konflate-diffmode', m);
-  }
-
-  // Side-by-side split is unreadable at phone width — force unified there (and
-  // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
-  let narrow = $state(window.matchMedia('(max-width: 640px)').matches);
-  onMount(() => {
-    const mq = window.matchMedia('(max-width: 640px)');
-    const onChange = () => (narrow = mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  });
-  const renderMode = $derived(narrow ? 'unified' : mode);
+  const renderMode = $derived(vp.narrow ? 'unified' : view.mode);
 
   const cellClass = (c: SideCell) => (c.kind === 'blank' ? 'side-blank' : `row-${c.kind}`);
 </script>
@@ -53,10 +53,10 @@
   <span class="res-counts"
     >{#if resource.add}<span class="add">+{resource.add}</span>{/if}{#if resource.del}<span class="del">-{resource.del}</span>{/if}</span
   >
-  {#if !narrow}
+  {#if !vp.narrow}
     <div class="view-toggle">
-      <button class:active={mode === 'unified'} aria-pressed={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
-      <button class:active={mode === 'split'} aria-pressed={mode === 'split'} onclick={() => setMode('split')}>Split</button>
+      <button class:active={view.mode === 'unified'} aria-pressed={view.mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
+      <button class:active={view.mode === 'split'} aria-pressed={view.mode === 'split'} onclick={() => setMode('split')}>Split</button>
     </div>
   {/if}
 </div>

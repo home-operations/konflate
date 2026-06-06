@@ -930,6 +930,18 @@ a.repo:focus-visible .repo-ext {
   overflow: auto;
   min-height: 0;
 }
+/* All sections (Summary + every resource diff) stack in one scrolling pane —
+   review by scrolling, not by clicking each resource. The sticky .res-header
+   inside each section marks where you are; a rule separates the sections. */
+.diff-section + .diff-section {
+  border-top: 1px solid var(--border);
+}
+/* The last section fills the pane so every section can scroll to the top —
+   without this, a short final diff can never become current (the scrollspy
+   keys off "top crossed the pane top") and tree clicks land short. */
+.diff-section:last-child {
+  min-height: 100%;
+}
 /* Mobile-only resource switcher. The tree rail is the navigator on wide screens;
    where it's hidden (the ≤900px media query) this bar takes over, cycling
    Summary + every resource — the touch counterpart to the j/k keys. */
