@@ -1,20 +1,11 @@
 <script lang="ts">
   import { router } from './router.svelte';
-  import { store, openDiffs, currentPR } from './store.svelte';
-  import { isViewed } from './viewed.svelte';
+  import { store, openDiffs } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import {
-    mdiAlertOctagon,
-    mdiAlert,
-    mdiPackageVariantClosed,
-    mdiAlertCircleOutline,
-    mdiCheckCircle,
-    mdiCircleOutline,
-  } from './icons';
+  import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
 
   const d = $derived(store.diff!);
-  const pr = $derived(currentPR());
 
   function open(id: string) {
     if (router.route.name === 'review') openDiffs(router.route.pr, id);
@@ -110,10 +101,7 @@
       {#each parent.kinds as kind}
         {#each kind.items as item}
           <button class="ov-res" onclick={() => open(item.id)}>
-            <Icon
-              path={pr && isViewed(pr.number, pr.headSha, item.id) ? mdiCheckCircle : mdiCircleOutline}
-              size={15}
-            />
+            <span class="ov-dot status-{item.status}" aria-hidden="true"></span>
             <span class="ov-kind">{kind.kind}</span>
             <span class="ov-name status-{item.status}">{item.name}</span>
             <span class="spacer"></span>

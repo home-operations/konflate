@@ -1,8 +1,7 @@
 // Keyboard-first navigation. Active only outside text inputs and without
 // modifier keys, so it never fights the browser or the filter box.
 import { router } from './router.svelte';
-import { store, adjacentPR, adjacentResource, goList, setTab } from './store.svelte';
-import { toggleViewed } from './viewed.svelte';
+import { adjacentPR, adjacentResource, goList, setTab } from './store.svelte';
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
@@ -35,12 +34,6 @@ export function initKeyboard(): void {
       case 'o':
         setTab(r.tab === 'overview' ? 'diffs' : 'overview');
         break;
-      case 'v': {
-        if (!r.resource) return;
-        const pr = store.prs.find((p) => p.number === r.pr);
-        if (pr) toggleViewed(r.pr, pr.headSha, r.resource);
-        break;
-      }
       default:
         return;
     }

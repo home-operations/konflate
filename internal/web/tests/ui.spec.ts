@@ -54,6 +54,9 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.failure')).toContainText('plex');
   await expect(page.locator('.ov-res')).toHaveCount(3);
+  // Each changed resource carries a status dot (1 added, 1 removed, 1 changed).
+  await expect(page.locator('.ov-dot.status-added')).toHaveCount(1);
+  await expect(page.locator('.ov-dot.status-removed')).toHaveCount(1);
 
   // Into the Diffs tab → tree rail + wide diff.
   await page.getByRole('button', { name: /^Diffs/ }).click();
@@ -61,10 +64,6 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.tree .tree-item')).toHaveCount(3);
   await expect(page.locator('table.diff tr.row-add')).toBeVisible();
   await expect(page.locator('table.diff tr.row-del')).toBeVisible();
-
-  // Mark viewed updates the progress counter.
-  await page.locator('.viewed-btn').click();
-  await expect(page.locator('.progress')).toContainText('1/3 viewed');
 });
 
 test('landing health summary + non-default base branch tag', async ({ page }) => {

@@ -1,13 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { DiffResource, SideCell } from './types';
-  import { currentPR, store, adjacentResource } from './store.svelte';
-  import { isViewed, toggleViewed } from './viewed.svelte';
+  import { store, adjacentResource } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import {
-    mdiCheckCircle,
-    mdiCircleOutline,
     mdiUnfoldMoreHorizontal,
     mdiUnfoldLessHorizontal,
     mdiChevronLeft,
@@ -15,7 +12,6 @@
   } from './icons';
 
   let { resource }: { resource: DiffResource } = $props();
-  const pr = $derived(currentPR());
 
   // The Diffs tree rail is hidden on narrow screens, so surface prev/next
   // resource navigation (the j/k actions) in the header there.
@@ -56,7 +52,6 @@
   });
   const renderMode = $derived(narrow ? 'unified' : mode);
 
-  const viewed = $derived(pr ? isViewed(pr.number, pr.headSha, resource.id) : false);
   const cellClass = (c: SideCell) => (c.kind === 'blank' ? 'side-blank' : `row-${c.kind}`);
 </script>
 
@@ -91,16 +86,6 @@
       <button class:active={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
       <button class:active={mode === 'split'} onclick={() => setMode('split')}>Split</button>
     </div>
-  {/if}
-  {#if pr}
-    <button
-      class="btn viewed-btn"
-      class:on={viewed}
-      onclick={() => toggleViewed(pr.number, pr.headSha, resource.id)}
-      title="Mark viewed (v)"
-    >
-      <Icon path={viewed ? mdiCheckCircle : mdiCircleOutline} size={15} /> Viewed
-    </button>
   {/if}
 </div>
 

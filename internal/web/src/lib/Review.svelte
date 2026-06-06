@@ -1,7 +1,6 @@
 <script lang="ts">
   import { router } from './router.svelte';
   import { store, currentPR, goList, setTab, adjacentPR } from './store.svelte';
-  import { viewedCount } from './viewed.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
@@ -29,7 +28,6 @@
   const merged = $derived(pr ? !pr.open : false);
   const danger = $derived(store.diff?.warnings?.filter((w) => w.level === 'danger') ?? []);
   const total = $derived(store.diff?.resources?.length ?? 0);
-  const seen = $derived(pr ? viewedCount(pr.number, pr.headSha) : 0);
 </script>
 
 {#if route}
@@ -65,7 +63,6 @@
         </div>
       </div>
       <div class="review-nav">
-        {#if total}<span class="progress">{seen}/{total} viewed</span>{/if}
         <button class="btn btn-icon" onclick={() => adjacentPR(-1)} title="Previous PR ([)">
           <Icon path={mdiChevronLeft} label="Previous PR" />
         </button>
