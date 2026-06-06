@@ -44,15 +44,74 @@ export const store: Store = $state({
 
 // ---- derived helpers ------------------------------------------------------
 
+// ---- query grammar ----------------------------------------------------
+// A query is free text plus optional facet tokens, AND-ed together:
+//   "plex status:danger author:renovate base:main label:storage"
+// The same grammar drives the inline filter and the command palette.
+
+export interface ParsedQuery {
+  tokens: { key: string; value: string }[];
+  text: string;
+}
+
+const FACETS = ['status', 'author', 'base', 'label'];
+const STATUS_VALUES = ['danger', 'failed', 'rendering', 'merged', 'open'];
+
+export function parseQuery(raw: string): ParsedQuery {
+  const tokens: ParsedQuery['tokens'] = [];
+  const text: string[] = [];
+  for (const piece of raw.trim().split(/\s+/).filter(Boolean)) {
+    const m = piece.match(/^([a-z]+):(.+)$/i);
+    if (m && FACETS.includes(m[1].toLowerCase())) {
+      tokens.push({ key: m[1].toLowerCase(), value: m[2].toLowerCase() });
+    } else {
+      text.push(piece.toLowerCase());
+    }
+  }
+  return { tokens, text: text.join(' ') };
+}
+
+export function matchesQuery(p: PRStatus, q: ParsedQuery): boolean {
+  for (const t of q.tokens) {
+    switch (t.key) {
+      case 'status': {
+        // Prefix-match the canonical names so "status:dang" works.
+        const want = STATUS_VALUES.find((v) => v.startsWith(t.value));
+        if (!want || !matchesStatus(p, want === 'open' ? '' : (want as StatusFilter))) return false;
+        if (want === 'open' && !p.open) return false;
+        break;
+      }
+      case 'author':
+        if (!(p.author ?? '').toLowerCase().includes(t.value)) return false;
+        break;
+      case 'base':
+        if (!(p.baseRef ?? '').toLowerCase().includes(t.value)) return false;
+        break;
+      case 'label':
+        if (!(p.labels ?? []).some((l) => l.name.toLowerCase().includes(t.value))) return false;
+        break;
+    }
+  }
+  if (q.text) {
+    const hay = [
+      p.title,
+      String(p.number),
+      p.author ?? '',
+      p.baseRef ?? '',
+      (p.labels ?? []).map((l) => l.name).join(' '),
+    ]
+      .join(' ')
+      .toLowerCase();
+    if (!hay.includes(q.text)) return false;
+  }
+  return true;
+}
+
 export function filteredPRs(): PRStatus[] {
-  const q = store.query.trim().toLowerCase();
-  if (!q) return store.prs;
-  return store.prs.filter(
-    (p) =>
-      p.title.toLowerCase().includes(q) ||
-      String(p.number).includes(q) ||
-      (p.author ?? '').toLowerCase().includes(q),
-  );
+  const raw = store.query.trim();
+  if (!raw) return store.prs;
+  const q = parseQuery(raw);
+  return store.prs.filter((p) => matchesQuery(p, q));
 }
 
 // matchesStatus is the per-PR predicate for a summary-pill filter.

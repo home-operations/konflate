@@ -214,7 +214,9 @@ test('review body shows a big spinner while a diff is still rendering', async ({
   await page.route('**/api/prs/5/diff', (r) => r.fulfill({ status: 202, json: { status: 'running', pr: { number: 5 } } }));
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/5');
-  await expect(page.locator('.loading-center .kspin')).toBeVisible();
+  // The percussive-maintenance mascot, with its parts present and animated.
+  await expect(page.locator('.loading-center .smasher')).toBeVisible();
+  await expect(page.locator('.smasher .smash-arm')).toBeAttached();
   await expect(page.locator('.loading-center')).toContainText('Rendering');
 });
 
@@ -257,6 +259,83 @@ test('filter narrows the PR list', async ({ page }) => {
   await page.getByPlaceholder('Filter pull requests…').fill('plex');
   await expect(page.locator('.card')).toHaveCount(1);
   await expect(page.locator('.card')).toContainText('#131');
+});
+
+test('the filter understands facet tokens (status:/author:/base:/label:)', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  const input = page.locator('.pr-search');
+
+  await input.fill('status:danger');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card')).toContainText('#142');
+
+  // Tokens AND together, and with free text.
+  await input.fill('author:octocat base:staging');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card')).toContainText('#138');
+
+  await input.fill('label:media plex');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card')).toContainText('#131');
+
+  // The clear button empties the query and restores the list.
+  await page.locator('.search-box .clear-btn').click();
+  await expect(page.locator('.card')).toHaveCount(3);
+  await expect(input).toHaveValue('');
+});
+
+test('Ctrl+K palette: search, keyboard nav, open, recents', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // Ctrl+K opens it from anywhere; the input is focused.
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'Search pull requests' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('textbox')).toBeFocused();
+
+  // Risk floats first with no query: the danger PR leads the group.
+  await expect(dialog.locator('.palette-row .row-title').first()).toContainText('rook-ceph');
+  // Signal preview rides on the row.
+  await expect(dialog.locator('.palette-row').first().locator('.badge.danger').first()).toBeVisible();
+
+  // Typing narrows (and highlights the match); Enter opens the active row.
+  await dialog.getByRole('textbox').fill('plex');
+  await expect(dialog.locator('.palette-row')).toHaveCount(1);
+  await expect(dialog.locator('.palette-row mark')).toHaveText('plex');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/pr\/131$/);
+  await expect(dialog).toHaveCount(0);
+
+  // Reopening (from the review screen) shows the committed query under Recent.
+  await page.keyboard.press('Control+k');
+  await expect(dialog.locator('.group-label').first()).toHaveText('Recent');
+  await expect(dialog.locator('.palette-row .row-title').first()).toHaveText('plex');
+
+  // Escape closes without navigating.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/pr\/131$/);
+});
+
+test('Ctrl+K palette: facet tokens filter; arrows move the cursor', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'Search pull requests' });
+
+  await dialog.getByRole('textbox').fill('author:octocat');
+  await expect(dialog.locator('.palette-row')).toHaveCount(3);
+  // Risk-first ordering: #131 (render failure) leads octocat's PRs.
+  await expect(dialog.locator('.palette-row').nth(0)).toContainText('#131');
+  await expect(dialog.locator('.palette-row.active')).toContainText('#131');
+
+  // ArrowDown moves the selection; Enter opens that PR.
+  await page.keyboard.press('ArrowDown');
+  await expect(dialog.locator('.palette-row.active')).toContainText('#138');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/pr\/138$/);
 });
 
 test('summary pills filter by status; the sort selector reorders', async ({ page }) => {
@@ -569,7 +648,7 @@ test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter'
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveCount(0);
 
   // The topbar button is the discoverable entry point.
-  await page.locator('.kbd-btn').click();
+  await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
   // Click the backdrop's corner — its centre sits under the help card.
   await page.locator('.help-backdrop').click({ position: { x: 8, y: 8 } });
@@ -626,8 +705,8 @@ test('mobile: back and prev/next share one header row, title below (compact chro
   // back button, title, and nav stacked into three rows of chrome.
   expect(Math.abs((back?.y ?? 0) - (next?.y ?? 99))).toBeLessThanOrEqual(1);
   expect(title?.y ?? 0).toBeGreaterThan((back?.y ?? 0) + (back?.height ?? 0) - 1);
-  // And the shortcuts button is gone from the topbar (no keyboard on touch).
-  await expect(page.locator('.kbd-btn')).toBeHidden();
+  // And the search/shortcuts buttons are gone from the topbar (no keyboard on touch).
+  await expect(page.locator('.kbd-btn:visible')).toHaveCount(0);
 });
 
 test('captures list + overview screenshots (light)', async ({ page }) => {

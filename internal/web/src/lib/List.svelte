@@ -18,6 +18,7 @@
     mdiTagOutline,
     mdiSourceBranch,
     mdiSourcePull,
+    mdiClose,
     mdiFilterOutline,
     mdiSortVariant,
     mdiChevronRight,
@@ -182,10 +183,16 @@
       <Icon path={mdiFilterOutline} size={15} />
       <input
         class="pr-search"
-        placeholder="Filter pull requests…"
+        placeholder="Filter pull requests… (try status:danger or author:renovate)"
         bind:value={store.query}
         aria-label="Filter pull requests"
       />
+      {#if store.query}
+        <button class="clear-btn" onclick={() => (store.query = '')} aria-label="Clear filter">
+          <Icon path={mdiClose} size={13} />
+        </button>
+      {/if}
+      <span class="key-hint"><kbd>/</kbd></span>
     </label>
     <label class="sort" title="Sort pull requests">
       <Icon path={mdiSortVariant} size={15} />

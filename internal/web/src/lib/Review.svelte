@@ -3,7 +3,7 @@
   import { store, currentPR, goList, adjacentPR } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
-  import Spinner from './Spinner.svelte';
+  import Smasher from './Smasher.svelte';
   import Avatar from './Avatar.svelte';
   import {
     mdiArrowLeft,
@@ -104,7 +104,7 @@
 
     <div class="review-body">
       {#if store.loading || pr?.status === 'running'}
-        <div class="loading-center"><Spinner size={46} label="Rendering" /><p>Rendering the diff…</p></div>
+        <div class="loading-center"><Smasher size={130} /><p>Rendering the diff…</p></div>
       {:else if pr?.status === 'pending'}
         <div class="loading-center"><Icon path={mdiTrayFull} size={38} /><p>Queued — waiting to render…</p></div>
       {:else if store.diffError}

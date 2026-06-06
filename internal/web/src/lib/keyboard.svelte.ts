@@ -10,6 +10,13 @@ export function toggleHelp(): void {
   help.open = !help.open;
 }
 
+// The command palette — Cmd/Ctrl+K from anywhere (even inside an input).
+// It owns its other keys (arrows, Enter, Escape) locally.
+export const palette = $state({ open: false });
+export function togglePalette(): void {
+  palette.open = !palette.open;
+}
+
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -17,6 +24,14 @@ function isTyping(e: KeyboardEvent): boolean {
 
 export function initKeyboard(): void {
   window.addEventListener('keydown', (e) => {
+    // Cmd/Ctrl+K first: it must work everywhere, including inside the filter
+    // box (where everything below is suppressed).
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      togglePalette();
+      e.preventDefault();
+      return;
+    }
+
     if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
 
     // '?' toggles the help on any screen; while open, Escape closes it

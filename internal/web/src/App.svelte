@@ -4,19 +4,21 @@
   import { store, loadPRs, loadMeta, connectWS, ensureDiff } from './lib/store.svelte';
   import { theme, cycleTheme, initTheme } from './lib/theme.svelte';
   import { initClock } from './lib/time.svelte';
-  import { initKeyboard, help, toggleHelp } from './lib/keyboard.svelte';
+  import { initKeyboard, help, toggleHelp, togglePalette } from './lib/keyboard.svelte';
   import {
     mdiThemeLightDark,
     mdiWeatherNight,
     mdiWhiteBalanceSunny,
     mdiClockOutline,
     mdiKeyboardOutline,
+    mdiMagnify,
     mdiOpenInNew,
     forgeIcon,
   } from './lib/icons';
   import Icon from './lib/Icon.svelte';
   import List from './lib/List.svelte';
   import Review from './lib/Review.svelte';
+  import Palette from './lib/Palette.svelte';
   import type { Meta } from './lib/types';
 
   onMount(() => {
@@ -95,6 +97,9 @@
         </span>
       {/if}
       <!-- Hidden on phones (see the mobile block). -->
+      <button class="btn btn-icon kbd-btn" onclick={togglePalette} title="Search pull requests (Ctrl/⌘ K)">
+        <Icon path={mdiMagnify} label="Search pull requests" />
+      </button>
       <button class="btn btn-icon kbd-btn" onclick={toggleHelp} title="Keyboard shortcuts (?)">
         <Icon path={mdiKeyboardOutline} label="Keyboard shortcuts" />
       </button>
@@ -109,6 +114,8 @@
   {:else}
     <List />
   {/if}
+
+  <Palette />
 
   {#if help.open}
     <!-- The backdrop is a real button so closing is keyboard-reachable. -->
@@ -127,6 +134,8 @@
           <dd>back to the list</dd>
           <dt><kbd>/</kbd></dt>
           <dd>filter the list</dd>
+          <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>k</kbd></dt>
+          <dd>search pull requests</dd>
           <dt><kbd>?</kbd></dt>
           <dd>toggle this help</dd>
         </dl>
