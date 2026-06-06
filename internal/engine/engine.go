@@ -115,7 +115,6 @@ func (e *flateEngine) render(ctx context.Context, path, origPath string) (*orche
 		SourceCache:         e.cache,
 		WipeSecrets:         true,
 		AllowMissingSecrets: true,
-		EnableOCI:           true,
 	})
 	if err != nil {
 		return nil, err
