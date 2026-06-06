@@ -5,13 +5,13 @@
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
 
-  const d = $derived(store.diff!);
+  const d = $derived(store.diff);
 
   // A warning's resource ("Kind ns/name") matches the diff resource's title, so
   // a warning can deep-link to the diff it flags. Null when the resource didn't
   // render into the diff (e.g. it only changed indirectly).
   function warningTarget(resource: string): string | null {
-    return d.resources?.find((r) => r.title === resource)?.id ?? null;
+    return d?.resources?.find((r) => r.title === resource)?.id ?? null;
   }
   function openWarning(id: string): void {
     if (router.route.name === 'review') openSel(router.route.pr, id);
@@ -44,6 +44,9 @@
   <span class="warning-detail">{w.detail}</span>
 {/snippet}
 
+<!-- d can briefly be null while a new diff loads (ensureDiff clears it); the
+     parent unmounts this view in the same flush, but guard rather than assert. -->
+{#if d}
 <div class="overview">
   <div class="impact">
     <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
@@ -112,3 +115,4 @@
     </section>
   {/if}
 </div>
+{/if}

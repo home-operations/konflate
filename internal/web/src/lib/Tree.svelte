@@ -4,14 +4,15 @@
   import Icon from './Icon.svelte';
   import { mdiAlertOctagon, mdiFileDocumentOutline } from './icons';
 
-  const d = $derived(store.diff!);
+  // d can briefly be null while a new diff loads — every use below tolerates it.
+  const d = $derived(store.diff);
   // A null selection (bare #/pr/N) defaults to the Summary node.
   const sel = $derived(router.route.name === 'review' ? (router.route.sel ?? 'summary') : null);
   // Resources carrying a danger warning, keyed by their "Kind ns/name" label.
   const dangerLabels = $derived(
-    new Set((d.warnings ?? []).filter((w) => w.level === 'danger').map((w) => w.resource)),
+    new Set((d?.warnings ?? []).filter((w) => w.level === 'danger').map((w) => w.resource)),
   );
-  const dangerCount = $derived((d.warnings ?? []).filter((w) => w.level === 'danger').length);
+  const dangerCount = $derived((d?.warnings ?? []).filter((w) => w.level === 'danger').length);
 
   function open(id: string) {
     if (router.route.name === 'review') openSel(router.route.pr, id);
@@ -32,7 +33,7 @@
     {/if}
   </button>
 
-  {#each d.tree ?? [] as parent}
+  {#each d?.tree ?? [] as parent}
     <div class="tree-parent">
       <div class="tree-parent-label">{parent.label}</div>
       {#each parent.kinds as kind}

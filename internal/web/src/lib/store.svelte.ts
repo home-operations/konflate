@@ -299,16 +299,21 @@ function applyEnvelope(env: DiffEnvelope): void {
   }
 }
 
-// ---- chroma stylesheet (injected once) ------------------------------------
+// ---- chroma stylesheet -----------------------------------------------------
 
-let chromaInjected = false;
+// injectChroma keeps a single <style id="chroma-css"> in sync with the CSS the
+// server ships alongside each diff. All diffs currently share one theme, but
+// updating on change (rather than injecting once) means a server-side theme
+// change never silently keeps the stale stylesheet.
 function injectChroma(css: string): void {
-  if (chromaInjected || !css) return;
-  const style = document.createElement('style');
-  style.id = 'chroma-css';
-  style.textContent = css;
-  document.head.append(style);
-  chromaInjected = true;
+  if (!css) return;
+  let style = document.getElementById('chroma-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'chroma-css';
+    document.head.append(style);
+  }
+  if (style.textContent !== css) style.textContent = css;
 }
 
 // ---- websocket ------------------------------------------------------------

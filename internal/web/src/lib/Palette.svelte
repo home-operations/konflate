@@ -96,6 +96,11 @@
     if (idx >= rows.length) idx = Math.max(0, rows.length - 1);
   });
 
+  // First row of each kind, computed once per rows change — the group labels
+  // render above these.
+  const firstPrIdx = $derived(rows.findIndex((r) => r.kind === 'pr'));
+  const firstSuggestionIdx = $derived(rows.findIndex((r) => r.kind === 'suggestion'));
+
   function commit(row: Row | undefined): void {
     if (!row) return;
     if (row.kind === 'pr') {
@@ -143,14 +148,16 @@
 {#if palette.open}
   <div class="palette-overlay">
     <button class="help-backdrop" aria-label="Close search" onclick={togglePalette}></button>
-    <div class="palette" role="dialog" aria-label="Search pull requests">
+    <!-- The keydown handler lives on the dialog (not the input) so Tab cycles
+         the rows — and never escapes to the page behind — wherever focus sits
+         inside the palette. aria-modal marks the background inert for AT. -->
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Search pull requests" tabindex="-1" onkeydown={onKeydown}>
       <div class="palette-input">
         <Icon path={mdiMagnify} size={16} />
         <!-- svelte-ignore a11y_autofocus -->
         <input
           bind:value={q}
           use:focusOnMount
-          onkeydown={onKeydown}
           oninput={() => (idx = 0)}
           placeholder="Search pull requests… (status: author: base: label:)"
           aria-label="Search pull requests"
@@ -163,10 +170,10 @@
           <div class="group-label">Recent</div>
         {/if}
         {#each rows as row, i (row.kind + (row.kind === 'pr' ? row.pr.number : row.query))}
-          {#if row.kind === 'pr' && i === rows.findIndex((r) => r.kind === 'pr')}
+          {#if i === firstPrIdx}
             <div class="group-label">Pull requests</div>
           {/if}
-          {#if row.kind === 'suggestion' && i === rows.findIndex((r) => r.kind === 'suggestion')}
+          {#if i === firstSuggestionIdx}
             <div class="group-label">Try</div>
           {/if}
           <button

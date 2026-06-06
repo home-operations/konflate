@@ -5,9 +5,12 @@
 export type ThemePref = 'auto' | 'light' | 'dark';
 
 const KEY = 'konflate-theme';
-const mq = window.matchMedia('(prefers-color-scheme: dark)');
+// Guarded so importing this module never throws outside a browser (tests, a
+// future SSR build); in that case the app behaves as auto/light until init.
+const mq = typeof window === 'undefined' ? null : window.matchMedia('(prefers-color-scheme: dark)');
 
 function load(): ThemePref {
+  if (typeof localStorage === 'undefined') return 'auto';
   const v = localStorage.getItem(KEY);
   return v === 'light' || v === 'dark' || v === 'auto' ? v : 'auto';
 }
@@ -15,7 +18,7 @@ function load(): ThemePref {
 export const theme = $state({ pref: load() });
 
 export function effective(): 'light' | 'dark' {
-  if (theme.pref === 'auto') return mq.matches ? 'dark' : 'light';
+  if (theme.pref === 'auto') return mq?.matches ? 'dark' : 'light';
   return theme.pref;
 }
 
@@ -35,5 +38,5 @@ export function cycleTheme(): void {
 
 export function initTheme(): void {
   applyTheme();
-  mq.addEventListener('change', applyTheme);
+  mq?.addEventListener('change', applyTheme);
 }
