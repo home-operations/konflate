@@ -53,7 +53,7 @@ func Render(in RenderInput) (api.DiffResult, error) {
 		Impact:    Summarize(in.Changes),
 		Images:    in.Images,
 		Failures:  in.Failures,
-		Warnings:  Lint(in.Changes),
+		Warnings:  Lint(in.Changes, in.Images),
 	}
 
 	for i, c := range in.Changes {

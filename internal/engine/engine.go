@@ -180,10 +180,12 @@ func joinPath(dir, sub string) string {
 }
 
 // childEntry is one rendered resource together with the parent (HelmRelease /
-// Kustomization) that produced it.
+// Kustomization) that produced it and its helm.sh/chart label (captured before
+// normalize strips it, so a chart-version bump can be flagged).
 type childEntry struct {
 	parent   manifest.NamedResource
 	resource map[string]any
+	chart    string
 }
 
 // pairChanges diffs two flate render outputs into resource-level changes.
@@ -205,11 +207,11 @@ func pairChanges(base, head map[manifest.NamedResource][]map[string]any) []diff.
 			if reflect.DeepEqual(old.resource, nw.resource) {
 				continue // unchanged
 			}
-			changes = append(changes, change("changed", nw.parent, old.resource, nw.resource))
+			changes = append(changes, change("changed", nw.parent, old.resource, nw.resource, old.chart, nw.chart))
 		case inHead:
-			changes = append(changes, change("added", nw.parent, nil, nw.resource))
+			changes = append(changes, change("added", nw.parent, nil, nw.resource, "", nw.chart))
 		default:
-			changes = append(changes, change("removed", old.parent, old.resource, nil))
+			changes = append(changes, change("removed", old.parent, old.resource, nil, old.chart, ""))
 		}
 	}
 
@@ -389,16 +391,32 @@ func indexChildren(m map[manifest.NamedResource][]map[string]any) map[string]chi
 	idx := make(map[string]childEntry)
 	for parent, children := range m {
 		for _, res := range children {
+			chart := chartLabel(res) // before normalize strips helm.sh/chart
 			normalize(res)
 			kind, ns, name := coords(res)
 			key := strings.Join([]string{parentLabel(parent), kind, ns, name}, "\x00")
-			idx[key] = childEntry{parent: parent, resource: res}
+			idx[key] = childEntry{parent: parent, resource: res, chart: chart}
 		}
 	}
 	return idx
 }
 
-func change(status string, parent manifest.NamedResource, old, nw map[string]any) diff.Change {
+// chartLabel returns a manifest's "helm.sh/chart" label ("<name>-<version>"),
+// or "" if absent.
+func chartLabel(m map[string]any) string {
+	meta, ok := m["metadata"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	labels, ok := meta["labels"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	s, _ := labels["helm.sh/chart"].(string)
+	return s
+}
+
+func change(status string, parent manifest.NamedResource, old, nw map[string]any, oldChart, newChart string) diff.Change {
 	src := nw
 	if src == nil {
 		src = old
@@ -412,6 +430,8 @@ func change(status string, parent manifest.NamedResource, old, nw map[string]any
 		Parent:    parentLabel(parent),
 		Old:       old,
 		New:       nw,
+		OldChart:  oldChart,
+		NewChart:  newChart,
 	}
 }
 
