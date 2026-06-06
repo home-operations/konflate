@@ -16,8 +16,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
@@ -36,31 +38,69 @@ type Engine interface {
 	Diff(ctx context.Context, pr api.PR) (api.DiffResult, error)
 }
 
-// flateEngine is the production Engine: go-git clone + two flate renders.
+// flateEngine is the production Engine: a persistent git mirror + two flate
+// renders.
 type flateEngine struct {
-	cloneURL    string
-	token       string
 	clusterPath string
+	cacheDir    string
+	// mirror is the persistent bare clone of the repo; each diff fetches the
+	// base/head refs into it incrementally instead of re-cloning.
+	mirror *gitclone.Mirror
 	// cache is shared across every diff for this repo instance and, within a
 	// single diff, across the base and head renders — so the head render reuses
 	// the Helm charts / OCI layers / git sources the base render already
 	// fetched. flate's source cache is concurrency-safe (audited).
 	cache *source.Cache
+
+	// flate render tuning, resolved from config once (see internal/config). The
+	// helm/stage caches and source retry default to flate's own CLI values; the
+	// reconcile concurrency is bounded so a fan-out PR can't oversubscribe.
+	stageCacheBytes        int64
+	helmTemplateCacheBytes int64
+	helmRenderCacheBytes   int64
+	concurrency            int
+	sourceRetry            source.RetryConfig
+	diffTimeout            time.Duration
 }
 
 // New builds the production Engine from config.
 func New(cfg *config.Config) Engine {
+	const mib = 1 << 20
+	conc := cfg.RenderConcurrency
+	if conc <= 0 {
+		conc = runtime.NumCPU() * 4 // flate's default for I/O-bound reconcile work
+	}
 	return &flateEngine{
-		cloneURL:    cfg.Forge.CloneURL(),
-		token:       cfg.Token,
-		clusterPath: cfg.ClusterPath,
-		cache:       source.NewCache(cacheroot.New(cfg.CacheDir)),
+		clusterPath:            cfg.ClusterPath,
+		cacheDir:               cfg.CacheDir,
+		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token),
+		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
+		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,
+		helmTemplateCacheBytes: int64(cfg.HelmTemplateCacheMB) * mib,
+		helmRenderCacheBytes:   int64(cfg.HelmRenderCacheMB) * mib,
+		concurrency:            conc,
+		sourceRetry: source.RetryConfig{
+			Attempts: cfg.SourceRetryAttempts,
+			MinWait:  200 * time.Millisecond,
+			MaxWait:  3 * time.Second,
+			Jitter:   0.1,
+		},
+		diffTimeout: cfg.DiffTimeout,
 	}
 }
 
-// Diff clones the PR, renders both sides with flate, and builds the diff.
+// Diff clones the PR, renders both sides with flate, and builds the diff. The
+// whole operation is bounded by diffTimeout (when set) so one PR can't hold a
+// render slot indefinitely — the deadline flows into the git fetch and both
+// flate renders via ctx.
 func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, error) {
-	clone, err := gitclone.Clone(ctx, e.cloneURL, e.token, pr.HeadRef, pr.BaseRef)
+	if e.diffTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.diffTimeout)
+		defer cancel()
+	}
+
+	clone, err := e.mirror.Trees(ctx, pr.HeadRef, pr.BaseRef)
 	if err != nil {
 		return api.DiffResult{}, fmt.Errorf("engine: clone PR #%d: %w", pr.Number, err)
 	}
@@ -110,11 +150,20 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 //     cluster's real secrets (missing auth secrets become skips).
 func (e *flateEngine) render(ctx context.Context, path, origPath string) (*orchestrator.Result, error) {
 	o, err := orchestrator.New(orchestrator.Config{
-		Path:                path,
-		PathOrig:            origPath,
-		SourceCache:         e.cache,
-		WipeSecrets:         true,
-		AllowMissingSecrets: true,
+		Path:        path,
+		PathOrig:    origPath,
+		SourceCache: e.cache,
+		// CacheDir roots flate's persistent stage + on-disk Helm render caches on
+		// the same (operator-mounted) volume as the source cache, so they survive
+		// restarts and are reused across PRs.
+		CacheDir:               e.cacheDir,
+		WipeSecrets:            true,
+		AllowMissingSecrets:    true,
+		StageCacheBytes:        e.stageCacheBytes,
+		HelmTemplateCacheBytes: e.helmTemplateCacheBytes,
+		HelmRenderCacheBytes:   e.helmRenderCacheBytes,
+		Concurrency:            e.concurrency,
+		SourceRetry:            e.sourceRetry,
 	})
 	if err != nil {
 		return nil, err

@@ -61,6 +61,33 @@ spec:
             - name: KONFLATE_MAX_DIFF_CONC
               value: {{ .Values.config.maxDiffConcurrency | quote }}
             {{- end }}
+            {{- /* toString, not `with`: an explicit 0 (disable a cache) must
+                   still emit — `with` would treat int 0 as empty and drop it,
+                   silently reviving the default. Empty string = use the default. */}}
+            {{- if ne (toString .Values.config.helmTemplateCacheMb) "" }}
+            - name: KONFLATE_HELM_TEMPLATE_CACHE_MB
+              value: {{ .Values.config.helmTemplateCacheMb | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.helmRenderCacheMb) "" }}
+            - name: KONFLATE_HELM_RENDER_CACHE_MB
+              value: {{ .Values.config.helmRenderCacheMb | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.stageCacheMb) "" }}
+            - name: KONFLATE_STAGE_CACHE_MB
+              value: {{ .Values.config.stageCacheMb | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.sourceRetryAttempts) "" }}
+            - name: KONFLATE_SOURCE_RETRY_ATTEMPTS
+              value: {{ .Values.config.sourceRetryAttempts | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.renderConcurrency) "" }}
+            - name: KONFLATE_RENDER_CONCURRENCY
+              value: {{ .Values.config.renderConcurrency | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.diffTimeout) "" }}
+            - name: KONFLATE_DIFF_TIMEOUT
+              value: {{ .Values.config.diffTimeout | quote }}
+            {{- end }}
             - name: KONFLATE_CLOSED_PR_MAX
               value: {{ .Values.config.closedPrMax | quote }}
             - name: KONFLATE_CLOSED_PR_TTL

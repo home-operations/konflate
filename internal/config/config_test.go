@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -86,6 +87,63 @@ func TestLoad_DiffConcurrency(t *testing.T) {
 	}
 	if cfg.MaxDiffConcurrency != 9 {
 		t.Errorf("explicit MaxDiffConcurrency = %d, want 9", cfg.MaxDiffConcurrency)
+	}
+}
+
+func TestLoad_FlateTuningDefaults(t *testing.T) {
+	// Unset, the flate render knobs default to flate's own CLI values so the
+	// caching applies out of the box.
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, c := range []struct {
+		name      string
+		got, want int
+	}{
+		{"HelmTemplateCacheMB", cfg.HelmTemplateCacheMB, 256},
+		{"HelmRenderCacheMB", cfg.HelmRenderCacheMB, 1024},
+		{"StageCacheMB", cfg.StageCacheMB, 2048},
+		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
+		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
+	} {
+		if c.got != c.want {
+			t.Errorf("%s default = %d, want %d", c.name, c.got, c.want)
+		}
+	}
+	if cfg.DiffTimeout != 10*time.Minute {
+		t.Errorf("DiffTimeout default = %v, want 10m", cfg.DiffTimeout)
+	}
+}
+
+func TestLoad_UnsetsSecrets(t *testing.T) {
+	// Secrets load into the Config, then are removed from the process
+	// environment (the `,unset` tag) so a later in-process env dump can't leak
+	// them. Non-secret vars are left in place.
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	t.Setenv("KONFLATE_TOKEN", "supersecret")
+	t.Setenv("KONFLATE_WEBHOOK_SECRET", "wh-secret")
+	t.Setenv("KONFLATE_PUSH_TOKEN", "push-secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// The values are available on the config…
+	if cfg.Token != "supersecret" || cfg.WebhookSecret != "wh-secret" || cfg.PushToken != "push-secret" {
+		t.Fatalf("secrets not loaded into config: token=%q webhook=%q push=%q",
+			cfg.Token, cfg.WebhookSecret, cfg.PushToken)
+	}
+	// …but gone from the environment.
+	for _, k := range []string{"KONFLATE_TOKEN", "KONFLATE_WEBHOOK_SECRET", "KONFLATE_PUSH_TOKEN"} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Errorf("%s should be unset after Load, still present as %q", k, v)
+		}
+	}
+	// A non-secret var stays set (only secrets carry `,unset`).
+	if _, ok := os.LookupEnv("KONFLATE_REPO"); !ok {
+		t.Error("KONFLATE_REPO should remain set after Load")
 	}
 }
 

@@ -25,8 +25,11 @@ type Config struct {
 	// Token is the forge API token used for API calls and cloning. Optional and
 	// purely for read auth — it raises the forge API rate limit and unlocks
 	// private repositories. It gates no feature (see [Config.Authenticated]).
-	// Never included in any HTTP response or log line.
-	Token string `env:"KONFLATE_TOKEN"`
+	// Never included in any HTTP response or log line, and unset from the process
+	// environment once read (defense-in-depth — a later in-process os.Environ
+	// dump can't leak it; Load runs exactly once at startup). NB: this does not
+	// scrub /proc/<pid>/environ or the Pod spec, only the running process's env.
+	Token string `env:"KONFLATE_TOKEN,unset"`
 
 	// ClusterPath is the directory flate renders from — the GitRepository root
 	// that Flux Kustomization spec.path values resolve against. For the standard
@@ -46,14 +49,16 @@ type Config struct {
 	//   GitLab       — static token   (X-Gitlab-Token)
 	//   Forgejo      — HMAC-SHA256 key (X-Gitea-Signature)
 	// POST /hooks is served only when this is set AND konflate is in
-	// authenticated mode (see WebhookEnabled); otherwise it returns 501.
-	WebhookSecret string `env:"KONFLATE_WEBHOOK_SECRET"`
+	// authenticated mode (see WebhookEnabled); otherwise it returns 501. Unset
+	// from the process environment once read (see Token).
+	WebhookSecret string `env:"KONFLATE_WEBHOOK_SECRET,unset"`
 
 	// PushToken is the bearer token for POST /api/prs/{n}/refresh, the
 	// authenticated re-render trigger for CI workflows. The endpoint is served
 	// only when this is set AND konflate is in authenticated mode (see
-	// PushEnabled); otherwise it returns 501.
-	PushToken string `env:"KONFLATE_PUSH_TOKEN"`
+	// PushEnabled); otherwise it returns 501. Unset from the process environment
+	// once read (see Token).
+	PushToken string `env:"KONFLATE_PUSH_TOKEN,unset"`
 
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
@@ -84,6 +89,46 @@ type Config struct {
 	// (each job holds two in-process flate orchestrators). Unset or 0 derives a
 	// default from the CPU budget (GOMAXPROCS, capped at 4); see Load.
 	MaxDiffConcurrency int `env:"KONFLATE_MAX_DIFF_CONC"`
+
+	// --- flate render tuning ---------------------------------------------
+	// These map onto flate's orchestrator config; the defaults mirror flate's
+	// own CLI so an embedder gets the same caching the `flate` binary does.
+
+	// HelmTemplateCacheMB caps flate's in-memory Helm template-output cache —
+	// repeat HelmReleases with identical inputs skip re-templating, the single
+	// largest CPU/allocation cost of a render. 0 disables it. In MiB.
+	HelmTemplateCacheMB int `env:"KONFLATE_HELM_TEMPLATE_CACHE_MB" envDefault:"256"`
+
+	// HelmRenderCacheMB caps flate's persistent on-disk Helm render cache (under
+	// CacheDir). It is reused across renders, PRs, and restarts: a re-render
+	// whose charts/values are unchanged short-circuits the Helm work entirely.
+	// 0 disables it. In MiB.
+	HelmRenderCacheMB int `env:"KONFLATE_HELM_RENDER_CACHE_MB" envDefault:"1024"`
+
+	// StageCacheMB caps flate's persistent kustomize stage cache (under
+	// CacheDir). 0 disables size-based eviction (the cache grows unbounded). In
+	// MiB.
+	StageCacheMB int `env:"KONFLATE_STAGE_CACHE_MB" envDefault:"2048"`
+
+	// SourceRetryAttempts is the total tries flate makes per source fetch
+	// (Git/OCI/Bucket) before giving up, retrying only transient network
+	// failures with bounded backoff. <=1 disables retry. Hardens renders
+	// against forge/registry blips.
+	SourceRetryAttempts int `env:"KONFLATE_SOURCE_RETRY_ATTEMPTS" envDefault:"3"`
+
+	// RenderConcurrency caps the reconcile goroutines flate runs within a
+	// single render. <=0 derives a default (runtime.NumCPU()*4) in the engine;
+	// bounding it stops a fan-out PR from oversubscribing CPU/memory, especially
+	// alongside MaxDiffConcurrency parallel renders.
+	RenderConcurrency int `env:"KONFLATE_RENDER_CONCURRENCY"`
+
+	// DiffTimeout bounds a single PR render end-to-end (git fetch + both flate
+	// renders). Without it a pathological or hostile PR — konflate may watch a
+	// repo it doesn't own — could occupy one of the few render slots forever;
+	// the deadline frees the slot and surfaces the failure. <=0 disables it.
+	// Generous by default so a legit cold render isn't cut short; lower it on
+	// public/untrusted instances.
+	DiffTimeout time.Duration `env:"KONFLATE_DIFF_TIMEOUT" envDefault:"10m"`
 
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and, per open PR, re-renders it if

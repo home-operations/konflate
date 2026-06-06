@@ -140,8 +140,10 @@ func (q *queue) run(pr api.PR) {
 			}
 		} else {
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
-			q.store.setResult(pr.Number, res)
-			sig := computeSignals(&res)
+			sig := q.store.setResult(pr.Number, res)
+			if sig == nil {
+				sig = computeSignals(&res) // PR closed mid-render; nothing stored
+			}
 			q.log.Info("diff rendered", "pr", pr.Number, "duration", time.Since(start).Round(time.Millisecond),
 				"resources", sig.Resources, "danger", sig.Danger, "images", sig.Images, "failures", sig.Failures)
 			q.emit(pr.Number, api.JobReady, "")
