@@ -25,8 +25,11 @@ type Config struct {
 	// Token is the forge API token used for API calls and cloning. Optional and
 	// purely for read auth — it raises the forge API rate limit and unlocks
 	// private repositories. It gates no feature (see [Config.Authenticated]).
-	// Never included in any HTTP response or log line.
-	Token string `env:"KONFLATE_TOKEN"`
+	// Never included in any HTTP response or log line, and unset from the process
+	// environment once read (defense-in-depth — a later in-process os.Environ
+	// dump can't leak it; Load runs exactly once at startup). NB: this does not
+	// scrub /proc/<pid>/environ or the Pod spec, only the running process's env.
+	Token string `env:"KONFLATE_TOKEN,unset"`
 
 	// ClusterPath is the directory flate renders from — the GitRepository root
 	// that Flux Kustomization spec.path values resolve against. For the standard
@@ -46,14 +49,16 @@ type Config struct {
 	//   GitLab       — static token   (X-Gitlab-Token)
 	//   Forgejo      — HMAC-SHA256 key (X-Gitea-Signature)
 	// POST /hooks is served only when this is set AND konflate is in
-	// authenticated mode (see WebhookEnabled); otherwise it returns 501.
-	WebhookSecret string `env:"KONFLATE_WEBHOOK_SECRET"`
+	// authenticated mode (see WebhookEnabled); otherwise it returns 501. Unset
+	// from the process environment once read (see Token).
+	WebhookSecret string `env:"KONFLATE_WEBHOOK_SECRET,unset"`
 
 	// PushToken is the bearer token for POST /api/prs/{n}/refresh, the
 	// authenticated re-render trigger for CI workflows. The endpoint is served
 	// only when this is set AND konflate is in authenticated mode (see
-	// PushEnabled); otherwise it returns 501.
-	PushToken string `env:"KONFLATE_PUSH_TOKEN"`
+	// PushEnabled); otherwise it returns 501. Unset from the process environment
+	// once read (see Token).
+	PushToken string `env:"KONFLATE_PUSH_TOKEN,unset"`
 
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
