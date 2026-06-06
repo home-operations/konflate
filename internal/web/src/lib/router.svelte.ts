@@ -17,7 +17,9 @@ function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 'pr' && parts[1]) {
     const pr = Number(parts[1]);
-    if (Number.isInteger(pr)) {
+    // PR numbers are positive integers on every forge — anything else is a
+    // malformed deep link and falls through to the list.
+    if (Number.isInteger(pr) && pr > 0) {
       return { name: 'review', pr, sel: parts[2] ?? null };
     }
   }

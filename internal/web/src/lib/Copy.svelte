@@ -2,6 +2,7 @@
   // A small icon button that copies `text` to the clipboard and briefly flips
   // to a check on success. Used sparingly for values a reviewer commonly lifts
   // out (a head SHA, an image reference, a resource identifier).
+  import { onDestroy } from 'svelte';
   import Icon from './Icon.svelte';
   import { mdiContentCopy, mdiCheck } from './icons';
 
@@ -15,6 +16,7 @@
 
   let copied = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => clearTimeout(timer));
 
   async function copy() {
     try {

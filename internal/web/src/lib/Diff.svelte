@@ -2,7 +2,10 @@
   // View mode is shared module state: every resource renders stacked in one
   // pane, so the toggle in any sticky header switches them all at once.
   // Default to split on wide screens, unified on narrow; remember the override.
+  // Module state initializers are guarded so importing this file never throws
+  // outside a browser (tests, a future SSR build).
   function defaultMode(): 'unified' | 'split' {
+    if (typeof window === 'undefined') return 'unified';
     const saved = localStorage.getItem('konflate-diffmode');
     if (saved === 'unified' || saved === 'split') return saved;
     return window.innerWidth >= 1400 ? 'split' : 'unified';
@@ -15,12 +18,23 @@
 
   // Side-by-side split is unreadable at phone width — force unified there (and
   // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
-  const mq = window.matchMedia('(max-width: 640px)');
-  const vp = $state({ narrow: mq.matches });
-  mq.addEventListener('change', () => (vp.narrow = mq.matches));
+  const vp = $state({ narrow: false });
+  if (typeof window !== 'undefined') {
+    const mq = window.matchMedia('(max-width: 640px)');
+    vp.narrow = mq.matches;
+    mq.addEventListener('change', () => (vp.narrow = mq.matches));
+  }
 </script>
 
 <script lang="ts">
+  // SECURITY — the {@html} trust boundary. Every {@html} below renders
+  // `row.html` / cell `.html`, which MUST only ever be the server's
+  // Chroma-rendered diff lines: HTML-escaped token text wrapped in
+  // <span class="..."> tags. There is no client-side sanitization — the
+  // guarantees are (1) the server escapes all file content before wrapping it,
+  // and (2) the CSP blocks inline scripts as a backstop. Never route any other
+  // value (PR titles, file paths, warnings — anything forge-controlled) into
+  // these fields, and never relax this without adding client-side sanitization.
   import type { DiffResource, SideCell } from './types';
   import { store } from './store.svelte';
   import Icon from './Icon.svelte';
@@ -107,7 +121,8 @@
               <td class="gutter num">{row.oldNo || ''}</td>
               <td class="gutter num">{row.newNo || ''}</td>
               <td class="gutter sign">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</td>
-              <!-- chroma-produced, HTML-escaped token spans; CSP blocks inline scripts -->
+              <!-- chroma-produced, HTML-escaped token spans; CSP blocks inline
+                   scripts — see the trust-boundary note at the top of this file -->
               <td class="code">{@html row.html ?? ''}</td>
             </tr>
           {/if}

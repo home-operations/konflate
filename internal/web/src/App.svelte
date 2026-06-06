@@ -128,7 +128,7 @@
     <!-- The backdrop is a real button so closing is keyboard-reachable. -->
     <div class="help-overlay">
       <button class="help-backdrop" aria-label="Close keyboard shortcuts" onclick={toggleHelp}></button>
-      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount onkeydown={trapTab}>
+      <div class="help-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount onkeydown={trapTab}>
         <h2>Keyboard shortcuts</h2>
         <dl class="help-keys">
           <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
