@@ -209,8 +209,16 @@ body {
   font-family: ui-monospace, monospace;
   font-size: 12px;
 }
-.pr-num {
+/* The PR number, shown first in the meta row (list + review) behind a
+   pull-request glyph. Kept at full text weight so it reads as the card's
+   identifier amid the muted meta. */
+.pr-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-weight: 600;
+  color: var(--text);
+  flex: 0 0 auto;
 }
 .tag {
   display: inline-flex;
@@ -267,13 +275,6 @@ body {
 }
 .dot-merged {
   background: var(--merged);
-}
-.merged-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--merged);
-  border-color: color-mix(in srgb, var(--merged) 40%, var(--border));
 }
 @keyframes pulse {
   50% {
@@ -1164,8 +1165,7 @@ td.side-blank {
     row-gap: 6px;
   }
   /* No hover on touch — keep the per-card copy-merge affordance visible, and
-     reserve a gutter so the top-row title/tags don't slide under it (cards are
-     narrow enough here that the title truncates and tags push to the edge). */
+     reserve a gutter so the title doesn't slide under it. */
   .card-actions {
     opacity: 1;
   }

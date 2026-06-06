@@ -30,6 +30,10 @@ test('list → review → diffs flow', async ({ page }) => {
   // Landing list: cards with per-PR signal badges.
   await expect(page.locator('.card')).toHaveCount(3);
   const card142 = page.locator('.card', { hasText: '#142' });
+  // The PR number lives in the meta row (behind a PR glyph), so the title owns
+  // its own line and carries no "#142".
+  await expect(card142.locator('.pr-id')).toContainText('#142');
+  await expect(card142.locator('.card-title')).toHaveText('feat(rook-ceph): bump operator to v1.15.0');
   await expect(card142.locator('.badge.danger').first()).toBeVisible();
   await expect(card142.locator('.ago').first()).toHaveText(/ago|just now/); // humanized timestamps
   // Author avatar renders when present; a PR without one falls back to the icon.
@@ -114,7 +118,8 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
   await group.click();
   const mergedCard = page.locator('.merged-cards .card.merged', { hasText: '#128' });
   await expect(mergedCard).toBeVisible();
-  await expect(mergedCard.locator('.merged-tag')).toContainText('merged');
+  // No redundant "merged" tag — the group header, dimmed card, purple dot, and
+  // "merged …" timestamp already convey it.
   await expect(mergedCard.locator('.ago')).toContainText('merged');
 
   // Opening a merged PR shows the frozen-diff banner.
