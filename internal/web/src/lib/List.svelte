@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PRStatus } from './types';
-  import { store, filteredPRs, openPR } from './store.svelte';
+  import { store, filteredPRs, matchesStatus, sortPRs, openPR, type StatusFilter } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
@@ -19,6 +19,7 @@
     mdiSourceBranch,
     mdiSourcePull,
     mdiFilterOutline,
+    mdiSortVariant,
     mdiChevronRight,
     mdiChevronDown,
     mdiCheckCircleOutline,
@@ -27,18 +28,32 @@
     mdiConsoleLine,
   } from './icons';
 
+  // Two filter stages: the text query narrows `prs` (which the summary pills
+  // count, so the counts hold steady while a pill is active), then the active
+  // pill narrows and the sort orders what's shown.
   const prs = $derived(filteredPRs());
-  const openPrs = $derived(prs.filter((p) => p.open));
-  const mergedPrs = $derived(prs.filter((p) => !p.open));
+  const shown = $derived(sortPRs(prs.filter((p) => matchesStatus(p, store.statusFilter))));
+  const openPrs = $derived(shown.filter((p) => p.open));
+  const mergedPrs = $derived(shown.filter((p) => !p.open));
+  const openAll = $derived(prs.filter((p) => p.open));
+  const filterActive = $derived(store.query.trim() !== '' || store.statusFilter !== '');
 
-  // At-a-glance health of the open set, shown above the list.
+  // At-a-glance health of the open set, shown above the list — each pill is
+  // also a toggle that filters the list down to that status.
   const summary = $derived.by(() => ({
-    open: openPrs.length,
-    danger: openPrs.filter((p) => (p.signals?.danger ?? 0) > 0).length,
-    failed: openPrs.filter((p) => p.status === 'error').length,
-    rendering: openPrs.filter((p) => p.status === 'pending' || p.status === 'running').length,
-    merged: mergedPrs.length,
+    open: openAll.length,
+    danger: openAll.filter((p) => (p.signals?.danger ?? 0) > 0).length,
+    failed: openAll.filter((p) => p.status === 'error').length,
+    rendering: openAll.filter((p) => p.status === 'pending' || p.status === 'running').length,
+    merged: prs.length - openAll.length,
   }));
+
+  function toggleFilter(f: StatusFilter): void {
+    store.statusFilter = store.statusFilter === f ? '' : f;
+  }
+  // A pill renders while it counts something — or while it's the active
+  // filter, so it can't strand itself unclickable when its count hits zero.
+  const showPill = (count: number, f: StatusFilter): boolean => count > 0 || store.statusFilter === f;
 
   // The default base branch is whatever most open PRs target. A PR whose base
   // differs is flagged on its card so a non-default target (konflate reviews all
@@ -55,7 +70,7 @@
   // The "recently merged" shelf is collapsed by default; expand on click, or
   // automatically while a filter is active so a search can reach merged PRs.
   let mergedExpanded = $state(false);
-  const showMerged = $derived(mergedExpanded || store.query.trim() !== '');
+  const showMerged = $derived(mergedExpanded || filterActive);
 
   // pending/running render as icons below and ready carries signal badges, so
   // this fallback only labels the terminal error state.
@@ -66,6 +81,18 @@
   const labelColor = (l: { color?: string }) =>
     l.color && /^[0-9a-fA-F]{3,8}$/.test(l.color) ? `#${l.color}` : '';
 </script>
+
+{#snippet pill(f: StatusFilter, count: number, tone: string, hint: string)}
+  <button
+    class="sum-pill {tone}"
+    class:active={store.statusFilter === f}
+    aria-pressed={store.statusFilter === f}
+    title={hint}
+    onclick={() => toggleFilter(f)}
+  >
+    <strong>{count}</strong> {f}
+  </button>
+{/snippet}
 
 {#snippet allClear()}
   <div class="all-clear">
@@ -156,32 +183,48 @@
       bind:value={store.query}
       aria-label="Filter pull requests"
     />
+    <label class="sort" title="Sort pull requests">
+      <Icon path={mdiSortVariant} size={15} />
+      <select bind:value={store.sort} aria-label="Sort pull requests">
+        <option value="created">created</option>
+        <option value="refreshed">refreshed</option>
+        <option value="name">name</option>
+      </select>
+    </label>
   </div>
 
-  {#if store.loaded && openPrs.length}
+  {#if store.loaded && openAll.length}
     <div class="list-summary">
       <span class="sum-pill"><strong>{summary.open}</strong> open</span>
-      {#if summary.danger}<span class="sum-pill danger"><strong>{summary.danger}</strong> danger</span>{/if}
-      {#if summary.failed}<span class="sum-pill danger"><strong>{summary.failed}</strong> failed</span>{/if}
-      {#if summary.rendering}<span class="sum-pill"><strong>{summary.rendering}</strong> rendering</span>{/if}
-      {#if summary.merged}<span class="sum-pill merged"><strong>{summary.merged}</strong> merged</span>{/if}
+      {#if showPill(summary.danger, 'danger')}
+        {@render pill('danger', summary.danger, 'danger', 'Only PRs with danger warnings')}
+      {/if}
+      {#if showPill(summary.failed, 'failed')}
+        {@render pill('failed', summary.failed, 'danger', 'Only PRs whose render failed')}
+      {/if}
+      {#if showPill(summary.rendering, 'rendering')}
+        {@render pill('rendering', summary.rendering, '', 'Only PRs still rendering')}
+      {/if}
+      {#if showPill(summary.merged, 'merged')}
+        {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}
+      {/if}
     </div>
   {/if}
 
   {#if !store.loaded}
     <p class="empty"><Icon path={mdiLoading} spin /> Loading pull requests…</p>
-  {:else if prs.length === 0}
-    {#if store.prs.length === 0}
-      {@render allClear()}
-    {:else}
+  {:else if shown.length === 0}
+    {#if filterActive}
       <p class="empty">No pull requests match your filter.</p>
+    {:else}
+      {@render allClear()}
     {/if}
   {:else}
     {#if openPrs.length}
       <ul class="cards">
         {#each openPrs as pr (pr.number)}{@render prCard(pr)}{/each}
       </ul>
-    {:else}
+    {:else if !filterActive}
       {@render allClear()}
     {/if}
 

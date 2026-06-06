@@ -5,11 +5,18 @@
 import type { DiffEnvelope, DiffResult, Meta, PRStatus, WSEvent } from './types';
 import { router, navigate } from './router.svelte';
 
+// The status facets a summary pill can filter the list down to ('' = all).
+export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged';
+// List sort orders: newest first, recently refreshed first, or by title.
+export type SortKey = 'created' | 'refreshed' | 'name';
+
 interface Store {
   meta: Meta | null;
   prs: PRStatus[];
   loaded: boolean; // the initial PR list has been fetched at least once
   query: string;
+  statusFilter: StatusFilter;
+  sort: SortKey;
   diff: DiffResult | null;
   diffFor: number | null; // PR number the diff/loading belongs to
   diffError: string;
@@ -24,6 +31,8 @@ export const store: Store = $state({
   prs: [],
   loaded: false,
   query: '',
+  statusFilter: '',
+  sort: 'created',
   diff: null,
   diffFor: null,
   diffError: '',
@@ -44,6 +53,39 @@ export function filteredPRs(): PRStatus[] {
       String(p.number).includes(q) ||
       (p.author ?? '').toLowerCase().includes(q),
   );
+}
+
+// matchesStatus is the per-PR predicate for a summary-pill filter.
+export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
+  switch (f) {
+    case 'danger':
+      return (p.signals?.danger ?? 0) > 0;
+    case 'failed':
+      return p.status === 'error';
+    case 'rendering':
+      return p.status === 'pending' || p.status === 'running';
+    case 'merged':
+      return !p.open;
+    default:
+      return true;
+  }
+}
+
+// An unparsable/missing timestamp sorts last under the desc time orders.
+const ts = (iso?: string): number => {
+  const v = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(v) ? 0 : v;
+};
+
+// sortPRs orders a list by the selected sort: created/refreshed newest first,
+// name A→Z. Returns a copy — the store's array stays in server order.
+export function sortPRs(list: PRStatus[]): PRStatus[] {
+  const key = store.sort;
+  return [...list].sort((a, b) => {
+    if (key === 'name') return a.title.localeCompare(b.title);
+    if (key === 'refreshed') return ts(b.updatedAt) - ts(a.updatedAt);
+    return ts(b.createdAt) - ts(a.createdAt);
+  });
 }
 
 export function currentPR(): PRStatus | null {

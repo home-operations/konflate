@@ -28,6 +28,7 @@ export {
   mdiAccountOutline,
   mdiTagOutline,
   mdiScaleBalance,
+  mdiSortVariant,
   mdiSourceBranch,
   mdiSourcePull,
   mdiFilterOutline,

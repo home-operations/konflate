@@ -172,7 +172,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .pr-search):focus-visible {
+:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .pr-search, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -356,6 +356,30 @@ a.repo:focus-visible .repo-ext {
 .pr-search:focus {
   outline: none;
 }
+/* Sort selector at the right edge of the filter row — quiet text control. */
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.sort select {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.sort select:hover {
+  color: var(--text);
+}
+.sort select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .cards {
   list-style: none;
   margin: 0 auto;
@@ -504,6 +528,34 @@ a.repo:focus-visible .repo-ext {
 .sum-pill strong {
   color: var(--text);
   font-weight: 600;
+}
+/* The danger/failed/rendering/merged pills are buttons that filter the list to
+   that status; the active one fills with its own tint. */
+button.sum-pill {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+button.sum-pill:hover {
+  border-color: var(--accent);
+}
+.sum-pill.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.sum-pill.danger.active {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+}
+.sum-pill.danger:hover {
+  border-color: var(--danger);
+}
+.sum-pill.merged.active {
+  border-color: var(--merged);
+  background: color-mix(in srgb, var(--merged) 12%, var(--panel));
+}
+.sum-pill.merged:hover {
+  border-color: var(--merged);
 }
 .sum-pill.danger {
   color: var(--danger);

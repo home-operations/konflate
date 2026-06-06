@@ -259,6 +259,48 @@ test('filter narrows the PR list', async ({ page }) => {
   await expect(page.locator('.card')).toContainText('#131');
 });
 
+test('summary pills filter by status; the sort selector reorders', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // Default sort: created desc → #138 (06-03) > #142 (06-01) > #131 (05-30).
+  const ids = page.locator('.cards .pr-id');
+  await expect(ids.nth(0)).toContainText('#138');
+  await expect(ids.nth(1)).toContainText('#142');
+  await expect(ids.nth(2)).toContainText('#131');
+
+  // Refreshed sort: last render desc → #142 (12:00) > #138 (11:30) > #131 (10:00).
+  await page.locator('.sort select').selectOption('refreshed');
+  await expect(ids.nth(0)).toContainText('#142');
+  await expect(ids.nth(1)).toContainText('#138');
+
+  // The danger pill narrows to the one PR carrying danger warnings; clicking
+  // again clears it.
+  const danger = page.locator('.sum-pill', { hasText: 'danger' });
+  await danger.click();
+  await expect(danger).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card')).toContainText('#142');
+  await danger.click();
+  await expect(page.locator('.card')).toHaveCount(3);
+
+  // failed → the render-error PR.
+  await page.locator('.sum-pill', { hasText: 'failed' }).click();
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card')).toContainText('#131');
+
+  // merged → only the merged shelf, auto-expanded; counts stay visible.
+  await page.locator('.sum-pill', { hasText: 'merged' }).click();
+  await expect(page.locator('.merged-cards .card')).toHaveCount(1);
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.list-summary')).toContainText('3 open');
+
+  // Status filter + a text query that excludes everything → the no-match state.
+  await page.getByPlaceholder('Filter pull requests…').fill('plex');
+  await expect(page.locator('.card')).toHaveCount(0);
+  await expect(page.locator('.empty')).toContainText('match your filter');
+});
+
 test('image changes shorten digest versions (full value on hover + correct copy)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __copied: string[] }).__copied = [];
