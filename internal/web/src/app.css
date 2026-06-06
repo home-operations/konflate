@@ -3,41 +3,39 @@
 /* ---- theme tokens ---------------------------------------------------- */
 :root,
 .light {
-  --bg: #f6f8fa;
+  --bg: #f5f7fa;
   --panel: #ffffff;
-  --panel-alt: #f6f8fa;
-  --border: #d0d7de;
+  --panel-alt: #eef1f5;
+  --border: #d4dae2;
   --text: #1f2328;
-  --muted: #59636e; /* ≥6:1 on panel/bg — much of the UI is 11–12px muted text */
-  --accent: #0969da;
-  --add-bg: #e6ffec;
-  --add-gutter: #ccffd8;
-  --del-bg: #ffebe9;
-  --del-gutter: #ffd7d5;
+  --muted: #59636e; /* ≥5.4:1 on panel/bg/panel-alt — much of the UI is 11–12px muted text */
+  --accent: #2563d9;
+  --add-bg: #e9f7ee;
+  --add-bar: #1a7f37;
+  --del-bg: #fdeeec;
+  --del-bar: #cf222e;
   --danger: #cf222e;
   --caution: #9a6700;
   --ok: #1a7f37;
   --merged: #8250df;
-  --danger-bg: #ffebe9;
   --caution-bg: #fff8c5;
 }
 .dark {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --panel-alt: #0d1117;
-  --border: #30363d;
+  --bg: #0b0e14;
+  --panel: #11151c;
+  --panel-alt: #161b24;
+  --border: #232a36;
   --text: #e6edf3;
   --muted: #9198a1; /* ≥5.9:1 on panel/bg — much of the UI is 11–12px muted text */
-  --accent: #2f81f7;
-  --add-bg: #12261e;
-  --add-gutter: #1b4721;
-  --del-bg: #25171c;
-  --del-gutter: #542426;
+  --accent: #5b8cff;
+  --add-bg: #0d1f15;
+  --add-bar: #2ea043;
+  --del-bg: #221015;
+  --del-bar: #f85149;
   --danger: #f85149;
   --caution: #d29922;
   --ok: #3fb950;
   --merged: #a371f7;
-  --danger-bg: #25171c;
   --caution-bg: #272115;
 }
 
@@ -52,8 +50,10 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  /* Mono-first: the whole app reads as an instrument, not a web page. */
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 .icon {
   vertical-align: -0.15em;
@@ -85,8 +85,8 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 16px;
+  gap: 14px;
+  padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
@@ -95,8 +95,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
   color: inherit;
   text-decoration: none;
 }
@@ -798,6 +799,7 @@ button.sum-pill:hover {
 }
 .rt-name {
   font-weight: 600;
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -805,10 +807,23 @@ button.sum-pill:hover {
 .rt-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: 4px;
+}
+/* Each meta item (#id, author, sha, opened, refreshed, open link) reads as a
+   small tag, matching the chip language of the status pills. Explicit class —
+   a bare child selector would chip whatever else lands in the row. */
+.rt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  background: var(--panel-alt);
 }
 .rt-author {
   display: inline-flex;
@@ -871,17 +886,6 @@ button.sum-pill:hover {
   align-items: center;
   gap: 8px;
 }
-.danger-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--danger-bg);
-  color: var(--danger);
-  font-size: 13px;
-  font-weight: 600;
-  border-bottom: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
-}
 .merged-strip {
   display: flex;
   align-items: center;
@@ -940,9 +944,9 @@ button.sum-pill:hover {
 }
 
 /* ---- overview -------------------------------------------------------- */
+/* Flush-left like the diff sections below it — the Summary is one of the
+   stacked sections, not a centered page. */
 .overview {
-  max-width: 1100px;
-  margin: 0 auto;
   padding: 14px;
 }
 .impact {
@@ -953,10 +957,15 @@ button.sum-pill:hover {
 }
 .impact-pill {
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 11px;
-  font-size: 12px;
-  background: var(--panel);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-alt);
+  font-variant-numeric: tabular-nums;
+}
+.impact-pill strong {
+  color: var(--text);
 }
 /* Tint the add/changed/removed pills (the .add/.chg/.del classes carry the text
    color) so the shape of the change reads at a glance; counts stay neutral. */
@@ -972,86 +981,85 @@ button.sum-pill:hover {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
   background: color-mix(in srgb, var(--danger) 10%, var(--panel));
 }
+/* Overview sections sit flat on the pane — headed lists, not boxed cards. */
 .ov-section {
-  margin-bottom: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: var(--panel);
+  margin-bottom: 16px;
 }
 .ov-section h3 {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 8px;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
 }
+/* One line per warning: level badge, resource, detail share a baseline and
+   wrap only when they must. */
 .warning {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   padding: 6px 10px;
-  border-left: 3px solid var(--border);
-  border-radius: 0 4px 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   margin-bottom: 6px;
 }
 /* A warning whose resource rendered into the diff is a button that jumps to
-   it — reset the button chrome but keep the level edge, and hint on hover. */
+   it — reset the button chrome but keep the level tint, and deepen on hover. */
 .warning-link {
-  display: block;
   width: 100%;
   text-align: left;
   font: inherit;
   color: inherit;
   background: none;
-  border: none;
-  border-left: 3px solid var(--border);
   cursor: pointer;
-}
-.warning-link:hover {
-  background: var(--panel-alt);
 }
 .warning:last-child {
   margin-bottom: 0;
 }
 .warning.danger {
-  border-left-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 .warning.caution {
-  border-left-color: var(--caution);
+  border-color: color-mix(in srgb, var(--caution) 35%, var(--border));
+  background: color-mix(in srgb, var(--caution) 8%, transparent);
+}
+.warning-link.danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.warning-link.caution:hover {
+  background: color-mix(in srgb, var(--caution) 14%, transparent);
 }
 .warning-badge {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border-radius: 4px;
   padding: 1px 6px;
-  margin-right: 6px;
 }
 .warning.danger .warning-badge {
-  background: var(--danger-bg);
   color: var(--danger);
 }
 .warning.caution .warning-badge {
-  background: var(--caution-bg);
   color: var(--caution);
 }
 .warning-res {
-  font-family: ui-monospace, monospace;
   font-size: 12px;
+  font-weight: 600;
 }
 .warning-detail {
-  display: block; /* a span so it's valid inside the button variant */
   color: var(--muted);
   font-size: 12px;
-  margin-top: 3px;
 }
-/* Each image change is a stacked block (name / from→to / refs) rather than a
-   table row, so a long digest wraps instead of forcing horizontal overflow. */
 .img-list {
   list-style: none;
   margin: 0;
@@ -1061,10 +1069,13 @@ button.sum-pill:hover {
   gap: 10px;
   font-size: 12px;
 }
+/* One line per image: name, from → to, refs share a baseline; long digests
+   wrap the row rather than overflowing. */
 .img-change {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
 }
 .img-head {
   display: flex;
@@ -1219,20 +1230,21 @@ button.sum-pill:hover {
   color: var(--danger);
 }
 .tree-parent {
-  margin-top: 6px;
+  margin-top: 10px;
 }
 .tree-parent-label {
-  font-weight: 600;
-  font-size: 12px;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--muted);
   padding: 6px 12px 2px;
   word-break: break-word;
 }
 .tree-kind {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
   color: var(--muted);
-  padding: 4px 12px 2px 18px;
+  padding: 5px 12px 2px 18px;
 }
 .tree-item {
   width: 100%;
@@ -1246,7 +1258,7 @@ button.sum-pill:hover {
   color: inherit;
   background: transparent;
   border: none;
-  font-size: 13px;
+  font-size: 12px;
 }
 .tree-item:hover {
   background: var(--panel-alt);
@@ -1280,7 +1292,7 @@ button.sum-pill:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -1288,26 +1300,44 @@ button.sum-pill:hover {
   z-index: 1;
 }
 .res-title {
-  font-family: ui-monospace, monospace;
   font-weight: 600;
   flex: 1 1 auto;
   word-break: break-all;
 }
+/* The resource kind reads quieter than the ns/name it qualifies; the Summary
+   header's quiet title shares the treatment (a label, not an identifier). */
+.res-kind,
+.res-title-quiet {
+  color: var(--muted);
+  font-weight: 500;
+}
 .res-status {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 2px 7px;
+  color: var(--muted);
+  flex: 0 0 auto;
 }
 .res-status.status-added {
   color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
 }
 .res-status.status-removed {
   color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+.res-status.status-changed {
+  color: var(--caution);
+  border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
 }
 .res-counts {
   white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .res-counts .del {
   margin-left: 6px;
@@ -1315,7 +1345,7 @@ button.sum-pill:hover {
 .view-toggle {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -1323,13 +1353,28 @@ button.sum-pill:hover {
   border: none;
   background: var(--panel-alt);
   color: var(--muted);
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
   cursor: pointer;
 }
 .view-toggle button.active {
   background: var(--accent);
   color: var(--panel); /* white fails 4.5:1 on the dark theme's lighter accent */
+  font-weight: 600;
+}
+/* The per-resource warning badge rides in the sticky header — tinted so the
+   flagged resource reads as flagged even with the Summary scrolled away. */
+.res-header .badge.danger {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.res-header .badge.caution {
+  background: color-mix(in srgb, var(--caution) 10%, transparent);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
 }
 
 table.diff {
@@ -1373,23 +1418,38 @@ td.gutter.sign {
   padding: 0 4px;
   border-right: none;
 }
+/* Color-blind-safe add/del rows: three independent signals — the tinted row
+   background, a 3px status bar on the code cell, and the +/− sign column. */
 .row-add {
   background: var(--add-bg);
-}
-.row-add td.gutter {
-  background: var(--add-gutter);
-}
-/* Line numbers shift toward --text on the tinted gutters — plain --muted
-   lands at ~3.7:1 against the dark green/red gutter fills. */
-.row-add td.gutter,
-.row-del td.gutter {
-  color: color-mix(in srgb, var(--muted) 40%, var(--text));
 }
 .row-del {
   background: var(--del-bg);
 }
+tr.row-add td.code,
+td.code.row-add {
+  box-shadow: inset 3px 0 0 var(--add-bar);
+  padding-left: 13px;
+}
+tr.row-del td.code,
+td.code.row-del {
+  box-shadow: inset 3px 0 0 var(--del-bar);
+  padding-left: 13px;
+}
+.row-add td.gutter.sign {
+  color: var(--add-bar);
+  font-weight: 700;
+}
+.row-del td.gutter.sign {
+  color: var(--del-bar);
+  font-weight: 700;
+}
+/* Line numbers shift toward --text on the tinted rows. Plain --muted clears
+   AA on the flat row fills (~5.9:1+), so this is hierarchy, not contrast:
+   changed-row numbers read a notch firmer than context-row numbers. */
+.row-add td.gutter,
 .row-del td.gutter {
-  background: var(--del-gutter);
+  color: color-mix(in srgb, var(--muted) 40%, var(--text));
 }
 
 /* Word-level (intra-line) highlight: the runes that actually changed, tinted
@@ -1418,14 +1478,14 @@ td.gutter.sign {
   border: none;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: var(--panel-alt);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
   color: var(--accent);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
 }
 .expand-btn:hover {
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel-alt));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
 tr.folded {
   background: color-mix(in srgb, var(--accent) 5%, transparent);

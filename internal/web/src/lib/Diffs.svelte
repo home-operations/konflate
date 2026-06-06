@@ -102,7 +102,16 @@
       </button>
     </div>
     <div class="diff-pane" bind:this={pane} onscroll={onScroll}>
-      <section class="diff-section" data-sel="summary"><Overview /></section>
+      <section class="diff-section" data-sel="summary">
+        <!-- Same sticky container as Diff.svelte's res-header (keep the two in
+             step), with a neutral status chip and a quiet title — the Summary
+             is a section like the others, not a resource. -->
+        <div class="res-header">
+          <span class="res-status">summary</span>
+          <span class="res-title res-title-quiet">Overview</span>
+        </div>
+        <Overview />
+      </section>
       {#each resources as r (r.id)}
         <section class="diff-section" data-sel={r.id}><Diff resource={r} /></section>
       {/each}

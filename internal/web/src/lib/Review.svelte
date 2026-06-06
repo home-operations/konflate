@@ -9,7 +9,6 @@
     mdiArrowLeft,
     mdiChevronLeft,
     mdiChevronRight,
-    mdiAlertOctagon,
     mdiOpenInNew,
     mdiSourceMerge,
     mdiSourcePull,
@@ -25,7 +24,6 @@
   const pr = $derived(currentPR());
   const forgeUrl = $derived(pr && /^https?:\/\//i.test(pr.url) ? pr.url : null);
   const merged = $derived(pr ? !pr.open : false);
-  const danger = $derived(store.diff?.warnings?.filter((w) => w.level === 'danger') ?? []);
 </script>
 
 {#if route}
@@ -49,22 +47,22 @@
           <span class="rt-name">{pr?.title ?? ''}</span>
         </div>
         <div class="rt-meta">
-          <span class="pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
+          <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
-            <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
-            <span class="sha-wrap">
+            <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
+            <span class="rt-tag sha-wrap">
               <code class="sha">{pr.headSha.slice(0, 7)}</code>
               <Copy text={pr.headSha} label="Copy full commit SHA" />
             </span>
             {#if pr.createdAt}
-              <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={13} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
+              <span class="rt-tag ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={13} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
             {/if}
             {#if pr.updatedAt}
-              <span class="ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={13} /> refreshed {timeAgo(pr.updatedAt, clock.now)}</span>
+              <span class="rt-tag ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={13} /> refreshed {timeAgo(pr.updatedAt, clock.now)}</span>
             {/if}
           {/if}
           {#if forgeUrl}
-            <a class="ext" href={forgeUrl} target="_blank" rel="noopener noreferrer">
+            <a class="rt-tag ext" href={forgeUrl} target="_blank" rel="noopener noreferrer">
               <Icon path={mdiOpenInNew} size={13} /> open
             </a>
           {/if}
@@ -81,16 +79,6 @@
     {#if store.diffRefreshError}
       <div class="refresh-strip" title={store.diffRefreshError}>
         <Icon path={mdiRefresh} size={15} /> Couldn't refresh — showing the last successful render
-      </div>
-    {/if}
-
-    {#if danger.length}
-      <div class="danger-strip">
-        <Icon path={mdiAlertOctagon} size={15} />
-        {danger.length} danger {danger.length === 1 ? 'warning' : 'warnings'} — {danger[0].resource}{danger.length >
-        1
-          ? ` and ${danger.length - 1} more`
-          : ''}
       </div>
     {/if}
 
