@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/home-operations/konflate/compare/0.1.11...0.1.12) (2026-06-06)
+
+
+### Bug Fixes
+
+* **ui:** palette focus containment, diff null guards, chroma CSS sync ([#38](https://github.com/home-operations/konflate/issues/38)) ([6e2e394](https://github.com/home-operations/konflate/commit/6e2e3946d80fbf10485d2980056bd4d32ccb92fa))
+
 ## [0.1.11](https://github.com/home-operations/konflate/compare/0.1.10...0.1.11) (2026-06-06)
 
 
