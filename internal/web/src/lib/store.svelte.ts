@@ -2,8 +2,8 @@
 // this store owns the data (instance meta, the PR list, the currently-loaded
 // diff) and the actions that mutate it.
 
-import type { DiffEnvelope, DiffResource, DiffResult, Meta, PRStatus, WSEvent } from './types';
-import { router, navigate, type Tab } from './router.svelte';
+import type { DiffEnvelope, DiffResult, Meta, PRStatus, WSEvent } from './types';
+import { router, navigate } from './router.svelte';
 
 interface Store {
   meta: Meta | null;
@@ -52,30 +52,26 @@ export function currentPR(): PRStatus | null {
   return store.prs.find((p) => p.number === r.pr) ?? null;
 }
 
-export function selectedResource(): DiffResource | null {
-  const r = router.route;
-  if (r.name !== 'review' || !r.resource) return null;
-  return store.diff?.resources?.find((res) => res.id === r.resource) ?? null;
-}
-
 // ---- navigation -----------------------------------------------------------
 
 export function openPR(n: number): void {
-  navigate({ name: 'review', pr: n, tab: 'overview', resource: null });
+  navigate({ name: 'review', pr: n, sel: null });
 }
 
-export function openDiffs(n: number, resource: string | null = null): void {
-  navigate({ name: 'review', pr: n, tab: 'diffs', resource });
-}
-
-export function setTab(tab: Tab): void {
-  const r = router.route;
-  if (r.name !== 'review') return;
-  navigate({ name: 'review', pr: r.pr, tab, resource: r.resource });
+// Select a tree node in a review: 'summary', a resource id, or null (a bare
+// #/pr/N, which the review renders as the Summary).
+export function openSel(n: number, sel: string | null = null): void {
+  navigate({ name: 'review', pr: n, sel });
 }
 
 export function goList(): void {
   navigate({ name: 'list' });
+}
+
+// The ordered selection cycle for j/k and the mobile switcher: Summary first,
+// then every resource.
+export function selectables(): string[] {
+  return ['summary', ...(store.diff?.resources ?? []).map((res) => res.id)];
 }
 
 export function adjacentPR(delta: number): void {
@@ -86,14 +82,16 @@ export function adjacentPR(delta: number): void {
   if (i >= 0 && j >= 0 && j < store.prs.length) openPR(store.prs[j].number);
 }
 
+// Move the selection by delta through [Summary, ...resources], clamped at the
+// ends. A null selection (the default landing) sits on Summary, so j from there
+// steps into the first resource.
 export function adjacentResource(delta: number): void {
   const r = router.route;
   if (r.name !== 'review') return;
-  const list = store.diff?.resources ?? [];
-  if (list.length === 0) return;
-  const i = r.resource ? list.findIndex((res) => res.id === r.resource) : -1;
-  const j = Math.min(Math.max(i + delta, 0), list.length - 1);
-  openDiffs(r.pr, list[j].id);
+  const ids = selectables();
+  const i = Math.max(0, ids.indexOf(r.sel ?? 'summary'));
+  const j = Math.min(Math.max(i + delta, 0), ids.length - 1);
+  openSel(r.pr, ids[j]);
 }
 
 // ---- API ------------------------------------------------------------------

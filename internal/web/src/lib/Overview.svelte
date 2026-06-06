@@ -1,15 +1,10 @@
 <script lang="ts">
-  import { router } from './router.svelte';
-  import { store, openDiffs } from './store.svelte';
+  import { store } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
 
   const d = $derived(store.diff!);
-
-  function open(id: string) {
-    if (router.route.name === 'review') openDiffs(router.route.pr, id);
-  }
 
   // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
   // digest-pinned image doesn't blow out the layout; tags are short already and
@@ -93,23 +88,4 @@
       {/each}
     </section>
   {/if}
-
-  <section class="ov-section">
-    <h3>Changed resources</h3>
-    {#each d.tree ?? [] as parent}
-      <div class="ov-parent">{parent.label}</div>
-      {#each parent.kinds as kind}
-        {#each kind.items as item}
-          <button class="ov-res" onclick={() => open(item.id)}>
-            <span class="ov-dot status-{item.status}" aria-hidden="true"></span>
-            <span class="ov-kind">{kind.kind}</span>
-            <span class="ov-name status-{item.status}">{item.name}</span>
-            <span class="spacer"></span>
-            {#if item.add}<span class="add">+{item.add}</span>{/if}
-            {#if item.del}<span class="del">-{item.del}</span>{/if}
-          </button>
-        {/each}
-      {/each}
-    {/each}
-  </section>
 </div>
