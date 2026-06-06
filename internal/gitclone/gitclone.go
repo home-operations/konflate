@@ -75,7 +75,7 @@ func Clone(ctx context.Context, cloneURL, token, headRef, baseRef string) (_ *Re
 		Auth:     auth,
 		RefSpecs: []gitconfig.RefSpec{headSpec},
 		Tags:     git.NoTags,
-	}); err != nil && err != git.NoErrAlreadyUpToDate {
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, git.NoMatchingRefSpecError{}) {
 			// The branch was deleted (merged/closed PR) — the remote no longer
 			// advertises the ref. Report it as gone so the caller reconciles the

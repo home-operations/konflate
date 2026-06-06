@@ -230,11 +230,17 @@ func sideRows(ah, bh []string, groups [][]difflib.OpCode) []api.SideRow {
 				}
 			case 'd':
 				for k := range op.I2 - op.I1 {
-					rows = append(rows, api.SideRow{Left: api.SideCell{Kind: kindDel, No: op.I1 + k + 1, HTML: ah[op.I1+k]}, Right: api.SideCell{Kind: kindBlank}})
+					rows = append(rows, api.SideRow{
+						Left:  api.SideCell{Kind: kindDel, No: op.I1 + k + 1, HTML: ah[op.I1+k]},
+						Right: api.SideCell{Kind: kindBlank},
+					})
 				}
 			case 'i':
 				for k := range op.J2 - op.J1 {
-					rows = append(rows, api.SideRow{Left: api.SideCell{Kind: kindBlank}, Right: api.SideCell{Kind: kindAdd, No: op.J1 + k + 1, HTML: bh[op.J1+k]}})
+					rows = append(rows, api.SideRow{
+						Left:  api.SideCell{Kind: kindBlank},
+						Right: api.SideCell{Kind: kindAdd, No: op.J1 + k + 1, HTML: bh[op.J1+k]},
+					})
 				}
 			case 'r':
 				dn, an := op.I2-op.I1, op.J2-op.J1

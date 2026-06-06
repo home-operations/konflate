@@ -267,7 +267,10 @@ func (s *store) list() []api.PRStatus {
 			c := j.closedAt
 			closedAt = &c
 		}
-		out = append(out, api.PRStatus{PR: j.pr, Status: j.status, Error: j.errMsg, RefreshError: j.refreshErr, UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals})
+		out = append(out, api.PRStatus{
+			PR: j.pr, Status: j.status, Error: j.errMsg, RefreshError: j.refreshErr,
+			UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals,
+		})
 	}
 	slices.SortFunc(out, func(a, b api.PRStatus) int { return cmp.Compare(b.Number, a.Number) }) // newest first
 	return out
