@@ -3,18 +3,40 @@
 import { router } from './router.svelte';
 import { adjacentPR, adjacentResource, goList, openSel } from './store.svelte';
 
-// The shortcuts help overlay — toggled by '?' (and the topbar button), closed
-// by Escape or a backdrop click.
+// Two overlays: the shortcuts help (toggled by '?' or the topbar button) and the
+// command palette (Cmd/Ctrl+K). They are mutually exclusive, and opening either
+// remembers the focused element so closing restores it (WCAG 2.4.3 focus order).
 export const help = $state({ open: false });
-export function toggleHelp(): void {
-  help.open = !help.open;
+export const palette = $state({ open: false });
+
+let restoreFocus: HTMLElement | null = null;
+
+// open shows one overlay, closing the other first and recording the element to
+// restore focus to on close.
+function open(show: () => void): void {
+  const active = document.activeElement;
+  restoreFocus = active instanceof HTMLElement ? active : null;
+  help.open = false;
+  palette.open = false;
+  show();
 }
 
-// The command palette — Cmd/Ctrl+K from anywhere (even inside an input).
-// It owns its other keys (arrows, Enter, Escape) locally.
-export const palette = $state({ open: false });
+// closeOverlays shuts both overlays and returns focus to whatever opened them.
+function closeOverlays(): void {
+  help.open = false;
+  palette.open = false;
+  restoreFocus?.focus();
+  restoreFocus = null;
+}
+
+export function toggleHelp(): void {
+  if (help.open) closeOverlays();
+  else open(() => (help.open = true));
+}
+
 export function togglePalette(): void {
-  palette.open = !palette.open;
+  if (palette.open) closeOverlays();
+  else open(() => (palette.open = true));
 }
 
 function isTyping(e: KeyboardEvent): boolean {
@@ -42,7 +64,7 @@ export function initKeyboard(): void {
       return;
     }
     if (help.open && e.key === 'Escape') {
-      help.open = false;
+      closeOverlays();
       e.preventDefault();
       return;
     }

@@ -673,6 +673,51 @@ test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter'
   await expect(page.getByPlaceholder('Filter pull requests…')).toBeFocused();
 });
 
+test('deep link to a missing resource lands on the Summary', async ({ page }) => {
+  await stubApi(page);
+  // The diff has r0/r1/r2; rZZZ is gone → the URL is corrected to the PR root
+  // and the Summary is shown rather than an empty, broken selection.
+  await page.goto('/#/pr/142/rZZZ');
+  await expect(page).toHaveURL(/#\/pr\/142$/);
+  await expect(page.locator('[data-sel="summary"] .impact')).toBeVisible();
+});
+
+test('palette returns focus to its trigger on close', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  const search = page.getByRole('button', { name: 'Search pull requests' });
+  await search.click();
+  const dialog = page.getByRole('dialog', { name: 'Search pull requests' });
+  await expect(dialog.getByRole('textbox')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(search).toBeFocused(); // focus returns, not dropped to <body>
+});
+
+test('help dialog: focus return, Tab trap, and Ctrl+K swaps to the palette', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  const helpBtn = page.getByRole('button', { name: 'Keyboard shortcuts' });
+  const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+
+  // Open from the button → Esc → focus returns to the button.
+  await helpBtn.click();
+  await expect(help).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await expect(helpBtn).toBeFocused();
+
+  // Tab is trapped — focus stays on the dialog, not the page behind the backdrop.
+  await helpBtn.click();
+  await page.keyboard.press('Tab');
+  await expect(help).toBeFocused();
+
+  // Ctrl+K from the open help closes it and opens the palette (mutually exclusive).
+  await page.keyboard.press('Control+k');
+  await expect(help).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Search pull requests' })).toBeVisible();
+});
+
 test('list footer: project links, version, license, year — and no topbar GitHub button', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
