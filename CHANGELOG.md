@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/home-operations/konflate/compare/0.1.9...0.1.10) (2026-06-06)
+
+
+### Features
+
+* improve ui/ux ([#33](https://github.com/home-operations/konflate/issues/33)) ([9ebf3b2](https://github.com/home-operations/konflate/commit/9ebf3b2ab3b1acfed77c219e0c1cbd5f2af9c83c))
+
 ## [0.1.9](https://github.com/home-operations/konflate/compare/0.1.8...0.1.9) (2026-06-06)
 
 
