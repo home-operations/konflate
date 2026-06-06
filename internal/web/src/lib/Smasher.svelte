@@ -46,6 +46,13 @@
 
   <!-- the technician -->
   <circle cx="92" cy="26" r="6" />
+  <!-- tinfoil hat (standard issue for cluster operators): one tall cone,
+       foil creases inside -->
+  <g stroke-width="2">
+    <path d="M87 21 L93 7.5 L97.5 20.5" />
+    <line x1="90.5" y1="19" x2="92.6" y2="10.5" opacity="0.55" stroke-width="1.5" />
+    <line x1="94.6" y1="18.5" x2="93.2" y2="10" opacity="0.55" stroke-width="1.5" />
+  </g>
   <line x1="92" y1="32" x2="88" y2="56" />
   <line x1="88" y1="56" x2="80" y2="78" />
   <line x1="88" y1="56" x2="96" y2="78" />
