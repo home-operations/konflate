@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7](https://github.com/home-operations/konflate/compare/0.1.6...0.1.7) (2026-06-06)
+
+
+### Features
+
+* **ui:** mobile polish & Overview restyle; remove the viewed feature ([#23](https://github.com/home-operations/konflate/issues/23)) ([352c717](https://github.com/home-operations/konflate/commit/352c717362329830379c180b8bc91b821c5c4329))
+* **ui:** move the PR number into the meta row for a readable title ([#21](https://github.com/home-operations/konflate/issues/21)) ([104466c](https://github.com/home-operations/konflate/commit/104466ce1b7759bb48f7fbb62fb3ee3a6e094ac2))
+
 ## [0.1.6](https://github.com/home-operations/konflate/compare/0.1.5...0.1.6) (2026-06-05)
 
 
