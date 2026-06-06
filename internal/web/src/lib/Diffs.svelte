@@ -30,19 +30,25 @@
 
   $effect(() => {
     const target = sel;
+    const present = resources; // re-run when the rendered resource set changes
     if (!pane || target === spySel) return;
     // CSS.escape: `sel` comes from the URL hash, and an unescaped quote/bracket
     // would make querySelector throw inside the effect.
     const section = pane.querySelector(`[data-sel="${CSS.escape(target)}"]`);
-    if (!section) {
-      // Stale deep link — the resource is gone from the re-rendered diff. Land
-      // on the Summary and fix the URL so it doesn't claim a missing resource.
-      spySel = 'summary';
-      if (router.route.name === 'review') replace({ name: 'review', pr: router.route.pr, sel: null });
+    if (section) {
+      section.scrollIntoView({ block: 'start' });
+      spySel = target; // the scroll event re-derives it if the section can't reach the top
       return;
     }
-    section.scrollIntoView({ block: 'start' });
-    spySel = target; // the scroll event re-derives it if the section can't reach the top
+    // No section for the target. Only a genuinely-missing resource — the diff
+    // finished loading and doesn't contain it (a stale deep link) — bounces to
+    // the Summary; if the sections just haven't rendered yet (a future change
+    // that mounts during loading), wait for the next run rather than redirect.
+    const stale = target !== 'summary' && !store.loading && !present.some((r) => r.id === target);
+    if (stale && router.route.name === 'review') {
+      spySel = 'summary';
+      replace({ name: 'review', pr: router.route.pr, sel: null });
+    }
   });
 
   // Scrollspy: the current section is the last one whose top has crossed the

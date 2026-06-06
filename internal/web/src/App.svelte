@@ -56,6 +56,13 @@
   function focusOnMount(node: HTMLElement): void {
     node.focus();
   }
+
+  // The help dialog is informational (no focusable controls), so keep Tab from
+  // escaping to the page behind the backdrop — focus stays on the card. Escape
+  // (global handler) and the backdrop close it.
+  function trapTab(e: KeyboardEvent): void {
+    if (e.key === 'Tab') e.preventDefault();
+  }
 </script>
 
 <div class="app">
@@ -121,7 +128,7 @@
     <!-- The backdrop is a real button so closing is keyboard-reachable. -->
     <div class="help-overlay">
       <button class="help-backdrop" aria-label="Close keyboard shortcuts" onclick={toggleHelp}></button>
-      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount>
+      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount onkeydown={trapTab}>
         <h2>Keyboard shortcuts</h2>
         <dl class="help-keys">
           <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
