@@ -19,7 +19,12 @@
 </script>
 
 <div class="tree">
-  <button class="tree-summary" class:selected={sel === 'summary'} onclick={() => open('summary')}>
+  <button
+    class="tree-summary"
+    class:selected={sel === 'summary'}
+    aria-current={sel === 'summary' ? 'true' : undefined}
+    onclick={() => open('summary')}
+  >
     <Icon path={mdiFileDocumentOutline} size={14} />
     <span class="leaf-name">Summary</span>
     {#if dangerCount}
@@ -33,7 +38,12 @@
       {#each parent.kinds as kind}
         <div class="tree-kind">{kind.kind}</div>
         {#each kind.items as item}
-          <button class="tree-item status-{item.status}" class:selected={item.id === sel} onclick={() => open(item.id)}>
+          <button
+            class="tree-item status-{item.status}"
+            class:selected={item.id === sel}
+            aria-current={item.id === sel ? 'true' : undefined}
+            onclick={() => open(item.id)}
+          >
             <span class="leaf-name">{item.name}</span>
             {#if dangerLabels.has(`${kind.kind} ${item.name}`)}
               <Icon path={mdiAlertOctagon} size={13} label="has a danger warning" />

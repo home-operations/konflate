@@ -48,11 +48,15 @@
   <span class="res-status status-{resource.status}">{resource.status}</span>
   <span class="res-title">{resource.title}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  <span class="res-counts"><span class="add">+{resource.add}</span><span class="del">-{resource.del}</span></span>
+  <!-- Zero counts are hidden, matching the tree rail (a green +0 on a removed
+       resource reads as noise). -->
+  <span class="res-counts"
+    >{#if resource.add}<span class="add">+{resource.add}</span>{/if}{#if resource.del}<span class="del">-{resource.del}</span>{/if}</span
+  >
   {#if !narrow}
     <div class="view-toggle">
-      <button class:active={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
-      <button class:active={mode === 'split'} onclick={() => setMode('split')}>Split</button>
+      <button class:active={mode === 'unified'} aria-pressed={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
+      <button class:active={mode === 'split'} aria-pressed={mode === 'split'} onclick={() => setMode('split')}>Split</button>
     </div>
   {/if}
 </div>

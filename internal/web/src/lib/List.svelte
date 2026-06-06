@@ -6,6 +6,7 @@
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
   import Copy from './Copy.svelte';
+  import Footer from './Footer.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -20,6 +21,7 @@
     mdiFilterOutline,
     mdiChevronRight,
     mdiChevronDown,
+    mdiCheckCircleOutline,
     mdiTrayFull,
     mdiLoading,
     mdiConsoleLine,
@@ -65,9 +67,23 @@
     l.color && /^[0-9a-fA-F]{3,8}$/.test(l.color) ? `#${l.color}` : '';
 </script>
 
+{#snippet allClear()}
+  <!-- An empty review queue is the success state — inbox zero, not an error. -->
+  <div class="all-clear">
+    <Icon path={mdiCheckCircleOutline} size={36} />
+    <p>All caught up — no open pull requests.</p>
+  </div>
+{/snippet}
+
 {#snippet prCard(pr: PRStatus)}
   <li class="card-li">
-    <button class="card" class:merged={!pr.open} onclick={() => openPR(pr.number)}>
+    <!-- Open PRs with danger warnings get a red edge (see .card.danger). -->
+    <button
+      class="card"
+      class:merged={!pr.open}
+      class:danger={pr.open && (pr.signals?.danger ?? 0) > 0}
+      onclick={() => openPR(pr.number)}
+    >
       <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
         <span class="card-title">{pr.title}</span>
@@ -157,16 +173,18 @@
   {#if !store.loaded}
     <p class="empty"><Icon path={mdiLoading} spin /> Loading pull requests…</p>
   {:else if prs.length === 0}
-    <p class="empty">
-      {store.prs.length === 0 ? 'No open pull requests.' : 'No pull requests match your filter.'}
-    </p>
+    {#if store.prs.length === 0}
+      {@render allClear()}
+    {:else}
+      <p class="empty">No pull requests match your filter.</p>
+    {/if}
   {:else}
     {#if openPrs.length}
       <ul class="cards">
         {#each openPrs as pr (pr.number)}{@render prCard(pr)}{/each}
       </ul>
     {:else}
-      <p class="empty">No open pull requests.</p>
+      {@render allClear()}
     {/if}
 
     {#if mergedPrs.length}
@@ -181,4 +199,6 @@
       {/if}
     {/if}
   {/if}
+
+  <Footer />
 </div>

@@ -3,6 +3,14 @@
 import { router } from './router.svelte';
 import { adjacentPR, adjacentResource, goList, openSel } from './store.svelte';
 
+// The shortcuts help overlay — toggled by '?' (and the topbar button), closed
+// by Escape or a backdrop click. Lives here so the key handler and the App
+// share one source of truth.
+export const help = $state({ open: false });
+export function toggleHelp(): void {
+  help.open = !help.open;
+}
+
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -11,8 +19,30 @@ function isTyping(e: KeyboardEvent): boolean {
 export function initKeyboard(): void {
   window.addEventListener('keydown', (e) => {
     if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+
+    // The help overlay first: '?' toggles it on any screen; while it's open,
+    // Escape closes it (instead of leaving the review underneath).
+    if (e.key === '?') {
+      toggleHelp();
+      e.preventDefault();
+      return;
+    }
+    if (help.open && e.key === 'Escape') {
+      help.open = false;
+      e.preventDefault();
+      return;
+    }
+
     const r = router.route;
-    if (r.name !== 'review') return;
+
+    // On the list, '/' jumps to the filter box (the only input there).
+    if (r.name === 'list') {
+      if (e.key === '/') {
+        document.querySelector<HTMLInputElement>('.pr-search')?.focus();
+        e.preventDefault();
+      }
+      return;
+    }
 
     switch (e.key) {
       case 'Escape':

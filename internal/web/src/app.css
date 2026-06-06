@@ -80,6 +80,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* mobile: exclude the browser chrome (100vh overflows under it) */
 }
 .topbar {
   display: flex;
@@ -122,6 +123,26 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* When the repo is a link to its forge page: quiet until hovered, then the
+   accent + underline + external-link glyph make the affordance unmistakable. */
+a.repo {
+  text-decoration: none;
+}
+a.repo:hover {
+  color: var(--accent);
+}
+a.repo:hover > span:not(.repo-ext) {
+  text-decoration: underline;
+}
+.repo-ext {
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+a.repo:hover .repo-ext,
+a.repo:focus-visible .repo-ext {
+  opacity: 1;
+}
 .spacer {
   flex: 1 1 auto;
 }
@@ -149,12 +170,15 @@ body {
   opacity: 0.6;
   cursor: default;
 }
+/* One focus ring for every interactive element, matching .copy-btn's accent
+   treatment — this is a keyboard-driven UI, so tab focus must be visible
+   everywhere. Inset so it never clips inside scroll containers. */
+:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .pr-search):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .btn-icon {
   padding: 6px 9px;
-}
-.gh {
-  color: var(--text);
-  text-decoration: none;
 }
 .auto {
   display: inline-flex;
@@ -202,6 +226,21 @@ body {
 .error-box {
   padding: 16px;
   color: var(--muted);
+}
+/* An empty review queue is the success state — celebrate it quietly. */
+.all-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 56px 16px;
+  color: var(--muted);
+}
+.all-clear .icon {
+  color: var(--ok);
+}
+.all-clear p {
+  margin: 0;
 }
 .error-box {
   color: var(--danger);
@@ -285,6 +324,10 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Column so the footer's margin-top:auto pins it to the bottom even when a
+     short list doesn't fill the viewport (it still scrolls with the cards). */
+  display: flex;
+  flex-direction: column;
 }
 .pr-search-wrap {
   position: sticky;
@@ -339,6 +382,11 @@ body {
 }
 .card:hover {
   border-color: var(--accent);
+}
+/* Triage salience: a card carrying danger warnings shows a red edge so risk
+   reads before the badges do. Inset shadow, not a border, so layout is stable. */
+.card.danger {
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 /* Recently-merged cards are reference, not action — dim them until hovered. */
 .card.merged {
@@ -740,6 +788,22 @@ body {
   border-radius: 0 4px 4px 0;
   margin-bottom: 6px;
 }
+/* A warning whose resource rendered into the diff is a button that jumps to
+   it — reset the button chrome but keep the level edge, and hint on hover. */
+.warning-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-left: 3px solid var(--border);
+  cursor: pointer;
+}
+.warning-link:hover {
+  background: var(--panel-alt);
+}
 .warning:last-child {
   margin-bottom: 0;
 }
@@ -773,6 +837,7 @@ body {
   font-size: 12px;
 }
 .warning-detail {
+  display: block; /* a span so it's valid inside the button variant */
   color: var(--muted);
   font-size: 12px;
   margin-top: 3px;
@@ -927,6 +992,7 @@ body {
 }
 .tree-summary.selected {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent); /* selected ≠ hover, even in dark */
 }
 .summary-danger {
   display: inline-flex;
@@ -967,6 +1033,7 @@ body {
 }
 .tree-item.selected {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent); /* selected ≠ hover, even in dark */
 }
 .leaf-name {
   flex: 1 1 auto;
@@ -1147,6 +1214,95 @@ td.side-blank {
   );
 }
 
+/* ---- footer (list screen) --------------------------------------------- */
+.footer {
+  margin-top: auto; /* pin to the bottom when the list is short */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 20px 16px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+.foot-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.foot-sep {
+  user-select: none;
+}
+
+/* ---- keyboard-shortcuts help ------------------------------------------ */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.help-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  cursor: default;
+}
+.help-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 15%, transparent);
+  min-width: 280px;
+}
+.help-card h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.help-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.help-keys dt {
+  text-align: right;
+  white-space: nowrap;
+}
+.help-keys dd {
+  margin: 0;
+  color: var(--muted);
+}
+kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--panel-alt);
+}
+
 /* ---- mobile ---------------------------------------------------------- */
 @media (max-width: 900px) {
   .diffs {
@@ -1170,10 +1326,25 @@ td.side-blank {
    card's right edge. */
 @media (max-width: 640px) {
   /* Reclaim the topbar for the repo name (otherwise truncated to "ac…"): drop
-     the wordmark to the logo, and the auto-refresh pill to its clock icon. */
+     the wordmark to the logo, the auto-refresh pill to its clock icon, and the
+     shortcuts-help button entirely (keyboard shortcuts mean nothing on touch). */
   .wordmark,
-  .auto-text {
+  .auto-text,
+  .kbd-btn {
     display: none;
+  }
+  /* One row of header chrome, not three: back and prev/next share the top row
+     and the title block drops below them, full-width. */
+  .review-head {
+    justify-content: space-between;
+  }
+  .review-title {
+    order: 1;
+    flex-basis: 100%;
+  }
+  /* 16px so iOS doesn't force-zoom the page when the filter gains focus. */
+  .pr-search {
+    font-size: 16px;
   }
   /* Thumb-friendly hit areas for the icon buttons (back, prev/next, theme, the
      resource nav, etc.) — and the same 40px box for the auto-refresh pill so it
