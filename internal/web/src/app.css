@@ -1171,6 +1171,23 @@ td.side-blank {
   }
   .card-top {
     padding-right: 26px;
+    align-items: flex-start; /* dot beside the first title line, not the block centre */
+  }
+  .card-top .dot {
+    margin-top: 5px;
+  }
+  /* The title is what you scan for — on a phone let a long one wrap to two lines
+     (clamped) instead of truncating to one. min-width:0 lets the flex child
+     shrink so the clamp engages. */
+  .card-title,
+  .rt-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    min-width: 0;
   }
   /* The review header's meta row (sha · author · opened · refreshed · open) is
      too wide for a phone — let it wrap instead of overflowing. */
