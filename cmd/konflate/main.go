@@ -65,6 +65,7 @@ func run() error {
 	}
 
 	srv := server.New(cfg, prov, engine.New(cfg), web.FS(), logger)
+	srv.Version = version // surfaced at /api/meta for the UI footer
 
 	// Honour the usual termination signals plus SIGHUP/SIGQUIT (matching the
 	// org's services) for a graceful shutdown.

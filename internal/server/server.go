@@ -40,6 +40,10 @@ type Server struct {
 	ui     fs.FS
 	log    *slog.Logger
 
+	// Version is the build version (main stamps it from ldflags after New);
+	// served at /api/meta for the UI footer. "dev" or empty for local builds.
+	Version string
+
 	store   *store
 	hub     *hub
 	metrics *metrics
