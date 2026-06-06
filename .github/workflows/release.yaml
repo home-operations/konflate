@@ -72,7 +72,7 @@ jobs:
   helm:
     name: Helm
     if: ${{ github.event_name == 'release' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
