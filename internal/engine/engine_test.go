@@ -193,6 +193,28 @@ func TestPairChanges_SuppressesRenderNoise(t *testing.T) {
 	}
 }
 
+func TestPairChanges_StripsVolatileChurn(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: "vol"}
+	// A volsync ReplicationSource whose only between-render differences are
+	// volatile noise: rotating checksum/* annotations (incl. the plural
+	// checksum/secrets the old exact-match list missed) and the render-clock
+	// spec.restic.unlock timestamp. Both must be stripped, so no change surfaces.
+	src := func(checksum, unlock string) map[manifest.NamedResource][]map[string]any {
+		m := res("ReplicationSource", "apps", "data", map[string]any{
+			"spec": map[string]any{"restic": map[string]any{"repository": "backups", "unlock": unlock}},
+		})
+		m["metadata"].(map[string]any)["annotations"] = map[string]any{
+			"checksum/config":  checksum,
+			"checksum/secrets": checksum,
+		}
+		return map[manifest.NamedResource][]map[string]any{parent: {m}}
+	}
+	if got := pairChanges(src("aaaa", "20240101000000"), src("bbbb", "20240102000000")); len(got) != 0 {
+		t.Errorf("rotating checksum/* + spec.restic.unlock should be stripped, got %d change(s): %+v", len(got), got)
+	}
+}
+
 func deploy(ns, name, image string) map[string]any {
 	return res("Deployment", ns, name, map[string]any{
 		"spec": map[string]any{"template": map[string]any{"spec": map[string]any{

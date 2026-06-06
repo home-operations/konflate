@@ -11,7 +11,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/go-github/v88 v88.0.0
-	github.com/home-operations/flate v0.0.0-20260606122622-fdf06b48e591
+	github.com/home-operations/flate v0.3.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.23.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.36.0
