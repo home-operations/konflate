@@ -83,6 +83,23 @@ func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result,
 		return nil, err
 	}
 
+	// Prepare the ephemeral work dir before taking the read lock — directory
+	// creation doesn't touch the mirror, so holding the lock for it would only
+	// widen the window a fetcher waits on the write lock.
+	if err := os.MkdirAll(m.workRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("gitclone: clone dir: %w", err)
+	}
+	root, err := os.MkdirTemp(m.workRoot, "diff-")
+	if err != nil {
+		return nil, fmt.Errorf("gitclone: work dir: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(root) }
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+
 	// Object reads (merge-base walk + tree extraction) run under the read lock
 	// so no concurrent fetch mutates the store mid-read. The commit objects were
 	// resolved during fetch and stay valid here.
@@ -97,20 +114,6 @@ func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result,
 	if len(bases) > 0 {
 		mergeBase = bases[0]
 	}
-
-	if err := os.MkdirAll(m.workRoot, 0o755); err != nil {
-		return nil, fmt.Errorf("gitclone: clone dir: %w", err)
-	}
-	root, err := os.MkdirTemp(m.workRoot, "diff-")
-	if err != nil {
-		return nil, fmt.Errorf("gitclone: work dir: %w", err)
-	}
-	cleanup := func() { _ = os.RemoveAll(root) }
-	defer func() {
-		if err != nil {
-			cleanup()
-		}
-	}()
 
 	res := &Result{
 		BaseDir: filepath.Join(root, "base"),
@@ -168,6 +171,13 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 // of the base branch on first use. A bare, single-branch clone avoids pulling
 // the repo's other (often many) branches; subsequent head/base refs are added
 // by explicit fetches. Caller holds the write lock.
+//
+// Deliberately opens a fresh *git.Repository per call rather than caching one on
+// the Mirror: go-git's storer mutates unsynchronized object-cache maps lazily on
+// read, so a shared handle read by several renders under the (shared) read lock
+// would data-race. A private handle per render keeps those reads goroutine-safe;
+// don't "optimize" this into a cached handle without moving all object reads
+// under the write lock.
 func (m *Mirror) openOrClone(ctx context.Context, baseRef string) (*git.Repository, error) {
 	repo, err := git.PlainOpen(m.bareDir)
 	if err == nil {
@@ -223,12 +233,19 @@ func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {
 	return nil, fmt.Errorf("could not resolve %q", ref)
 }
 
-// extractTree writes every file in the commit's tree to dir. Entries whose
-// path escapes dir are skipped: a maliciously crafted repository (konflate may
-// be pointed at a public repo it does not own) could carry a tree entry like
-// "../../etc/x", and writing it via filepath.Join would land outside dir
-// (a zip-slip). go-git's File.Contents yields blob bytes, not symlinks, so
-// regular files are the only thing written.
+// maxFileBytes caps the size of a single file extracted from a tree. Flux
+// manifests are small YAML; a giant blob (a committed binary, or a hostile repo
+// konflate doesn't own) would only bloat memory and the cache volume — and
+// isn't review-relevant — so oversized files are skipped. A var, not a const,
+// so tests can lower it.
+var maxFileBytes int64 = 10 << 20 // 10 MiB
+
+// extractTree writes every file in the commit's tree to dir. Two classes are
+// skipped: entries whose path escapes dir (a maliciously crafted repository —
+// konflate may be pointed at a public repo it does not own — could carry a tree
+// entry like "../../etc/x", and writing it via filepath.Join would land outside
+// dir, a zip-slip), and files larger than maxFileBytes. go-git's File.Contents
+// yields blob bytes, not symlinks, so regular files are the only thing written.
 func extractTree(c *object.Commit, dir string) error {
 	tree, err := c.Tree()
 	if err != nil {
@@ -238,6 +255,9 @@ func extractTree(c *object.Commit, dir string) error {
 		dst := filepath.Join(dir, filepath.FromSlash(f.Name))
 		if !withinRoot(dir, dst) {
 			return nil // path-traversal entry; never write outside the root
+		}
+		if f.Size > maxFileBytes {
+			return nil // oversized blob; not review-relevant, skip to bound memory/disk
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err

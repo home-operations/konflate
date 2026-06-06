@@ -89,6 +89,33 @@ func TestLoad_DiffConcurrency(t *testing.T) {
 	}
 }
 
+func TestLoad_FlateTuningDefaults(t *testing.T) {
+	// Unset, the flate render knobs default to flate's own CLI values so the
+	// caching applies out of the box.
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, c := range []struct {
+		name      string
+		got, want int
+	}{
+		{"HelmTemplateCacheMB", cfg.HelmTemplateCacheMB, 256},
+		{"HelmRenderCacheMB", cfg.HelmRenderCacheMB, 1024},
+		{"StageCacheMB", cfg.StageCacheMB, 2048},
+		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
+		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
+	} {
+		if c.got != c.want {
+			t.Errorf("%s default = %d, want %d", c.name, c.got, c.want)
+		}
+	}
+	if cfg.DiffTimeout != 10*time.Minute {
+		t.Errorf("DiffTimeout default = %v, want 10m", cfg.DiffTimeout)
+	}
+}
+
 func TestLoad_RequiresRepo(t *testing.T) {
 	t.Setenv("KONFLATE_REPO", "")
 	t.Setenv("KONFLATE_TOKEN", "tok")

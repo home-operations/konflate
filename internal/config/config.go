@@ -117,6 +117,14 @@ type Config struct {
 	// alongside MaxDiffConcurrency parallel renders.
 	RenderConcurrency int `env:"KONFLATE_RENDER_CONCURRENCY"`
 
+	// DiffTimeout bounds a single PR render end-to-end (git fetch + both flate
+	// renders). Without it a pathological or hostile PR — konflate may watch a
+	// repo it doesn't own — could occupy one of the few render slots forever;
+	// the deadline frees the slot and surfaces the failure. <=0 disables it.
+	// Generous by default so a legit cold render isn't cut short; lower it on
+	// public/untrusted instances.
+	DiffTimeout time.Duration `env:"KONFLATE_DIFF_TIMEOUT" envDefault:"10m"`
+
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and, per open PR, re-renders it if
 	// its last render is older than this. It's the safety net that keeps PRs

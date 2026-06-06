@@ -84,6 +84,10 @@ spec:
             - name: KONFLATE_RENDER_CONCURRENCY
               value: {{ .Values.config.renderConcurrency | quote }}
             {{- end }}
+            {{- if ne (toString .Values.config.diffTimeout) "" }}
+            - name: KONFLATE_DIFF_TIMEOUT
+              value: {{ .Values.config.diffTimeout | quote }}
+            {{- end }}
             - name: KONFLATE_CLOSED_PR_MAX
               value: {{ .Values.config.closedPrMax | quote }}
             - name: KONFLATE_CLOSED_PR_TTL

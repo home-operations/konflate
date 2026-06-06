@@ -60,6 +60,7 @@ type flateEngine struct {
 	helmRenderCacheBytes   int64
 	concurrency            int
 	sourceRetry            source.RetryConfig
+	diffTimeout            time.Duration
 }
 
 // New builds the production Engine from config.
@@ -84,11 +85,21 @@ func New(cfg *config.Config) Engine {
 			MaxWait:  3 * time.Second,
 			Jitter:   0.1,
 		},
+		diffTimeout: cfg.DiffTimeout,
 	}
 }
 
-// Diff clones the PR, renders both sides with flate, and builds the diff.
+// Diff clones the PR, renders both sides with flate, and builds the diff. The
+// whole operation is bounded by diffTimeout (when set) so one PR can't hold a
+// render slot indefinitely — the deadline flows into the git fetch and both
+// flate renders via ctx.
 func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, error) {
+	if e.diffTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.diffTimeout)
+		defer cancel()
+	}
+
 	clone, err := e.mirror.Trees(ctx, pr.HeadRef, pr.BaseRef)
 	if err != nil {
 		return api.DiffResult{}, fmt.Errorf("engine: clone PR #%d: %w", pr.Number, err)

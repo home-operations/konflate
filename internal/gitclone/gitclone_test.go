@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -221,5 +222,49 @@ func TestMirror_Concurrent(t *testing.T) {
 		if err != nil {
 			t.Errorf("concurrent render %d: %v", i, err)
 		}
+	}
+}
+
+// TestMirror_SkipsOversizedFiles verifies extractTree drops blobs over
+// maxFileBytes (a hostile or accidental giant file) while still extracting the
+// normal ones.
+func TestMirror_SkipsOversizedFiles(t *testing.T) {
+	orig := maxFileBytes
+	maxFileBytes = 16
+	t.Cleanup(func() { maxFileBytes = orig })
+
+	src := t.TempDir()
+	repo, err := git.PlainInit(src, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, src, "small.yaml", "a: 1\n")               // under the cap
+	write(t, src, "big.yaml", strings.Repeat("x", 100)) // over the cap
+	commit(t, wt, "C0")
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Storer.SetReference(
+		plumbing.NewHashReference(plumbing.NewBranchReferenceName("feature"), head.Hash()),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	if err != nil {
+		t.Fatalf("Trees: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+
+	if _, ok := read(res.HeadDir, "small.yaml"); !ok {
+		t.Error("small.yaml is under the cap and should be extracted")
+	}
+	if _, ok := read(res.HeadDir, "big.yaml"); ok {
+		t.Error("big.yaml exceeds maxFileBytes and should be skipped")
 	}
 }
