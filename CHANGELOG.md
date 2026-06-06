@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/home-operations/konflate/compare/0.1.8...0.1.9) (2026-06-06)
+
+
+### Performance Improvements
+
+* **backend:** reuse a git mirror and enable flate's render caches ([#31](https://github.com/home-operations/konflate/issues/31)) ([07c9af0](https://github.com/home-operations/konflate/commit/07c9af05975805bd8794a84eb809522aa52f05ba))
+
 ## [0.1.8](https://github.com/home-operations/konflate/compare/0.1.7...0.1.8) (2026-06-06)
 
 
