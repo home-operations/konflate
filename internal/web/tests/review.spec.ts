@@ -45,12 +45,16 @@ for (const vp of viewports) {
     test('diffs-unified', async ({ page }) => {
       await stub(page);
       await page.goto('/#/pr/142/diffs/r0');
-      await page.getByRole('button', { name: 'Unified' }).click();
+      // The toggle only exists where split is offered; phones are unified-only,
+      // so click it when present, otherwise we're already unified.
+      const unified = page.getByRole('button', { name: 'Unified' });
+      if (await unified.count()) await unified.click();
       await page.locator('table.diff.unified').waitFor();
       await page.screenshot({ path: `screenshots/${vp.tag}-diffs-unified.png`, fullPage: true });
     });
 
     test('diffs-split', async ({ page }) => {
+      test.skip(vp.tag === 'mobile', 'split view is unavailable at phone width (unified only)');
       await stub(page);
       await page.goto('/#/pr/142/diffs/r0');
       await page.getByRole('button', { name: 'Split' }).click();

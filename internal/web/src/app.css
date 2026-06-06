@@ -979,6 +979,22 @@ body {
   background: var(--panel);
   z-index: 1;
 }
+/* Prev/next resource nav in the diff header. Hidden by default — the tree rail
+   is the navigator on wide screens — and revealed where the rail is hidden (see
+   the media queries). The j/k actions are surfaced as buttons for touch. */
+.res-nav {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.res-pos {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5em;
+  text-align: center;
+}
 .res-title {
   font-family: ui-monospace, monospace;
   font-weight: 600;
@@ -1141,6 +1157,10 @@ td.side-blank {
   .rail {
     display: none;
   }
+  /* With the tree rail gone, the diff header carries the resource navigation. */
+  .res-nav {
+    display: inline-flex;
+  }
   .review-head {
     flex-wrap: wrap;
   }
@@ -1151,6 +1171,19 @@ td.side-blank {
    title to one character per line, and the PR-card signal badges clip off the
    card's right edge. */
 @media (max-width: 640px) {
+  /* Reclaim the topbar for the repo name (otherwise truncated to "ac…"): drop
+     the wordmark to the logo, and the auto-refresh pill to its clock icon. */
+  .wordmark,
+  .auto-text {
+    display: none;
+  }
+  /* Thumb-friendly hit areas for the icon buttons (back, prev/next, theme, the
+     resource nav, etc.). */
+  .btn-icon {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
   .res-header {
     flex-wrap: wrap;
     row-gap: 8px;

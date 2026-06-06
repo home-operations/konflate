@@ -1,13 +1,26 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { DiffResource, SideCell } from './types';
-  import { currentPR } from './store.svelte';
+  import { currentPR, store, adjacentResource } from './store.svelte';
   import { isViewed, toggleViewed } from './viewed.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiCheckCircle, mdiCircleOutline, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import {
+    mdiCheckCircle,
+    mdiCircleOutline,
+    mdiUnfoldMoreHorizontal,
+    mdiUnfoldLessHorizontal,
+    mdiChevronLeft,
+    mdiChevronRight,
+  } from './icons';
 
   let { resource }: { resource: DiffResource } = $props();
   const pr = $derived(currentPR());
+
+  // The Diffs tree rail is hidden on narrow screens, so surface prev/next
+  // resource navigation (the j/k actions) in the header there.
+  const resources = $derived(store.diff?.resources ?? []);
+  const resIndex = $derived(resources.findIndex((r) => r.id === resource.id));
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
   // ("g0") across different resources never collide, and each resource keeps its
@@ -32,19 +45,53 @@
     localStorage.setItem('konflate-diffmode', m);
   }
 
+  // Side-by-side split is unreadable at phone width — force unified there (and
+  // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
+  let narrow = $state(window.matchMedia('(max-width: 640px)').matches);
+  onMount(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = () => (narrow = mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  });
+  const renderMode = $derived(narrow ? 'unified' : mode);
+
   const viewed = $derived(pr ? isViewed(pr.number, pr.headSha, resource.id) : false);
   const cellClass = (c: SideCell) => (c.kind === 'blank' ? 'side-blank' : `row-${c.kind}`);
 </script>
 
 <div class="res-header">
+  <div class="res-nav">
+    <button
+      class="btn btn-icon"
+      onclick={() => adjacentResource(-1)}
+      disabled={resIndex <= 0}
+      title="Previous resource (k)"
+      aria-label="Previous resource"
+    >
+      <Icon path={mdiChevronLeft} size={16} />
+    </button>
+    <span class="res-pos">{resIndex + 1}/{resources.length}</span>
+    <button
+      class="btn btn-icon"
+      onclick={() => adjacentResource(1)}
+      disabled={resIndex >= resources.length - 1}
+      title="Next resource (j)"
+      aria-label="Next resource"
+    >
+      <Icon path={mdiChevronRight} size={16} />
+    </button>
+  </div>
   <span class="res-status status-{resource.status}">{resource.status}</span>
   <span class="res-title">{resource.title}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
   <span class="res-counts"><span class="add">+{resource.add}</span><span class="del">-{resource.del}</span></span>
-  <div class="view-toggle">
-    <button class:active={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
-    <button class:active={mode === 'split'} onclick={() => setMode('split')}>Split</button>
-  </div>
+  {#if !narrow}
+    <div class="view-toggle">
+      <button class:active={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
+      <button class:active={mode === 'split'} onclick={() => setMode('split')}>Split</button>
+    </div>
+  {/if}
   {#if pr}
     <button
       class="btn viewed-btn"
@@ -58,7 +105,7 @@
 </div>
 
 {#key resource.id}
-  {#if mode === 'unified'}
+  {#if renderMode === 'unified'}
     <table class="diff chroma unified">
       <tbody>
         {#each resource.unified as row}
