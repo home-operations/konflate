@@ -13,6 +13,7 @@
     mdiAlertOctagon,
     mdiOpenInNew,
     mdiSourceMerge,
+    mdiSourcePull,
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
@@ -39,16 +40,16 @@
       </button>
       <div class="review-title">
         <div class="rt-line">
-          <span class="pr-num">#{route.pr}</span>
           <span class="rt-name">{pr?.title ?? ''}</span>
         </div>
         <div class="rt-meta">
+          <span class="pr-id"><Icon path={mdiSourcePull} size={14} /> #{route.pr}</span>
           {#if pr}
+            <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             <span class="sha-wrap">
               <code class="sha">{pr.headSha.slice(0, 7)}</code>
               <Copy text={pr.headSha} label="Copy full commit SHA" />
             </span>
-            <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             {#if pr.createdAt}
               <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={13} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
             {/if}

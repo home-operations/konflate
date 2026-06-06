@@ -16,10 +16,10 @@
     mdiRefresh,
     mdiTagOutline,
     mdiSourceBranch,
+    mdiSourcePull,
     mdiFilterOutline,
     mdiChevronRight,
     mdiChevronDown,
-    mdiSourceMerge,
     mdiTrayFull,
     mdiLoading,
     mdiConsoleLine,
@@ -70,18 +70,17 @@
     <button class="card" class:merged={!pr.open} onclick={() => openPR(pr.number)}>
       <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
-        <span class="pr-num">#{pr.number}</span>
         <span class="card-title">{pr.title}</span>
+      </div>
+      <div class="card-meta">
+        <span class="pr-id"><Icon path={mdiSourcePull} size={13} /> #{pr.number}</span>
+        <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if pr.draft}<span class="tag">draft</span>{/if}
         {#if pr.baseRef && defaultBase && pr.baseRef !== defaultBase}
           <span class="tag base-tag" title={`Targets ${pr.baseRef}, not the default branch`}>
             <Icon path={mdiSourceBranch} size={11} /> {pr.baseRef}
           </span>
         {/if}
-        {#if !pr.open}<span class="tag merged-tag"><Icon path={mdiSourceMerge} size={11} /> merged</span>{/if}
-      </div>
-      <div class="card-meta">
-        <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if !pr.open && pr.closedAt}
           <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
         {:else}

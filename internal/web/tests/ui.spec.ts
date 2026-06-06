@@ -30,6 +30,12 @@ test('list → review → diffs flow', async ({ page }) => {
   // Landing list: cards with per-PR signal badges.
   await expect(page.locator('.card')).toHaveCount(3);
   const card142 = page.locator('.card', { hasText: '#142' });
+  // The PR number lives in the meta row (behind a PR glyph), so the title owns
+  // its own line and carries no "#142".
+  await expect(card142.locator('.pr-id')).toContainText('#142');
+  await expect(card142.locator('.card-title')).toHaveText(
+    'feat(rook-ceph): bump the rook-ceph operator and cluster chart to v1.15.0',
+  );
   await expect(card142.locator('.badge.danger').first()).toBeVisible();
   await expect(card142.locator('.ago').first()).toHaveText(/ago|just now/); // humanized timestamps
   // Author avatar renders when present; a PR without one falls back to the icon.
@@ -114,7 +120,8 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
   await group.click();
   const mergedCard = page.locator('.merged-cards .card.merged', { hasText: '#128' });
   await expect(mergedCard).toBeVisible();
-  await expect(mergedCard.locator('.merged-tag')).toContainText('merged');
+  // No redundant "merged" tag — the group header, dimmed card, purple dot, and
+  // "merged …" timestamp already convey it.
   await expect(mergedCard.locator('.ago')).toContainText('merged');
 
   // Opening a merged PR shows the frozen-diff banner.
@@ -277,6 +284,19 @@ test('mobile: diff header title is not crushed to one char per line (regression)
   // it one character per line (~28 lines tall). Fixed, it's a readable 1–2 rows.
   expect(box?.height ?? 999).toBeLessThan(120);
   expect(box?.width ?? 0).toBeGreaterThan(150);
+});
+
+test('mobile: a long PR title wraps to two lines instead of truncating', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  await page.goto('/');
+  const title = page.locator('.card', { hasText: '#142' }).locator('.card-title');
+  await title.waitFor();
+  // Two-line clamp is engaged on mobile (single-line truncation uses nowrap).
+  await expect(title).toHaveCSS('white-space', 'normal');
+  const box = await title.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(20); // taller than one line ⇒ it wrapped
+  expect(box?.height ?? 999).toBeLessThan(60); // but clamped — never a tall stack
 });
 
 test('copy buttons copy the full underlying value', async ({ page }) => {
