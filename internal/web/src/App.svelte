@@ -53,7 +53,7 @@
   <header class="topbar">
     <a class="brand" href="#/">
       <img src="/favicon.svg" width="22" height="22" alt="" />
-      <span>konflate</span>
+      <span class="wordmark">konflate</span>
       <span class="conn" class:on={store.connected} title={store.connected ? 'live' : 'reconnecting…'}></span>
     </a>
 
@@ -69,7 +69,7 @@
     <div class="actions">
       {#if autoLabel}
         <span class="auto" title={`Pull requests auto-update every ${autoLabel} (plus on webhook)`}>
-          <Icon path={mdiClockOutline} size={15} /> auto · {autoLabel}
+          <Icon path={mdiClockOutline} size={15} /> <span class="auto-text">auto · {autoLabel}</span>
         </span>
       {/if}
       <a

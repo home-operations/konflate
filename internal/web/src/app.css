@@ -618,11 +618,6 @@ body {
   align-items: center;
   gap: 8px;
 }
-.progress {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
 .danger-strip {
   display: flex;
   align-items: center;
@@ -741,8 +736,26 @@ body {
   font-size: 12px;
   background: var(--panel);
 }
+/* Tint the add/changed/removed pills (the .add/.chg/.del classes carry the text
+   color) so the shape of the change reads at a glance; counts stay neutral. */
+.impact-pill.add {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+  background: color-mix(in srgb, var(--ok) 10%, var(--panel));
+}
+.impact-pill.chg {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.impact-pill.del {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
 .ov-section {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
 }
 .ov-section h3 {
   display: flex;
@@ -756,8 +769,19 @@ body {
   margin: 0 0 8px;
 }
 .warning {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  border-left: 3px solid var(--border);
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 6px;
+}
+.warning:last-child {
+  margin-bottom: 0;
+}
+.warning.danger {
+  border-left-color: var(--danger);
+}
+.warning.caution {
+  border-left-color: var(--caution);
 }
 .warning-badge {
   display: inline-flex;
@@ -871,6 +895,20 @@ body {
 .ov-res:hover {
   background: var(--panel-alt);
 }
+/* Status marker: changed (accent) by default, green added, red removed. */
+.ov-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--accent);
+}
+.ov-dot.status-added {
+  background: var(--ok);
+}
+.ov-dot.status-removed {
+  background: var(--danger);
+}
 .ov-kind {
   font-size: 11px;
   text-transform: uppercase;
@@ -979,6 +1017,22 @@ body {
   background: var(--panel);
   z-index: 1;
 }
+/* Prev/next resource nav in the diff header. Hidden by default — the tree rail
+   is the navigator on wide screens — and revealed where the rail is hidden (see
+   the media queries). The j/k actions are surfaced as buttons for touch. */
+.res-nav {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.res-pos {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5em;
+  text-align: center;
+}
 .res-title {
   font-family: ui-monospace, monospace;
   font-weight: 600;
@@ -1022,13 +1076,6 @@ body {
 .view-toggle button.active {
   background: var(--accent);
   color: #fff;
-}
-.viewed-btn {
-  flex: 0 0 auto;
-}
-.viewed-btn.on {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
 }
 
 table.diff {
@@ -1141,6 +1188,10 @@ td.side-blank {
   .rail {
     display: none;
   }
+  /* With the tree rail gone, the diff header carries the resource navigation. */
+  .res-nav {
+    display: inline-flex;
+  }
   .review-head {
     flex-wrap: wrap;
   }
@@ -1151,6 +1202,19 @@ td.side-blank {
    title to one character per line, and the PR-card signal badges clip off the
    card's right edge. */
 @media (max-width: 640px) {
+  /* Reclaim the topbar for the repo name (otherwise truncated to "ac…"): drop
+     the wordmark to the logo, and the auto-refresh pill to its clock icon. */
+  .wordmark,
+  .auto-text {
+    display: none;
+  }
+  /* Thumb-friendly hit areas for the icon buttons (back, prev/next, theme, the
+     resource nav, etc.). */
+  .btn-icon {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
   .res-header {
     flex-wrap: wrap;
     row-gap: 8px;

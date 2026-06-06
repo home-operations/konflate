@@ -54,6 +54,9 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.failure')).toContainText('plex');
   await expect(page.locator('.ov-res')).toHaveCount(3);
+  // Each changed resource carries a status dot (1 added, 1 removed, 1 changed).
+  await expect(page.locator('.ov-dot.status-added')).toHaveCount(1);
+  await expect(page.locator('.ov-dot.status-removed')).toHaveCount(1);
 
   // Into the Diffs tab → tree rail + wide diff.
   await page.getByRole('button', { name: /^Diffs/ }).click();
@@ -61,10 +64,6 @@ test('list → review → diffs flow', async ({ page }) => {
   await expect(page.locator('.tree .tree-item')).toHaveCount(3);
   await expect(page.locator('table.diff tr.row-add')).toBeVisible();
   await expect(page.locator('table.diff tr.row-del')).toBeVisible();
-
-  // Mark viewed updates the progress counter.
-  await page.locator('.viewed-btn').click();
-  await expect(page.locator('.progress')).toContainText('1/3 viewed');
 });
 
 test('landing health summary + non-default base branch tag', async ({ page }) => {
@@ -297,6 +296,48 @@ test('mobile: a long PR title wraps to two lines instead of truncating', async (
   const box = await title.boundingBox();
   expect(box?.height ?? 0).toBeGreaterThan(20); // taller than one line ⇒ it wrapped
   expect(box?.height ?? 999).toBeLessThan(60); // but clamped — never a tall stack
+});
+
+test('mobile: the diff header carries a resource switcher (the tree rail is hidden)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  await page.goto('/#/pr/142/diffs/r0');
+  const nav = page.locator('.res-nav');
+  await expect(nav).toBeVisible();
+  await expect(nav.locator('.res-pos')).toHaveText('1/3');
+  await expect(page.getByRole('button', { name: 'Previous resource' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Next resource' }).click();
+  await expect(page).toHaveURL(/#\/pr\/142\/diffs\/r1/);
+  await expect(nav.locator('.res-pos')).toHaveText('2/3');
+
+  await page.getByRole('button', { name: 'Next resource' }).click();
+  await expect(page).toHaveURL(/#\/pr\/142\/diffs\/r2/);
+  await expect(nav.locator('.res-pos')).toHaveText('3/3');
+  await expect(page.getByRole('button', { name: 'Next resource' })).toBeDisabled();
+});
+
+test('mobile: split view is unavailable; diffs render unified', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  await page.goto('/#/pr/142/diffs/r0');
+  await expect(page.locator('table.diff.unified')).toBeVisible();
+  await expect(page.locator('table.diff.split')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Split' })).toHaveCount(0);
+});
+
+test('mobile: topbar keeps the repo name and icon buttons are tappable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  await page.goto('/');
+  // The wordmark + auto-label collapse so the repo name isn't crowded out.
+  await expect(page.locator('.repo')).toContainText('acme/home-ops');
+  await expect(page.locator('.brand .wordmark')).toBeHidden();
+  await expect(page.locator('.auto .auto-text')).toBeHidden();
+  await expect(page.locator('.auto svg')).toBeVisible(); // the clock icon stays
+  // Icon buttons are ≥40px tall for thumbs.
+  const box = await page.locator('.actions .btn-icon').last().boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
 });
 
 test('copy buttons copy the full underlying value', async ({ page }) => {
