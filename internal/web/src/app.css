@@ -8,7 +8,7 @@
   --panel-alt: #f6f8fa;
   --border: #d0d7de;
   --text: #1f2328;
-  --muted: #656d76;
+  --muted: #59636e; /* ≥6:1 on panel/bg — much of the UI is 11–12px muted text */
   --accent: #0969da;
   --add-bg: #e6ffec;
   --add-gutter: #ccffd8;
@@ -27,7 +27,7 @@
   --panel-alt: #0d1117;
   --border: #30363d;
   --text: #e6edf3;
-  --muted: #8b949e;
+  --muted: #9198a1; /* ≥5.9:1 on panel/bg — much of the UI is 11–12px muted text */
   --accent: #2f81f7;
   --add-bg: #12261e;
   --add-gutter: #1b4721;
@@ -372,6 +372,10 @@ a.repo:focus-visible .repo-ext {
 .pr-search:focus {
   outline: none;
 }
+.pr-search::placeholder {
+  color: var(--muted);
+  opacity: 1; /* Firefox dims placeholders by default, undercutting AA */
+}
 /* Sort selector at the right edge of the toolbar — quiet text control. */
 .sort {
   display: flex;
@@ -428,12 +432,13 @@ a.repo:focus-visible .repo-ext {
 .card.danger {
   box-shadow: inset 3px 0 0 var(--danger);
 }
-/* Recently-merged cards are reference, not action — dim them until hovered. */
-.card.merged {
-  opacity: 0.68;
+/* Recently-merged cards are reference, not action — de-emphasized via a muted
+   title (whole-card opacity would push the meta text below AA contrast). */
+.card.merged .card-title {
+  color: var(--muted);
 }
-.card.merged:hover {
-  opacity: 1;
+.card.merged:hover .card-title {
+  color: var(--text);
 }
 /* Per-card "copy merge command" overlay. The card is itself a <button>, so the
    copy (also a button) can't nest inside it — it's an absolutely-positioned
@@ -558,13 +563,17 @@ button.sum-pill {
 button.sum-pill:hover {
   border-color: var(--accent);
 }
+/* Active text deepens toward --text — the tinted fill costs ~1 point of
+   contrast, pushing the bare status color below AA. */
 .sum-pill.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
 }
 .sum-pill.danger.active {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
 }
 .sum-pill.danger:hover {
   border-color: var(--danger);
@@ -572,6 +581,7 @@ button.sum-pill:hover {
 .sum-pill.merged.active {
   border-color: var(--merged);
   background: color-mix(in srgb, var(--merged) 12%, var(--panel));
+  color: color-mix(in srgb, var(--merged) 75%, var(--text));
 }
 .sum-pill.merged:hover {
   border-color: var(--merged);
@@ -699,7 +709,7 @@ button.sum-pill:hover {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.75; /* quiet, but ≥3:1 — 0.55 dropped the icon to ~2.2:1 */
   transition:
     opacity 0.1s,
     color 0.1s,
@@ -751,7 +761,8 @@ button.sum-pill:hover {
   gap: 8px;
   padding: 8px 14px;
   background: color-mix(in srgb, var(--merged) 12%, var(--panel));
-  color: var(--merged);
+  /* deepened toward --text: bare --merged is ~4.3:1 on the tinted strip */
+  color: color-mix(in srgb, var(--merged) 75%, var(--text));
   font-size: 13px;
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--merged) 30%, var(--border));
@@ -1191,7 +1202,7 @@ button.sum-pill:hover {
 }
 .view-toggle button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--panel); /* white fails 4.5:1 on the dark theme's lighter accent */
 }
 
 table.diff {
@@ -1240,6 +1251,12 @@ td.gutter.sign {
 }
 .row-add td.gutter {
   background: var(--add-gutter);
+}
+/* Line numbers shift toward --text on the tinted gutters — plain --muted
+   lands at ~3.7:1 against the dark green/red gutter fills. */
+.row-add td.gutter,
+.row-del td.gutter {
+  color: color-mix(in srgb, var(--muted) 40%, var(--text));
 }
 .row-del {
   background: var(--del-bg);
