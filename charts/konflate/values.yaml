@@ -33,6 +33,28 @@ config:
   # KONFLATE_MAX_DIFF_CONC — max concurrent diff renders. 0 = auto (derived from
   # the pod's CPU limit via GOMAXPROCS, capped at 4).
   maxDiffConcurrency: 0
+  # --- flate render tuning (advanced) ---------------------------------------
+  # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
+  # flate's own CLI and suit most setups — leave these empty to use them. The
+  # disk caches live under the persisted cache volume (see `persistence`), so
+  # sizing that volume matters as much as these caps. Quote values; use "0" to
+  # disable a cache.
+  #
+  # KONFLATE_HELM_TEMPLATE_CACHE_MB — in-memory Helm template cache (the biggest
+  # CPU saver). Default 256. "0" disables.
+  helmTemplateCacheMb: ""
+  # KONFLATE_HELM_RENDER_CACHE_MB — persistent on-disk Helm render cache, reused
+  # across renders, PRs, and restarts. Default 1024. "0" disables.
+  helmRenderCacheMb: ""
+  # KONFLATE_STAGE_CACHE_MB — persistent kustomize stage cache. Default 2048.
+  # "0" disables size-based eviction (unbounded growth).
+  stageCacheMb: ""
+  # KONFLATE_SOURCE_RETRY_ATTEMPTS — tries per source fetch on transient network
+  # errors. Default 3; "1" disables retry.
+  sourceRetryAttempts: ""
+  # KONFLATE_RENDER_CONCURRENCY — cap on reconcile goroutines within one render.
+  # Empty/"0" = auto (NumCPU*4).
+  renderConcurrency: ""
   # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
   # KONFLATE_CLOSED_PR_MAX — cap on retained merged PRs (most-recent win); this
   # count, not the age, is what bounds memory. 0 disables the cap.
@@ -143,9 +165,12 @@ httpRoute:
   # Gateway with both HTTP and HTTPS listeners; matches/filters are ignored.
   httpsRedirect: false
 
-# Persist the flate source cache (Helm charts / OCI layers / git objects) across
-# restarts. When disabled, an emptyDir is used and the cache is rebuilt on
-# restart. The per-diff clone dir is always ephemeral.
+# Persist konflate's on-disk caches across restarts: the flate source cache
+# (Helm charts / OCI layers / git objects), the persistent Helm-render and
+# kustomize-stage caches, and the bare git mirror of the repo. When disabled an
+# emptyDir is used and all of it is rebuilt on restart — a slower cold start and
+# a fresh full clone. The per-diff clone dir is always ephemeral. Recommended
+# for any non-trivial repo.
 persistence:
   enabled: false
   existingClaim: ""

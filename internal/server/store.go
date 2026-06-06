@@ -80,20 +80,25 @@ func (s *store) setStatus(pr api.PR, status api.JobStatus) {
 	j.updated = s.now()
 }
 
-// setResult stores a successful render and marks the PR ready.
-func (s *store) setResult(number int, result api.DiffResult) {
+// setResult stores a successful render and marks the PR ready, returning the
+// signals it computed (nil if the PR was concurrently closed and nothing was
+// stored) so the caller can log them without recomputing.
+func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if j := s.jobs[number]; j != nil && j.closedAt.IsZero() {
-		r := result
-		j.result = &r
-		j.signals = computeSignals(&r)
-		j.status = api.JobReady
-		j.errMsg = ""
-		j.refreshErr = ""
-		j.updated = s.now()
-		j.renderedAt = j.updated
+	j := s.jobs[number]
+	if j == nil || !j.closedAt.IsZero() {
+		return nil
 	}
+	r := result
+	j.result = &r
+	j.signals = computeSignals(&r)
+	j.status = api.JobReady
+	j.errMsg = ""
+	j.refreshErr = ""
+	j.updated = s.now()
+	j.renderedAt = j.updated
+	return j.signals
 }
 
 // computeSignals reduces a diff to its at-a-glance counts for the PR list.

@@ -2,6 +2,11 @@
 // diff needs: the PR head, and the merge-base of the head and the target
 // branch (GitHub-style — so changes that landed on the base branch after the
 // PR opened don't pollute the diff). Pure go-git; no `git` CLI shellout.
+//
+// konflate tracks a single repository, so rather than re-cloning it for every
+// render, a [Mirror] keeps one persistent bare repo on disk and fetches just
+// the base + head refs each render — an incremental fetch instead of a full
+// clone. The bare repo lives under the cache dir, so it also survives restarts.
 package gitclone
 
 import (
@@ -11,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
@@ -33,13 +39,71 @@ type Result struct {
 	Cleanup func()
 }
 
-// Clone clones cloneURL, computes the merge-base of headRef and baseRef, and
-// extracts both commit trees to temp directories. token may be empty for
-// public repositories (anonymous). headRef/baseRef are branch names.
-func Clone(ctx context.Context, cloneURL, token, headRef, baseRef string) (_ *Result, err error) {
-	root, err := os.MkdirTemp("", "konflate-clone-")
+// Mirror is a persistent bare clone of one repository. Trees fetches the
+// requested refs into it (incrementally) and extracts the two trees a diff
+// needs. It is safe for concurrent use: fetches are serialized and excluded
+// from the object reads done while extracting (go-git fetch appends to the
+// object store, so a read racing a write could otherwise see a torn ref).
+type Mirror struct {
+	bareDir  string // persistent bare repo (under the cache dir)
+	workRoot string // parent for the ephemeral per-diff working trees
+	url      string
+	auth     *githttp.BasicAuth
+
+	// fetch takes the write lock; merge-base + tree extraction take the read
+	// lock, so several renders extract concurrently but none does so while a
+	// fetch is mutating the shared object store.
+	mu sync.RWMutex
+}
+
+// NewMirror builds a Mirror for cloneURL. The bare repo lives under cacheDir
+// (persistent), per-diff working trees under cloneDir (ephemeral). token may be
+// empty for public repositories (anonymous).
+func NewMirror(cacheDir, cloneDir, cloneURL, token string) *Mirror {
+	var auth *githttp.BasicAuth
+	if token != "" {
+		// Any non-empty username works; the token is the password over HTTPS.
+		auth = &githttp.BasicAuth{Username: "x-access-token", Password: token}
+	}
+	return &Mirror{
+		bareDir:  filepath.Join(cacheDir, "git", "mirror.git"),
+		workRoot: cloneDir,
+		url:      cloneURL,
+		auth:     auth,
+	}
+}
+
+// Trees fetches headRef and baseRef into the mirror, computes the merge-base of
+// the two (GitHub-style), and extracts the head and merge-base trees to a fresh
+// working directory. headRef/baseRef are branch names. Callers must call
+// Result.Cleanup.
+func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result, err error) {
+	head, base, err := m.fetch(ctx, headRef, baseRef)
 	if err != nil {
-		return nil, fmt.Errorf("gitclone: temp dir: %w", err)
+		return nil, err
+	}
+
+	// Object reads (merge-base walk + tree extraction) run under the read lock
+	// so no concurrent fetch mutates the store mid-read. The commit objects were
+	// resolved during fetch and stay valid here.
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	mergeBase := base
+	bases, err := head.MergeBase(base)
+	if err != nil {
+		return nil, fmt.Errorf("gitclone: merge-base: %w", err)
+	}
+	if len(bases) > 0 {
+		mergeBase = bases[0]
+	}
+
+	if err := os.MkdirAll(m.workRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("gitclone: clone dir: %w", err)
+	}
+	root, err := os.MkdirTemp(m.workRoot, "diff-")
+	if err != nil {
+		return nil, fmt.Errorf("gitclone: work dir: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(root) }
 	defer func() {
@@ -48,73 +112,101 @@ func Clone(ctx context.Context, cloneURL, token, headRef, baseRef string) (_ *Re
 		}
 	}()
 
-	var auth *githttp.BasicAuth
-	if token != "" {
-		// Any non-empty username works; the token is the password over HTTPS.
-		auth = &githttp.BasicAuth{Username: "x-access-token", Password: token}
+	res := &Result{
+		BaseDir: filepath.Join(root, "base"),
+		HeadDir: filepath.Join(root, "head"),
+		Cleanup: cleanup,
+	}
+	if err = extractTree(mergeBase, res.BaseDir); err != nil {
+		return nil, fmt.Errorf("gitclone: extract merge-base: %w", err)
+	}
+	if err = extractTree(head, res.HeadDir); err != nil {
+		return nil, fmt.Errorf("gitclone: extract head: %w", err)
+	}
+	return res, nil
+}
+
+// fetch ensures the bare mirror exists (cloning it once), fetches the base and
+// head refs into it, and resolves both to commits — all under the write lock so
+// only one render mutates the store at a time. The returned commits carry their
+// own storer reference, so they stay readable after the lock is released.
+func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base *object.Commit, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	repo, err := m.openOrClone(ctx, baseRef)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// Bare, single-branch clone of the base branch, then fetch only the PR head
-	// branch. The two share history, so the merge-base is still computable, but
-	// we avoid pulling the repo's other (often many) branches — a large saving
-	// on branch-heavy repos. (Cross-fork PR heads aren't in this repo's refs and
-	// were never fetched here regardless.)
-	repo, err := git.PlainCloneContext(ctx, filepath.Join(root, "repo.git"), true, &git.CloneOptions{
-		URL:           cloneURL,
-		Auth:          auth,
+	// Refresh the base branch (a no-op right after the seeding clone). A missing
+	// base is a real error — the PR targets it.
+	if err := fetchRef(ctx, repo, m.auth, baseRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return nil, nil, fmt.Errorf("gitclone: fetch base %q: %w", baseRef, err)
+	}
+	// A missing head ref means the branch was deleted (merged/closed PR) — report
+	// it as gone so the caller reconciles the PR rather than failing the render.
+	if err := fetchRef(ctx, repo, m.auth, headRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if errors.Is(err, git.NoMatchingRefSpecError{}) {
+			return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, ErrHeadRefGone)
+		}
+		return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, err)
+	}
+
+	head, err = resolveCommit(repo, headRef)
+	if err != nil {
+		return nil, nil, fmt.Errorf("gitclone: head %q: %w", headRef, err)
+	}
+	base, err = resolveCommit(repo, baseRef)
+	if err != nil {
+		return nil, nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
+	}
+	return head, base, nil
+}
+
+// openOrClone opens the bare mirror, seeding it with a single-branch bare clone
+// of the base branch on first use. A bare, single-branch clone avoids pulling
+// the repo's other (often many) branches; subsequent head/base refs are added
+// by explicit fetches. Caller holds the write lock.
+func (m *Mirror) openOrClone(ctx context.Context, baseRef string) (*git.Repository, error) {
+	repo, err := git.PlainOpen(m.bareDir)
+	if err == nil {
+		return repo, nil
+	}
+	if !errors.Is(err, git.ErrRepositoryNotExists) {
+		return nil, fmt.Errorf("gitclone: open mirror: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(m.bareDir), 0o755); err != nil {
+		return nil, fmt.Errorf("gitclone: mirror dir: %w", err)
+	}
+	repo, err = git.PlainCloneContext(ctx, m.bareDir, true, &git.CloneOptions{
+		URL:           m.url,
+		Auth:          m.auth,
 		NoCheckout:    true,
 		Tags:          git.NoTags,
 		SingleBranch:  true,
 		ReferenceName: plumbing.NewBranchReferenceName(baseRef),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("gitclone: clone %s (base %q): %w", cloneURL, baseRef, err)
+		// A partial clone would wedge every later open; clear it so the next
+		// render re-seeds cleanly.
+		_ = os.RemoveAll(m.bareDir)
+		return nil, fmt.Errorf("gitclone: clone %s (base %q): %w", m.url, baseRef, err)
 	}
-	headSpec := gitconfig.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/heads/%s", headRef, headRef))
-	if err := repo.FetchContext(ctx, &git.FetchOptions{
+	return repo, nil
+}
+
+// fetchRef force-fetches a single branch into the mirror's refs/heads, pulling
+// only that branch (no tags). An explicit refspec lets the mirror accumulate
+// any base/head branch a PR needs, regardless of the branch it was seeded with.
+func fetchRef(ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth, ref string) error {
+	spec := gitconfig.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/heads/%s", ref, ref))
+	return repo.FetchContext(ctx, &git.FetchOptions{
 		Auth:     auth,
-		RefSpecs: []gitconfig.RefSpec{headSpec},
+		RefSpecs: []gitconfig.RefSpec{spec},
 		Tags:     git.NoTags,
-	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		if errors.Is(err, git.NoMatchingRefSpecError{}) {
-			// The branch was deleted (merged/closed PR) — the remote no longer
-			// advertises the ref. Report it as gone so the caller reconciles the
-			// PR rather than surfacing a render failure.
-			return nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, ErrHeadRefGone)
-		}
-		return nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, err)
-	}
-
-	headCommit, err := resolveCommit(repo, headRef)
-	if err != nil {
-		return nil, fmt.Errorf("gitclone: head %q: %w", headRef, err)
-	}
-	baseCommit, err := resolveCommit(repo, baseRef)
-	if err != nil {
-		return nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
-	}
-
-	mergeBase := baseCommit
-	bases, err := headCommit.MergeBase(baseCommit)
-	if err != nil {
-		return nil, fmt.Errorf("gitclone: merge-base: %w", err)
-	}
-	if len(bases) > 0 {
-		mergeBase = bases[0]
-	}
-
-	res := &Result{
-		BaseDir: filepath.Join(root, "base"),
-		HeadDir: filepath.Join(root, "head"),
-		Cleanup: cleanup,
-	}
-	if err := extractTree(mergeBase, res.BaseDir); err != nil {
-		return nil, fmt.Errorf("gitclone: extract merge-base: %w", err)
-	}
-	if err := extractTree(headCommit, res.HeadDir); err != nil {
-		return nil, fmt.Errorf("gitclone: extract head: %w", err)
-	}
-	return res, nil
+		Force:    true,
+	})
 }
 
 // resolveCommit resolves a branch name (or any revision) to its commit. It

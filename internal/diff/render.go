@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
@@ -39,15 +40,16 @@ const (
 // unified + side-by-side rows with YAML syntax highlighting, the navigation
 // tree, and the review signals (impact, images, failures, danger-lint).
 func Render(in RenderInput) (api.DiffResult, error) {
-	hl, css, err := newHighlighter()
+	b, err := sharedHighlighter()
 	if err != nil {
 		return api.DiffResult{}, err
 	}
+	hl := b.hl
 
 	out := api.DiffResult{
 		PRNumber:  in.PRNumber,
 		HeadSHA:   in.HeadSHA,
-		ChromaCSS: css,
+		ChromaCSS: b.css,
 		Impact:    Summarize(in.Changes),
 		Images:    in.Images,
 		Failures:  in.Failures,
@@ -344,7 +346,21 @@ type highlighter struct {
 	fmtr  *chromahtml.Formatter
 }
 
-func newHighlighter() (*highlighter, string, error) {
+// built is the shared, immutable highlighter plus its dual-theme stylesheet.
+type built struct {
+	hl  *highlighter
+	css string
+}
+
+// sharedHighlighter builds the YAML highlighter and its (static) dual-theme CSS
+// exactly once, then hands the same instance to every render. The lexer and
+// formatter are reused across concurrent renders — chroma's Tokenise/Format are
+// safe for concurrent use, and the lexer's lazy rule compilation is warmed here
+// under the Once so it never races — and the CSS string is shared rather than
+// regenerated and re-stored in every DiffResult.
+var sharedHighlighter = sync.OnceValues(buildHighlighter)
+
+func buildHighlighter() (*built, error) {
 	lexer := lexers.Get("yaml")
 	if lexer == nil {
 		lexer = lexers.Fallback
@@ -367,13 +383,15 @@ func newHighlighter() (*highlighter, string, error) {
 	// the highlight theme.
 	lightCSS, err := scopedCSS(fmtr, light, "light")
 	if err != nil {
-		return nil, "", fmt.Errorf("chroma css (light): %w", err)
+		return nil, fmt.Errorf("chroma css (light): %w", err)
 	}
 	darkCSS, err := scopedCSS(fmtr, dark, "dark")
 	if err != nil {
-		return nil, "", fmt.Errorf("chroma css (dark): %w", err)
+		return nil, fmt.Errorf("chroma css (dark): %w", err)
 	}
-	return &highlighter{lexer: lexer, style: light, fmtr: fmtr}, lightCSS + "\n" + darkCSS, nil
+	h := &highlighter{lexer: lexer, style: light, fmtr: fmtr}
+	_ = h.line("warm the lexer's lazy rule compilation once, single-threaded")
+	return &built{hl: h, css: lightCSS + "\n" + darkCSS}, nil
 }
 
 // scopedCSS renders style's class-based stylesheet and moves chroma's

@@ -85,6 +85,38 @@ type Config struct {
 	// default from the CPU budget (GOMAXPROCS, capped at 4); see Load.
 	MaxDiffConcurrency int `env:"KONFLATE_MAX_DIFF_CONC"`
 
+	// --- flate render tuning ---------------------------------------------
+	// These map onto flate's orchestrator config; the defaults mirror flate's
+	// own CLI so an embedder gets the same caching the `flate` binary does.
+
+	// HelmTemplateCacheMB caps flate's in-memory Helm template-output cache —
+	// repeat HelmReleases with identical inputs skip re-templating, the single
+	// largest CPU/allocation cost of a render. 0 disables it. In MiB.
+	HelmTemplateCacheMB int `env:"KONFLATE_HELM_TEMPLATE_CACHE_MB" envDefault:"256"`
+
+	// HelmRenderCacheMB caps flate's persistent on-disk Helm render cache (under
+	// CacheDir). It is reused across renders, PRs, and restarts: a re-render
+	// whose charts/values are unchanged short-circuits the Helm work entirely.
+	// 0 disables it. In MiB.
+	HelmRenderCacheMB int `env:"KONFLATE_HELM_RENDER_CACHE_MB" envDefault:"1024"`
+
+	// StageCacheMB caps flate's persistent kustomize stage cache (under
+	// CacheDir). 0 disables size-based eviction (the cache grows unbounded). In
+	// MiB.
+	StageCacheMB int `env:"KONFLATE_STAGE_CACHE_MB" envDefault:"2048"`
+
+	// SourceRetryAttempts is the total tries flate makes per source fetch
+	// (Git/OCI/Bucket) before giving up, retrying only transient network
+	// failures with bounded backoff. <=1 disables retry. Hardens renders
+	// against forge/registry blips.
+	SourceRetryAttempts int `env:"KONFLATE_SOURCE_RETRY_ATTEMPTS" envDefault:"3"`
+
+	// RenderConcurrency caps the reconcile goroutines flate runs within a
+	// single render. <=0 derives a default (runtime.NumCPU()*4) in the engine;
+	// bounding it stops a fan-out PR from oversubscribing CPU/memory, especially
+	// alongside MaxDiffConcurrency parallel renders.
+	RenderConcurrency int `env:"KONFLATE_RENDER_CONCURRENCY"`
+
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and, per open PR, re-renders it if
 	// its last render is older than this. It's the safety net that keeps PRs

@@ -3,8 +3,10 @@ package gitclone
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,37 +103,22 @@ func TestWithinRoot(t *testing.T) {
 	}
 }
 
-// TestClone_HeadRefGone verifies that a head ref the remote no longer advertises
-// (the PR's branch was deleted after a merge) surfaces as ErrHeadRefGone, so the
-// server can reconcile the PR instead of recording a render failure.
-func TestClone_HeadRefGone(t *testing.T) {
-	t.Parallel()
-	src := buildRepo(t)
-
-	// "master" (the base) exists; "feature" was deleted; fetching it must report
-	// the ref as gone rather than an opaque error.
-	_, err := Clone(context.Background(), src, "", "deleted-after-merge", "master")
-	if !errors.Is(err, ErrHeadRefGone) {
-		t.Fatalf("Clone with a missing head ref: got %v, want ErrHeadRefGone", err)
-	}
+// newTestMirror builds a Mirror with fresh temp dirs for its bare repo and
+// working trees, pointed at the local source repo src.
+func newTestMirror(t *testing.T, src string) *Mirror {
+	t.Helper()
+	return NewMirror(t.TempDir(), t.TempDir(), src, "")
 }
 
-func TestClone_MergeBaseTrees(t *testing.T) {
-	t.Parallel()
-	src := buildRepo(t)
+func read(dir, rel string) (string, bool) {
+	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	return string(b), err == nil
+}
 
-	// the default branch from PlainInit is "master"
-	res, err := Clone(context.Background(), src, "", "feature", "master")
-	if err != nil {
-		t.Fatalf("Clone: %v", err)
-	}
-	t.Cleanup(res.Cleanup)
-
-	read := func(dir, rel string) (string, bool) {
-		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		return string(b), err == nil
-	}
-
+// assertMergeBaseTrees checks that res holds the feature tip as head and the
+// merge-base (C0) — not main's tip — as base.
+func assertMergeBaseTrees(t *testing.T, res *Result) {
+	t.Helper()
 	// head tree = feature tip (C2): config changed to 5
 	if got, ok := read(res.HeadDir, "app/config.yaml"); !ok || got != "replicas: 5\n" {
 		t.Errorf("head config.yaml = %q (ok=%v), want %q", got, ok, "replicas: 5\n")
@@ -145,5 +132,94 @@ func TestClone_MergeBaseTrees(t *testing.T) {
 	// main's tip).
 	if _, ok := read(res.BaseDir, "app/other.yaml"); ok {
 		t.Error("base tree contains other.yaml — diff is against main's tip, not the merge-base")
+	}
+}
+
+// TestMirror_HeadRefGone verifies that a head ref the remote no longer advertises
+// (the PR's branch was deleted after a merge) surfaces as ErrHeadRefGone, so the
+// server can reconcile the PR instead of recording a render failure.
+func TestMirror_HeadRefGone(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+
+	// "master" (the base) exists; "feature" was deleted; fetching it must report
+	// the ref as gone rather than an opaque error.
+	_, err := newTestMirror(t, src).Trees(context.Background(), "deleted-after-merge", "master")
+	if !errors.Is(err, ErrHeadRefGone) {
+		t.Fatalf("Trees with a missing head ref: got %v, want ErrHeadRefGone", err)
+	}
+}
+
+func TestMirror_MergeBaseTrees(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+
+	// the default branch from PlainInit is "master"
+	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	if err != nil {
+		t.Fatalf("Trees: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+	assertMergeBaseTrees(t, res)
+}
+
+// TestMirror_Reuse confirms a second render against the same mirror reuses the
+// existing bare repo (incremental fetch) rather than re-cloning, and still
+// extracts correct trees. The bare repo must persist between calls.
+func TestMirror_Reuse(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+	m := newTestMirror(t, src)
+
+	first, err := m.Trees(context.Background(), "feature", "master")
+	if err != nil {
+		t.Fatalf("Trees (first): %v", err)
+	}
+	t.Cleanup(first.Cleanup)
+	if _, err := os.Stat(m.bareDir); err != nil {
+		t.Fatalf("mirror bare repo not present after first render: %v", err)
+	}
+
+	second, err := m.Trees(context.Background(), "feature", "master")
+	if err != nil {
+		t.Fatalf("Trees (reuse): %v", err)
+	}
+	t.Cleanup(second.Cleanup)
+	assertMergeBaseTrees(t, second)
+	// Distinct working dirs each render; the persistent bare repo is shared.
+	if first.HeadDir == second.HeadDir {
+		t.Error("expected a fresh working tree per render")
+	}
+}
+
+// TestMirror_Concurrent runs several renders against one mirror at once: the
+// fetch/extract locking must neither deadlock nor race (run with -race), and
+// every render must still get the correct trees.
+func TestMirror_Concurrent(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+	m := newTestMirror(t, src)
+
+	const n = 6
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := range n {
+		wg.Go(func() {
+			res, err := m.Trees(context.Background(), "feature", "master")
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			defer res.Cleanup()
+			if got, ok := read(res.HeadDir, "app/config.yaml"); !ok || got != "replicas: 5\n" {
+				errs[i] = fmt.Errorf("head config.yaml = %q (ok=%v)", got, ok)
+			}
+		})
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("concurrent render %d: %v", i, err)
+		}
 	}
 }
