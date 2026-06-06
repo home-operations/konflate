@@ -39,7 +39,7 @@
           <span class="rt-name">{pr?.title ?? ''}</span>
         </div>
         <div class="rt-meta">
-          <span class="pr-id"><Icon path={mdiSourcePull} size={14} /> #{route.pr}</span>
+          <span class="pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
             <span class="rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             <span class="sha-wrap">

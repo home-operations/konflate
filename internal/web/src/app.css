@@ -210,14 +210,12 @@ body {
   font-size: 12px;
 }
 /* The PR number, shown first in the meta row (list + review) behind a
-   pull-request glyph. Kept at full text weight so it reads as the card's
-   identifier amid the muted meta. */
+   pull-request glyph. Styled like its siblings (author, sha, opened, refreshed)
+   — muted and normal weight — so the whole meta row reads uniformly. */
 .pr-id {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-weight: 600;
-  color: var(--text);
   flex: 0 0 auto;
 }
 .tag {

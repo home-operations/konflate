@@ -73,7 +73,7 @@
         <span class="card-title">{pr.title}</span>
       </div>
       <div class="card-meta">
-        <span class="pr-id"><Icon path={mdiSourcePull} size={13} /> #{pr.number}</span>
+        <span class="pr-id"><Icon path={mdiSourcePull} size={12} /> #{pr.number}</span>
         <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if pr.draft}<span class="tag">draft</span>{/if}
         {#if pr.baseRef && defaultBase && pr.baseRef !== defaultBase}
