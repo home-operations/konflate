@@ -8,7 +8,7 @@
   --panel-alt: #f6f8fa;
   --border: #d0d7de;
   --text: #1f2328;
-  --muted: #656d76;
+  --muted: #59636e; /* ≥6:1 on panel/bg — much of the UI is 11–12px muted text */
   --accent: #0969da;
   --add-bg: #e6ffec;
   --add-gutter: #ccffd8;
@@ -27,7 +27,7 @@
   --panel-alt: #0d1117;
   --border: #30363d;
   --text: #e6edf3;
-  --muted: #8b949e;
+  --muted: #9198a1; /* ≥5.9:1 on panel/bg — much of the UI is 11–12px muted text */
   --accent: #2f81f7;
   --add-bg: #12261e;
   --add-gutter: #1b4721;
@@ -80,6 +80,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* mobile: exclude the browser chrome (100vh overflows under it) */
 }
 .topbar {
   display: flex;
@@ -104,6 +105,9 @@ body {
   height: 7px;
   border-radius: 50%;
   background: var(--muted);
+  /* Optical alignment: flex centers on the 24px line box, but the lowercase
+     wordmark's x-height center sits ~1px higher. */
+  transform: translateY(-1px);
 }
 .brand .conn.on {
   background: var(--ok);
@@ -121,6 +125,26 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Repo-link affordance: muted until hovered, then accent + underline + the
+   external-link glyph. */
+a.repo {
+  text-decoration: none;
+}
+a.repo:hover {
+  color: var(--accent);
+}
+a.repo:hover > span:not(.repo-ext) {
+  text-decoration: underline;
+}
+.repo-ext {
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+a.repo:hover .repo-ext,
+a.repo:focus-visible .repo-ext {
+  opacity: 1;
 }
 .spacer {
   flex: 1 1 auto;
@@ -149,12 +173,14 @@ body {
   opacity: 0.6;
   cursor: default;
 }
+/* One focus ring for every interactive element, matching .copy-btn's accent
+   treatment. Inset so it never clips inside scroll containers. */
+:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .btn-icon {
   padding: 6px 9px;
-}
-.gh {
-  color: var(--text);
-  text-decoration: none;
 }
 .auto {
   display: inline-flex;
@@ -182,6 +208,87 @@ body {
   transform-origin: center;
   animation: spin 1.8s linear infinite;
 }
+/* ---- loading smasher --------------------------------------------------
+   Percussive maintenance while something loads: wind-up (0–35%), swing
+   (35–48%), impact at 48% (sparks + wheel jolt + crack), recover. */
+.smash-arm {
+  transform-origin: 90px 38px;
+  animation: smash-swing 1.3s ease-in-out infinite;
+}
+@keyframes smash-swing {
+  0%,
+  30% {
+    transform: rotate(70deg);
+  }
+  35% {
+    transform: rotate(78deg); /* little wind-up before the blow */
+  }
+  48%,
+  62% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(70deg);
+  }
+}
+.smash-wheel {
+  transform-origin: 30px 80px; /* rocks on its contact point with the ground */
+  animation: smash-jolt 1.3s linear infinite;
+}
+@keyframes smash-jolt {
+  0%,
+  47% {
+    transform: none;
+  }
+  50% {
+    transform: translate(-1.5px, 1px) rotate(-3deg);
+  }
+  54% {
+    transform: translate(1px, 0) rotate(2deg);
+  }
+  58% {
+    transform: translate(-0.5px, 0.5px) rotate(-1deg);
+  }
+  62%,
+  100% {
+    transform: none;
+  }
+}
+.smash-sparks {
+  opacity: 0;
+  animation: smash-flash 1.3s linear infinite;
+}
+.spark-tint {
+  stroke: var(--caution);
+}
+.smash-crack {
+  stroke: var(--panel); /* a crack through the solid logo fill */
+}
+@keyframes smash-flash {
+  0%,
+  46% {
+    opacity: 0;
+  }
+  48%,
+  60% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .smash-arm,
+  .smash-wheel,
+  .smash-sparks {
+    animation: none;
+  }
+  .smash-sparks {
+    opacity: 1; /* the static frame still reads as the impact */
+  }
+}
+
 /* Big centred render/queued state in the review body. */
 .loading-center {
   display: flex;
@@ -194,6 +301,7 @@ body {
   font-size: 14px;
 }
 .loading-center .kspin,
+.loading-center .smasher,
 .loading-center .icon {
   color: var(--accent);
 }
@@ -202,6 +310,21 @@ body {
 .error-box {
   padding: 16px;
   color: var(--muted);
+}
+/* An empty review queue is the success state, not an error. */
+.all-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 56px 16px;
+  color: var(--muted);
+}
+.all-clear .icon {
+  color: var(--ok);
+}
+.all-clear p {
+  margin: 0;
 }
 .error-box {
   color: var(--danger);
@@ -285,21 +408,38 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Column so the footer's margin-top:auto pins it to the bottom even when a
+     short list doesn't fill the viewport (it still scrolls with the cards). */
+  display: flex;
+  flex-direction: column;
 }
-.pr-search-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+/* The toolbar (search box + sort) lives in the body, on the page background,
+   constrained to the cards' 960px column — it's list furniture, not chrome. */
+.list-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 16px;
+  width: 100%;
+  max-width: 960px;
+  margin: 16px auto 0;
+  padding: 0 12px;
+}
+/* A real bordered box, so the input has a visible shape and click target —
+   panel on bg, like the cards below it. */
+.search-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  padding: 0 10px;
   color: var(--muted);
 }
-.pr-search-wrap:focus-within {
-  border-bottom-color: var(--accent);
+.search-box:focus-within {
+  border-color: var(--accent);
   color: var(--accent);
 }
 .pr-search {
@@ -308,16 +448,65 @@ body {
   border: none;
   background: none;
   color: var(--text);
-  padding: 10px 0;
+  padding: 7px 0;
   font-size: 13px;
 }
 .pr-search:focus {
   outline: none;
 }
+.pr-search::placeholder {
+  color: var(--muted);
+  opacity: 1; /* Firefox dims placeholders by default, undercutting AA */
+}
+.clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.clear-btn:hover {
+  color: var(--text);
+  background: var(--panel-alt);
+}
+/* The "/" keycap hint inside the search box; gone on touch widths. */
+.key-hint {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+/* Sort selector at the right edge of the toolbar — quiet text control. */
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.sort select {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.sort select:hover {
+  color: var(--text);
+}
+.sort select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .cards {
   list-style: none;
   margin: 0 auto;
   padding: 12px;
+  width: 100%; /* flex items with margin:auto shrink-wrap without it */
   max-width: 960px;
   display: flex;
   flex-direction: column;
@@ -340,12 +529,18 @@ body {
 .card:hover {
   border-color: var(--accent);
 }
-/* Recently-merged cards are reference, not action — dim them until hovered. */
-.card.merged {
-  opacity: 0.68;
+/* Cards carrying danger warnings show a red edge. Inset shadow, not a
+   border, so layout is stable. */
+.card.danger {
+  box-shadow: inset 3px 0 0 var(--danger);
 }
-.card.merged:hover {
-  opacity: 1;
+/* Recently-merged cards are reference, not action — de-emphasized via a muted
+   title (whole-card opacity would push the meta text below AA contrast). */
+.card.merged .card-title {
+  color: var(--muted);
+}
+.card.merged:hover .card-title {
+  color: var(--text);
 }
 /* Per-card "copy merge command" overlay. The card is itself a <button>, so the
    copy (also a button) can't nest inside it — it's an absolutely-positioned
@@ -434,14 +629,16 @@ body {
   color: var(--muted);
   white-space: nowrap;
 }
+/* Left-aligned with the toolbar and cards — the three rows share one edge,
+   which is what makes the column read as one composition. */
 .list-summary {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%; /* flex items with margin:auto shrink-wrap without it */
   max-width: 960px;
   margin: 12px auto 4px;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 .sum-pill {
   display: inline-flex;
@@ -457,6 +654,39 @@ body {
 .sum-pill strong {
   color: var(--text);
   font-weight: 600;
+}
+/* The danger/failed/rendering/merged pills are buttons that filter the list to
+   that status; the active one fills with its own tint. */
+button.sum-pill {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+button.sum-pill:hover {
+  border-color: var(--accent);
+}
+/* Active text deepens toward --text — the tinted fill costs ~1 point of
+   contrast, pushing the bare status color below AA. */
+.sum-pill.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+.sum-pill.danger.active {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
+}
+.sum-pill.danger:hover {
+  border-color: var(--danger);
+}
+.sum-pill.merged.active {
+  border-color: var(--merged);
+  background: color-mix(in srgb, var(--merged) 12%, var(--panel));
+  color: color-mix(in srgb, var(--merged) 75%, var(--text));
+}
+.sum-pill.merged:hover {
+  border-color: var(--merged);
 }
 .sum-pill.danger {
   color: var(--danger);
@@ -581,7 +811,7 @@ body {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.75; /* quiet, but ≥3:1 — 0.55 dropped the icon to ~2.2:1 */
   transition:
     opacity 0.1s,
     color 0.1s,
@@ -633,7 +863,8 @@ body {
   gap: 8px;
   padding: 8px 14px;
   background: color-mix(in srgb, var(--merged) 12%, var(--panel));
-  color: var(--merged);
+  /* deepened toward --text: bare --merged is ~4.3:1 on the tinted strip */
+  color: color-mix(in srgb, var(--merged) 75%, var(--text));
   font-size: 13px;
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--merged) 30%, var(--border));
@@ -740,6 +971,22 @@ body {
   border-radius: 0 4px 4px 0;
   margin-bottom: 6px;
 }
+/* A warning whose resource rendered into the diff is a button that jumps to
+   it — reset the button chrome but keep the level edge, and hint on hover. */
+.warning-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-left: 3px solid var(--border);
+  cursor: pointer;
+}
+.warning-link:hover {
+  background: var(--panel-alt);
+}
 .warning:last-child {
   margin-bottom: 0;
 }
@@ -773,6 +1020,7 @@ body {
   font-size: 12px;
 }
 .warning-detail {
+  display: block; /* a span so it's valid inside the button variant */
   color: var(--muted);
   font-size: 12px;
   margin-top: 3px;
@@ -865,6 +1113,18 @@ body {
   overflow: auto;
   min-height: 0;
 }
+/* All sections (Summary + every resource diff) stack in one scrolling pane —
+   review by scrolling, not by clicking each resource. The sticky .res-header
+   inside each section marks where you are; a rule separates the sections. */
+.diff-section + .diff-section {
+  border-top: 1px solid var(--border);
+}
+/* The last section fills the pane so every section can scroll to the top —
+   without this, a short final diff can never become current (the scrollspy
+   keys off "top crossed the pane top") and tree clicks land short. */
+.diff-section:last-child {
+  min-height: 100%;
+}
 /* Mobile-only resource switcher. The tree rail is the navigator on wide screens;
    where it's hidden (the ≤900px media query) this bar takes over, cycling
    Summary + every resource — the touch counterpart to the j/k keys. */
@@ -927,6 +1187,7 @@ body {
 }
 .tree-summary.selected {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent); /* selected ≠ hover, even in dark */
 }
 .summary-danger {
   display: inline-flex;
@@ -967,6 +1228,7 @@ body {
 }
 .tree-item.selected {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent); /* selected ≠ hover, even in dark */
 }
 .leaf-name {
   flex: 1 1 auto;
@@ -1042,7 +1304,7 @@ body {
 }
 .view-toggle button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--panel); /* white fails 4.5:1 on the dark theme's lighter accent */
 }
 
 table.diff {
@@ -1091,6 +1353,12 @@ td.gutter.sign {
 }
 .row-add td.gutter {
   background: var(--add-gutter);
+}
+/* Line numbers shift toward --text on the tinted gutters — plain --muted
+   lands at ~3.7:1 against the dark green/red gutter fills. */
+.row-add td.gutter,
+.row-del td.gutter {
+  color: color-mix(in srgb, var(--muted) 40%, var(--text));
 }
 .row-del {
   background: var(--del-bg);
@@ -1147,6 +1415,227 @@ td.side-blank {
   );
 }
 
+/* ---- footer (list screen) --------------------------------------------- */
+.footer {
+  margin-top: auto; /* pin to the bottom when the list is short */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 20px 16px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+.foot-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.foot-sep {
+  user-select: none;
+}
+
+/* ---- keyboard-shortcuts help ------------------------------------------ */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.help-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  cursor: default;
+}
+.help-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 15%, transparent);
+  min-width: 280px;
+}
+.help-card h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.help-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.help-keys dt {
+  text-align: right;
+  white-space: nowrap;
+}
+.help-keys dd {
+  margin: 0;
+  color: var(--muted);
+}
+kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--panel-alt);
+}
+
+/* ---- command palette (Ctrl/⌘ K) ---------------------------------------- */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.palette {
+  position: relative;
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px color-mix(in srgb, var(--text) 25%, transparent);
+  overflow: hidden;
+}
+.palette-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.palette-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.palette-input input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.palette-body {
+  overflow-y: auto;
+  padding: 4px 0 6px;
+}
+.palette .group-label {
+  padding: 8px 14px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.palette-row.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.row-glyph {
+  display: inline-flex;
+  color: var(--muted);
+}
+.row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.row-title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-title.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.row-title mark {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.row-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.row-right {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.palette-empty {
+  margin: 0;
+  padding: 16px 14px;
+  color: var(--muted);
+}
+.palette-esc {
+  flex: 0 0 auto;
+}
+.palette-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+}
+.palette-footer .foot-gap {
+  flex: 1 1 auto;
+}
+
 /* ---- mobile ---------------------------------------------------------- */
 @media (max-width: 900px) {
   .diffs {
@@ -1170,10 +1659,26 @@ td.side-blank {
    card's right edge. */
 @media (max-width: 640px) {
   /* Reclaim the topbar for the repo name (otherwise truncated to "ac…"): drop
-     the wordmark to the logo, and the auto-refresh pill to its clock icon. */
+     the wordmark to the logo, the auto-refresh pill to its clock icon, and the
+     shortcuts-help button entirely (no keyboard on touch). */
   .wordmark,
-  .auto-text {
+  .auto-text,
+  .kbd-btn,
+  .key-hint {
     display: none;
+  }
+  /* One row of header chrome, not three: back and prev/next share the top row
+     and the title block drops below them, full-width. */
+  .review-head {
+    justify-content: space-between;
+  }
+  .review-title {
+    order: 1;
+    flex-basis: 100%;
+  }
+  /* 16px so iOS doesn't force-zoom the page when the filter gains focus. */
+  .pr-search {
+    font-size: 16px;
   }
   /* Thumb-friendly hit areas for the icon buttons (back, prev/next, theme, the
      resource nav, etc.) — and the same 40px box for the auto-refresh pill so it

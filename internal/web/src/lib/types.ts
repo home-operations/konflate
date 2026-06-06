@@ -164,5 +164,7 @@ export type WSEvent =
 export interface Meta {
   forge: string;
   repo: string;
+  repoUrl?: string; // the repo's web page on its forge (the header links to it)
+  version?: string; // konflate build version ("dev" for local builds)
   refreshIntervalSeconds: number;
 }

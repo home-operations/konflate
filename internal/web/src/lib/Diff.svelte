@@ -1,11 +1,41 @@
+<script lang="ts" module>
+  // View mode is shared module state: every resource renders stacked in one
+  // pane, so the toggle in any sticky header switches them all at once.
+  // Default to split on wide screens, unified on narrow; remember the override.
+  function defaultMode(): 'unified' | 'split' {
+    const saved = localStorage.getItem('konflate-diffmode');
+    if (saved === 'unified' || saved === 'split') return saved;
+    return window.innerWidth >= 1400 ? 'split' : 'unified';
+  }
+  const view = $state<{ mode: 'unified' | 'split' }>({ mode: defaultMode() });
+  function setMode(m: 'unified' | 'split') {
+    view.mode = m;
+    localStorage.setItem('konflate-diffmode', m);
+  }
+
+  // Side-by-side split is unreadable at phone width — force unified there (and
+  // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
+  const mq = window.matchMedia('(max-width: 640px)');
+  const vp = $state({ narrow: mq.matches });
+  mq.addEventListener('change', () => (vp.narrow = mq.matches));
+</script>
+
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { DiffResource, SideCell } from './types';
+  import { store } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import { mdiAlertOctagon, mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
   let { resource }: { resource: DiffResource } = $props();
+
+  // This resource's lint warnings, shown in its sticky header — in the stacked
+  // scroll the global danger strip scrolls away, so the warning rides along
+  // with the diff it belongs to. Matched the way Overview deep-links them.
+  const warns = $derived((store.diff?.warnings ?? []).filter((w) => w.resource === resource.title));
+  const dangers = $derived(warns.filter((w) => w.level === 'danger'));
+  const cautions = $derived(warns.filter((w) => w.level !== 'danger'));
+  const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
   // ("g0") across different resources never collide, and each resource keeps its
@@ -18,28 +48,7 @@
   const expandLabel = (count?: number): string =>
     `Expand ${count} unchanged ${count === 1 ? 'line' : 'lines'}`;
 
-  // Default to split on wide screens, unified on narrow; remember the override.
-  function defaultMode(): 'unified' | 'split' {
-    const saved = localStorage.getItem('konflate-diffmode');
-    if (saved === 'unified' || saved === 'split') return saved;
-    return window.innerWidth >= 1400 ? 'split' : 'unified';
-  }
-  let mode = $state<'unified' | 'split'>(defaultMode());
-  function setMode(m: 'unified' | 'split') {
-    mode = m;
-    localStorage.setItem('konflate-diffmode', m);
-  }
-
-  // Side-by-side split is unreadable at phone width — force unified there (and
-  // hide the toggle). Tracks the viewport live so a rotate/resize updates it.
-  let narrow = $state(window.matchMedia('(max-width: 640px)').matches);
-  onMount(() => {
-    const mq = window.matchMedia('(max-width: 640px)');
-    const onChange = () => (narrow = mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  });
-  const renderMode = $derived(narrow ? 'unified' : mode);
+  const renderMode = $derived(vp.narrow ? 'unified' : view.mode);
 
   const cellClass = (c: SideCell) => (c.kind === 'blank' ? 'side-blank' : `row-${c.kind}`);
 </script>
@@ -48,11 +57,24 @@
   <span class="res-status status-{resource.status}">{resource.status}</span>
   <span class="res-title">{resource.title}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  <span class="res-counts"><span class="add">+{resource.add}</span><span class="del">-{resource.del}</span></span>
-  {#if !narrow}
+  {#if dangers.length}
+    <span class="badge danger" title={detail(dangers)}>
+      <Icon path={mdiAlertOctagon} size={13} /> {dangers.length > 1 ? dangers.length : ''}
+    </span>
+  {/if}
+  {#if cautions.length}
+    <span class="badge caution" title={detail(cautions)}>
+      <Icon path={mdiAlert} size={13} /> {cautions.length > 1 ? cautions.length : ''}
+    </span>
+  {/if}
+  <!-- Zero counts are hidden, matching the tree rail. -->
+  <span class="res-counts"
+    >{#if resource.add}<span class="add">+{resource.add}</span>{/if}{#if resource.del}<span class="del">-{resource.del}</span>{/if}</span
+  >
+  {#if !vp.narrow}
     <div class="view-toggle">
-      <button class:active={mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
-      <button class:active={mode === 'split'} onclick={() => setMode('split')}>Split</button>
+      <button class:active={view.mode === 'unified'} aria-pressed={view.mode === 'unified'} onclick={() => setMode('unified')}>Unified</button>
+      <button class:active={view.mode === 'split'} aria-pressed={view.mode === 'split'} onclick={() => setMode('split')}>Split</button>
     </div>
   {/if}
 </div>

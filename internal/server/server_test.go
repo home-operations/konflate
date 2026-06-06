@@ -372,6 +372,7 @@ func TestServer_Meta(t *testing.T) {
 	cfg.WebhookSecret = "supersecret"
 	cfg.RefreshInterval = 10 * time.Minute
 	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+	s.Version = "1.2.3"
 
 	rec := do(s.mainHandler(), "GET", "/api/meta", nil, nil)
 	if rec.Code != http.StatusOK {
@@ -381,6 +382,9 @@ func TestServer_Meta(t *testing.T) {
 	mustJSON(t, rec, &m)
 	if m.Forge != "github" || m.Repo != "acme/web" || m.RefreshIntervalSeconds != 600 {
 		t.Errorf("meta = %+v, want github/acme/web/600s", m)
+	}
+	if m.RepoURL != "https://github.com/acme/web" || m.Version != "1.2.3" {
+		t.Errorf("meta = %+v, want repoUrl https://github.com/acme/web and version 1.2.3", m)
 	}
 	// /api/meta must never leak a secret.
 	if body := rec.Body.String(); strings.Contains(body, "supersecret") || strings.Contains(body, "secret-token") {

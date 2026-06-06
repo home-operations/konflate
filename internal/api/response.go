@@ -64,6 +64,12 @@ type DiffEnvelope struct {
 type Meta struct {
 	Forge string `json:"forge"` // "github" | "gitlab" | "forgejo"
 	Repo  string `json:"repo"`  // "owner/repo"
+	// RepoURL is the repository's web page on its forge, so the UI can link the
+	// repo name in the header.
+	RepoURL string `json:"repoUrl"`
+	// Version is the konflate build version (stamped via ldflags; "dev" for
+	// local builds), shown in the UI footer.
+	Version string `json:"version,omitempty"`
 	// RefreshIntervalSeconds is how often PRs auto-refresh, so the UI can show
 	// "auto-updates every Nm". konflate always auto-refreshes; there is no manual
 	// refresh trigger.

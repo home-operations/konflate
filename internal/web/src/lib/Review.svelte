@@ -3,7 +3,7 @@
   import { store, currentPR, goList, adjacentPR } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
-  import Spinner from './Spinner.svelte';
+  import Smasher from './Smasher.svelte';
   import Avatar from './Avatar.svelte';
   import {
     mdiArrowLeft,
@@ -31,9 +31,19 @@
 {#if route}
   <div class="review">
     <div class="review-head">
+      <!-- All navigation clusters on the left (back, then prev/next) so the
+           row ends with the title instead of orphan chevrons at the far right. -->
       <button class="btn btn-icon" onclick={goList} title="Back to list (Esc)">
         <Icon path={mdiArrowLeft} label="Back to list" />
       </button>
+      <div class="review-nav">
+        <button class="btn btn-icon" onclick={() => adjacentPR(-1)} title="Previous PR ([)">
+          <Icon path={mdiChevronLeft} label="Previous PR" />
+        </button>
+        <button class="btn btn-icon" onclick={() => adjacentPR(1)} title="Next PR (])">
+          <Icon path={mdiChevronRight} label="Next PR" />
+        </button>
+      </div>
       <div class="review-title">
         <div class="rt-line">
           <span class="rt-name">{pr?.title ?? ''}</span>
@@ -59,14 +69,6 @@
             </a>
           {/if}
         </div>
-      </div>
-      <div class="review-nav">
-        <button class="btn btn-icon" onclick={() => adjacentPR(-1)} title="Previous PR ([)">
-          <Icon path={mdiChevronLeft} label="Previous PR" />
-        </button>
-        <button class="btn btn-icon" onclick={() => adjacentPR(1)} title="Next PR (])">
-          <Icon path={mdiChevronRight} label="Next PR" />
-        </button>
       </div>
     </div>
 
@@ -102,7 +104,7 @@
 
     <div class="review-body">
       {#if store.loading || pr?.status === 'running'}
-        <div class="loading-center"><Spinner size={46} label="Rendering" /><p>Rendering the diff…</p></div>
+        <div class="loading-center"><Smasher size={130} /><p>Rendering the diff…</p></div>
       {:else if pr?.status === 'pending'}
         <div class="loading-center"><Icon path={mdiTrayFull} size={38} /><p>Queued — waiting to render…</p></div>
       {:else if store.diffError}

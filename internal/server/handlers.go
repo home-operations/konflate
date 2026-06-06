@@ -42,8 +42,11 @@ func handleDisabled(w http.ResponseWriter, _ *http.Request) {
 // cadence). No token or secret is included — safe even when konflate is public.
 func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, api.Meta{
-		Forge:                  string(s.cfg.Forge.Kind),
-		Repo:                   s.cfg.Forge.RepoPath,
+		Forge: string(s.cfg.Forge.Kind),
+		Repo:  s.cfg.Forge.RepoPath,
+		// The HTTPS clone URL doubles as the repo's web page on all three forges.
+		RepoURL:                s.cfg.Forge.CloneURL(),
+		Version:                s.Version,
 		RefreshIntervalSeconds: int(s.cfg.RefreshInterval.Seconds()),
 	})
 }

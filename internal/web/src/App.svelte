@@ -4,19 +4,22 @@
   import { store, loadPRs, loadMeta, connectWS, ensureDiff } from './lib/store.svelte';
   import { theme, cycleTheme, initTheme } from './lib/theme.svelte';
   import { initClock } from './lib/time.svelte';
-  import { initKeyboard } from './lib/keyboard.svelte';
+  import { initKeyboard, help, toggleHelp, togglePalette } from './lib/keyboard.svelte';
   import {
     mdiThemeLightDark,
     mdiWeatherNight,
     mdiWhiteBalanceSunny,
     mdiClockOutline,
+    mdiKeyboardOutline,
+    mdiMagnify,
+    mdiOpenInNew,
     forgeIcon,
-    githubMark,
-    KONFLATE_REPO_URL,
   } from './lib/icons';
   import Icon from './lib/Icon.svelte';
   import List from './lib/List.svelte';
   import Review from './lib/Review.svelte';
+  import Palette from './lib/Palette.svelte';
+  import type { Meta } from './lib/types';
 
   onMount(() => {
     initTheme();
@@ -47,6 +50,12 @@
     return `${sec}s`;
   }
   const autoLabel = $derived(store.meta ? fmtInterval(store.meta.refreshIntervalSeconds) : '');
+
+  // Move focus into the help dialog when it opens (screen readers announce it;
+  // Escape works from anywhere via the global key handler).
+  function focusOnMount(node: HTMLElement): void {
+    node.focus();
+  }
 </script>
 
 <div class="app">
@@ -57,11 +66,26 @@
       <span class="conn" class:on={store.connected} title={store.connected ? 'live' : 'reconnecting…'}></span>
     </a>
 
+    {#snippet repoChip(meta: Meta)}
+      {#if forge}<Icon path={forge.path} label={meta.forge} size={15} />{/if}
+      <span>{meta.repo}</span>
+    {/snippet}
+
     {#if store.meta}
-      <div class="repo">
-        {#if forge}<Icon path={forge.path} label={store.meta.forge} size={15} />{/if}
-        <span>{store.meta.repo}</span>
-      </div>
+      {#if store.meta.repoUrl}
+        <a
+          class="repo"
+          href={store.meta.repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open ${store.meta.repo} on ${store.meta.forge}`}
+        >
+          {@render repoChip(store.meta)}
+          <span class="repo-ext"><Icon path={mdiOpenInNew} size={12} /></span>
+        </a>
+      {:else}
+        <div class="repo">{@render repoChip(store.meta)}</div>
+      {/if}
     {:else}
       <div class="spacer"></div>
     {/if}
@@ -72,16 +96,13 @@
           <Icon path={mdiClockOutline} size={15} /> <span class="auto-text">auto · {autoLabel}</span>
         </span>
       {/if}
-      <a
-        class="btn btn-icon gh"
-        href={KONFLATE_REPO_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="konflate on GitHub"
-        aria-label="konflate on GitHub"
-      >
-        <Icon path={githubMark.path} size={16} />
-      </a>
+      <!-- Hidden on phones (see the mobile block). -->
+      <button class="btn btn-icon kbd-btn" onclick={togglePalette} title="Search pull requests (Ctrl/⌘ K)">
+        <Icon path={mdiMagnify} label="Search pull requests" />
+      </button>
+      <button class="btn btn-icon kbd-btn" onclick={toggleHelp} title="Keyboard shortcuts (?)">
+        <Icon path={mdiKeyboardOutline} label="Keyboard shortcuts" />
+      </button>
       <button class="btn btn-icon" onclick={cycleTheme} title={`Theme: ${theme.pref}`}>
         <Icon path={themeIconPath} label="Toggle theme" />
       </button>
@@ -92,5 +113,33 @@
     <Review />
   {:else}
     <List />
+  {/if}
+
+  <Palette />
+
+  {#if help.open}
+    <!-- The backdrop is a real button so closing is keyboard-reachable. -->
+    <div class="help-overlay">
+      <button class="help-backdrop" aria-label="Close keyboard shortcuts" onclick={toggleHelp}></button>
+      <div class="help-card" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" use:focusOnMount>
+        <h2>Keyboard shortcuts</h2>
+        <dl class="help-keys">
+          <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
+          <dd>next / previous resource</dd>
+          <dt><kbd>]</kbd> / <kbd>[</kbd></dt>
+          <dd>next / previous pull request</dd>
+          <dt><kbd>o</kbd></dt>
+          <dd>jump to the summary</dd>
+          <dt><kbd>u</kbd> or <kbd>Esc</kbd></dt>
+          <dd>back to the list</dd>
+          <dt><kbd>/</kbd></dt>
+          <dd>filter the list</dd>
+          <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>k</kbd></dt>
+          <dd>search pull requests</dd>
+          <dt><kbd>?</kbd></dt>
+          <dd>toggle this help</dd>
+        </dl>
+      </div>
+    </div>
   {/if}
 </div>

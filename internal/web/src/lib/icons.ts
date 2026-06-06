@@ -19,12 +19,19 @@ export {
   mdiContentCopy,
   mdiConsoleLine,
   mdiCheckCircle,
+  mdiCheckCircleOutline,
   mdiCircleOutline,
+  mdiClose,
+  mdiHistory,
+  mdiKeyboardOutline,
+  mdiMagnify,
   mdiFileDocumentOutline,
   mdiClockOutline,
   mdiRefresh,
   mdiAccountOutline,
   mdiTagOutline,
+  mdiScaleBalance,
+  mdiSortVariant,
   mdiSourceBranch,
   mdiSourcePull,
   mdiFilterOutline,
@@ -34,7 +41,7 @@ export {
   mdiLoading,
 } from '@mdi/js';
 
-import { siForgejo, siGithub, siGitlab } from 'simple-icons';
+import { siDiscord, siForgejo, siGithub, siGitlab, siKubernetes } from 'simple-icons';
 
 interface BrandIcon {
   path: string;
@@ -49,7 +56,12 @@ export const forgeIcon: Record<string, BrandIcon> = {
   forgejo: siForgejo,
 };
 
-// The GitHub mark for the "konflate on GitHub" link (konflate is hosted there,
-// independent of which forge the reviewed repo lives on).
+// The GitHub mark for the "konflate on GitHub" footer link (konflate is hosted
+// there, independent of which forge the reviewed repo lives on).
 export const githubMark: BrandIcon = siGithub;
+export const discordMark: BrandIcon = siDiscord;
+// The official heptagon-helm mark, for the loading mascot's smashee.
+export const kubernetesMark: BrandIcon = siKubernetes;
 export const KONFLATE_REPO_URL = 'https://github.com/home-operations/konflate';
+export const DISCORD_URL = 'https://discord.gg/home-operations';
+export const LICENSE_URL = 'https://github.com/home-operations/konflate/blob/main/LICENSE';

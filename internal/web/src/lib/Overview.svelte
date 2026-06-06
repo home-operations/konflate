@@ -1,10 +1,21 @@
 <script lang="ts">
-  import { store } from './store.svelte';
+  import { router } from './router.svelte';
+  import { store, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
 
   const d = $derived(store.diff!);
+
+  // A warning's resource ("Kind ns/name") matches the diff resource's title, so
+  // a warning can deep-link to the diff it flags. Null when the resource didn't
+  // render into the diff (e.g. it only changed indirectly).
+  function warningTarget(resource: string): string | null {
+    return d.resources?.find((r) => r.title === resource)?.id ?? null;
+  }
+  function openWarning(id: string): void {
+    if (router.route.name === 'review') openSel(router.route.pr, id);
+  }
 
   // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
   // digest-pinned image doesn't blow out the layout; tags are short already and
@@ -24,6 +35,15 @@
   }
 </script>
 
+{#snippet warningBody(w: { level: string; resource: string; detail: string })}
+  <span class="warning-badge">
+    <Icon path={w.level === 'danger' ? mdiAlertOctagon : mdiAlert} size={12} />
+    {w.level}
+  </span>
+  <span class="warning-res">{w.resource}</span>
+  <span class="warning-detail">{w.detail}</span>
+{/snippet}
+
 <div class="overview">
   <div class="impact">
     <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
@@ -32,23 +52,25 @@
     {#if d.impact.namespaces?.length}
       <span class="impact-pill"><strong>{d.impact.namespaces.length}</strong> namespaces</span>
     {/if}
-    <span class="impact-pill add">+{d.summary.added} added</span>
-    <span class="impact-pill chg">{d.summary.changed} changed</span>
-    <span class="impact-pill del">−{d.summary.removed} removed</span>
+    <!-- Zero counts stay neutral; a tinted "+0" is noise. -->
+    <span class="impact-pill" class:add={d.summary.added > 0}>+{d.summary.added} added</span>
+    <span class="impact-pill" class:chg={d.summary.changed > 0}>{d.summary.changed} changed</span>
+    <span class="impact-pill" class:del={d.summary.removed > 0}>−{d.summary.removed} removed</span>
   </div>
 
   {#if d.warnings?.length}
     <section class="ov-section">
       <h3>Warnings</h3>
       {#each d.warnings as w}
-        <div class="warning {w.level}">
-          <span class="warning-badge">
-            <Icon path={w.level === 'danger' ? mdiAlertOctagon : mdiAlert} size={12} />
-            {w.level}
-          </span>
-          <span class="warning-res">{w.resource}</span>
-          <div class="warning-detail">{w.detail}</div>
-        </div>
+        {@const target = warningTarget(w.resource)}
+        <!-- Warnings whose resource rendered into the diff deep-link to it. -->
+        {#if target}
+          <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
+            {@render warningBody(w)}
+          </button>
+        {:else}
+          <div class="warning {w.level}">{@render warningBody(w)}</div>
+        {/if}
       {/each}
     </section>
   {/if}
@@ -63,10 +85,11 @@
               <span class="img-name">{img.name}</span>
               {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
             </div>
+            <!-- ∅ = no reference on that side (image added/removed); tooltip spells it out. -->
             <div class="img-delta">
-              <span class="img-ver from" title={img.from || undefined}>{shortVer(img.from)}</span>
+              <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
               <span class="img-arrow">→</span>
-              <span class="img-ver to" title={img.to || undefined}>{shortVer(img.to)}</span>
+              <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
             </div>
             {#if img.refs?.length}
               <div class="img-refs">{img.refs.join(', ')}</div>
