@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.15](https://github.com/home-operations/konflate/compare/0.1.14...0.1.15) (2026-06-07)
+
+
+### Code Refactoring
+
+* **engine:** adopt flate's SDK diff surface, drop the duplicated pipeline ([#47](https://github.com/home-operations/konflate/issues/47)) ([7d7c5ba](https://github.com/home-operations/konflate/commit/7d7c5ba22d00a12088ed5ba336ef536ea0289ce2))
+
 ## [0.1.14](https://github.com/home-operations/konflate/compare/0.1.13...0.1.14) (2026-06-07)
 
 
