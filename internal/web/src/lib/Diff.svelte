@@ -36,17 +36,22 @@
   // value (PR titles, file paths, warnings — anything forge-controlled) into
   // these fields, and never relax this without adding client-side sanitization.
   import type { DiffResource, SideCell } from './types';
-  import { store } from './store.svelte';
+  import { diffIndex } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
-  let { resource }: { resource: DiffResource } = $props();
+  // `active` gates the heavy diff table: when false (the section is parked
+  // off-screen — see Diffs.svelte's lazy-mount) the sticky header still renders
+  // so the tree, scrollspy, deep-links and the j/k switcher keep working, but
+  // the table is replaced by a height-reserving placeholder. Defaults to true
+  // so any other caller renders fully.
+  let { resource, active = true }: { resource: DiffResource; active?: boolean } = $props();
 
   // This resource's lint warnings, shown in its sticky header — in the stacked
   // scroll the global danger strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
-  const warns = $derived((store.diff?.warnings ?? []).filter((w) => w.resource === resource.title));
+  const warns = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
   const dangers = $derived(warns.filter((w) => w.level === 'danger'));
   const cautions = $derived(warns.filter((w) => w.level !== 'danger'));
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
@@ -65,6 +70,14 @@
   const renderMode = $derived(vp.narrow ? 'unified' : view.mode);
 
   const cellClass = (c: SideCell) => (c.kind === 'blank' ? 'side-blank' : `row-${c.kind}`);
+
+  // Approximate the parked table's height so the scrollbar geometry is stable
+  // and the lazy-mount observer doesn't fault every section in at once. The
+  // initially-visible rows are the non-folded ones (folded context is collapsed
+  // until expanded); ~19px each (12px mono × 1.5 line-height plus borders), with
+  // a floor so a tiny diff still reserves a sensible block.
+  const visibleRows = $derived(resource.unified.reduce((n, row) => n + (row.folded ? 0 : 1), 0));
+  const reservedPx = $derived(Math.max(visibleRows * 19, 96));
 </script>
 
 <div class="res-header">
@@ -95,62 +108,80 @@
   {/if}
 </div>
 
-{#key resource.id}
-  {#if renderMode === 'unified'}
-    <table class="diff chroma unified">
-      <tbody>
-        {#each resource.unified as row}
-          {#if row.hunk}
-            <tr class="row-expand">
-              <td colspan="4">
-                <button class="expand-btn" onclick={() => toggleFold(row.fold)}>
-                  <Icon path={isExpanded(row.fold) ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
-                  {isExpanded(row.fold) ? 'Collapse' : expandLabel(row.count)}
-                </button>
-              </td>
-            </tr>
-          {:else if row.folded}
-            {#if isExpanded(row.fold)}
-              <tr class="row-ctx folded">
+{#if !active}
+  <!-- Parked off-screen: reserve the table's approximate height so scrolling
+       and the lazy-mount observer stay stable until this section nears the
+       viewport, at which point the real table mounts in its place. -->
+  <div class="diff-parked" style="height: {reservedPx}px" aria-hidden="true"></div>
+{:else}
+  {#key resource.id}
+    {#if renderMode === 'unified'}
+      <table class="diff chroma unified">
+        <tbody>
+          {#each resource.unified as row}
+            {#if row.hunk}
+              <tr class="row-expand">
+                <td colspan="4">
+                  <button class="expand-btn" onclick={() => toggleFold(row.fold)}>
+                    <Icon path={isExpanded(row.fold) ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
+                    {isExpanded(row.fold) ? 'Collapse' : expandLabel(row.count)}
+                  </button>
+                </td>
+              </tr>
+            {:else if row.folded}
+              {#if isExpanded(row.fold)}
+                <tr class="row-ctx folded">
+                  <td class="gutter num">{row.oldNo || ''}</td>
+                  <td class="gutter num">{row.newNo || ''}</td>
+                  <td class="gutter sign"></td>
+                  <td class="code">{@html row.html ?? ''}</td>
+                </tr>
+              {/if}
+            {:else}
+              <tr class="row-{row.kind ?? 'ctx'}">
                 <td class="gutter num">{row.oldNo || ''}</td>
                 <td class="gutter num">{row.newNo || ''}</td>
-                <td class="gutter sign"></td>
+                <td class="gutter sign">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</td>
+                <!-- chroma-produced, HTML-escaped token spans; CSP blocks inline
+                     scripts — see the trust-boundary note at the top of this file -->
                 <td class="code">{@html row.html ?? ''}</td>
               </tr>
             {/if}
-          {:else}
-            <tr class="row-{row.kind ?? 'ctx'}">
-              <td class="gutter num">{row.oldNo || ''}</td>
-              <td class="gutter num">{row.newNo || ''}</td>
-              <td class="gutter sign">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</td>
-              <!-- chroma-produced, HTML-escaped token spans; CSP blocks inline
-                   scripts — see the trust-boundary note at the top of this file -->
-              <td class="code">{@html row.html ?? ''}</td>
-            </tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
-  {:else}
-    <table class="diff chroma split">
-      <colgroup>
-        <col class="col-num" /><col class="col-code" />
-        <col class="col-num" /><col class="col-code" />
-      </colgroup>
-      <tbody>
-        {#each resource.side as row}
-          {#if row.hunk}
-            <tr class="row-expand">
-              <td colspan="4">
-                <button class="expand-btn" onclick={() => toggleFold(row.fold)}>
-                  <Icon path={isExpanded(row.fold) ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
-                  {isExpanded(row.fold) ? 'Collapse' : expandLabel(row.count)}
-                </button>
-              </td>
-            </tr>
-          {:else if row.folded}
-            {#if isExpanded(row.fold)}
-              <tr class="folded">
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <table class="diff chroma split">
+        <colgroup>
+          <col class="col-num" /><col class="col-code" />
+          <col class="col-num" /><col class="col-code" />
+        </colgroup>
+        <tbody>
+          {#each resource.side as row}
+            {#if row.hunk}
+              <tr class="row-expand">
+                <td colspan="4">
+                  <button class="expand-btn" onclick={() => toggleFold(row.fold)}>
+                    <Icon path={isExpanded(row.fold) ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
+                    {isExpanded(row.fold) ? 'Collapse' : expandLabel(row.count)}
+                  </button>
+                </td>
+              </tr>
+            {:else if row.folded}
+              {#if isExpanded(row.fold)}
+                <tr class="folded">
+                  <td class="gutter num">{row.left.no || ''}</td>
+                  <td class="code {cellClass(row.left)}"
+                    >{#if row.left.kind !== 'blank'}{@html row.left.html ?? ''}{/if}</td
+                  >
+                  <td class="gutter num">{row.right.no || ''}</td>
+                  <td class="code {cellClass(row.right)}"
+                    >{#if row.right.kind !== 'blank'}{@html row.right.html ?? ''}{/if}</td
+                  >
+                </tr>
+              {/if}
+            {:else}
+              <tr>
                 <td class="gutter num">{row.left.no || ''}</td>
                 <td class="code {cellClass(row.left)}"
                   >{#if row.left.kind !== 'blank'}{@html row.left.html ?? ''}{/if}</td
@@ -161,20 +192,9 @@
                 >
               </tr>
             {/if}
-          {:else}
-            <tr>
-              <td class="gutter num">{row.left.no || ''}</td>
-              <td class="code {cellClass(row.left)}"
-                >{#if row.left.kind !== 'blank'}{@html row.left.html ?? ''}{/if}</td
-              >
-              <td class="gutter num">{row.right.no || ''}</td>
-              <td class="code {cellClass(row.right)}"
-                >{#if row.right.kind !== 'blank'}{@html row.right.html ?? ''}{/if}</td
-              >
-            </tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-{/key}
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  {/key}
+{/if}

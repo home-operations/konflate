@@ -2,7 +2,7 @@
 // this store owns the data (instance meta, the PR list, the currently-loaded
 // diff) and the actions that mutate it.
 
-import type { DiffEnvelope, DiffResult, Meta, PRStatus, WSEvent } from './types';
+import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from './types';
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = all).
@@ -49,6 +49,37 @@ export const store: Store = $state({
 });
 
 // ---- derived helpers ------------------------------------------------------
+
+// Lookups derived once from the loaded diff, so the tree rail, the overview's
+// warnings and every resource header don't each re-scan the warning/resource
+// lists (the diff can carry dozens of each). Recomputes only when the diff
+// changes; readers stay reactive through the shared $derived. Svelte forbids
+// exporting a derived directly, so callers read it through diffIndex().
+const diffIndexState = $derived.by(() => {
+  const warningsByResource = new Map<string, Warning[]>();
+  const dangerResources = new Set<string>(); // resource titles carrying a danger
+  let dangerCount = 0; // total danger warnings (a resource may have several)
+  for (const w of store.diff?.warnings ?? []) {
+    let list = warningsByResource.get(w.resource);
+    if (!list) warningsByResource.set(w.resource, (list = []));
+    list.push(w);
+    if (w.level === 'danger') {
+      dangerResources.add(w.resource);
+      dangerCount++;
+    }
+  }
+  // Resource id keyed by its "Kind ns/name" title, so a warning can deep-link to
+  // the diff it flags without a linear find.
+  const idByTitle = new Map<string, string>();
+  for (const r of store.diff?.resources ?? []) idByTitle.set(r.title, r.id);
+  return { warningsByResource, dangerResources, dangerCount, idByTitle };
+});
+
+// diffIndex exposes the shared diff lookups (see diffIndexState). Read it inside
+// a component's reactive context ($derived/template) to stay live.
+export function diffIndex() {
+  return diffIndexState;
+}
 
 // ---- query grammar ----------------------------------------------------
 // A query is free text plus optional facet tokens, AND-ed together:

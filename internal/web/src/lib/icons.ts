@@ -31,6 +31,7 @@ export {
   mdiAccountOutline,
   mdiTagOutline,
   mdiScaleBalance,
+  mdiCopyright,
   mdiSortVariant,
   mdiSortAscending,
   mdiSortDescending,

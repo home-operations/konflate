@@ -1164,6 +1164,18 @@ button.sum-pill:hover {
 /* All sections (Summary + every resource diff) stack in one scrolling pane —
    review by scrolling, not by clicking each resource. The sticky .res-header
    inside each section marks where you are; a rule separates the sections. */
+/* Skip the layout + paint of sections scrolled out of view. The lazy-mount
+   (Diffs.svelte) keeps an off-screen section's DOM cheap; this keeps a
+   mounted-but-scrolled-away one from costing layout/paint on every reflow.
+   contain-intrinsic-size reserves space while a section is skipped so the
+   scrollbar stays stable: the first (fixed) value is the fallback older
+   engines parse; the 'auto' form, where supported, then remembers each
+   section's real height so the scroll position never jumps. */
+.diff-section {
+  content-visibility: auto;
+  contain-intrinsic-size: 600px;
+  contain-intrinsic-size: auto 600px;
+}
 .diff-section + .diff-section {
   border-top: 1px solid var(--border);
 }
@@ -1172,6 +1184,13 @@ button.sum-pill:hover {
    keys off "top crossed the pane top") and tree clicks land short. */
 .diff-section:last-child {
   min-height: 100%;
+}
+/* The block a parked (not-yet-mounted) section's diff table leaves behind to
+   reserve its approximate height — see Diff.svelte. Kept blank: the lazy-mount
+   observer fills it a couple of viewports before it scrolls into view, so it's
+   effectively never seen during normal reading. */
+.diff-parked {
+  width: 100%;
 }
 /* Mobile-only resource switcher. The tree rail is the navigator on wide screens;
    where it's hidden (the ≤900px media query) this bar takes over, cycling
@@ -1547,6 +1566,13 @@ td.side-blank {
 }
 .foot-sep {
   user-select: none;
+}
+/* The copyright line: align the © icon with the text the same way .foot-link
+   does (it's a span, not a link, so it doesn't share those rules). */
+.foot-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* ---- keyboard-shortcuts help ------------------------------------------ */
