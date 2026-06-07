@@ -10,6 +10,7 @@
 go = "1.26.4"
 golangci-lint = "2.12.2"
 helm = "4.2.0"
+helm-docs = "1.14.2"
 lefthook = "2.1.9"
 node = "24.16.0"
 oxfmt = "0.53.0"
@@ -82,6 +83,23 @@ run = "helm lint charts/konflate"
 [tasks.helm-template]
 description = "Render the Helm chart with example values"
 run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"
+
+[tasks.helm-docs]
+description = "Generate the Helm chart README from Chart.yaml + values.yaml"
+# oxfmt after helm-docs so the committed README matches the lefthook/CI
+# markdown formatter (otherwise the freshness check below would always drift).
+run = """
+helm-docs --chart-search-root=charts --log-level=warn
+oxfmt charts/konflate/README.md
+"""
+
+[tasks.helm-docs-check]
+description = "Fail if the chart README is stale (CI gate)"
+run = """
+helm-docs --chart-search-root=charts --log-level=warn
+oxfmt charts/konflate/README.md
+git diff --exit-code charts/konflate/README.md
+"""
 
 [tasks.dev]
 description = "Run konflate locally (set KONFLATE_REPO=... first)"

@@ -6,3 +6,5 @@
 *.orig
 .vscode/
 .idea/
+# helm-docs input template; the generated README.md ships, this doesn't.
+README.md.gotmpl

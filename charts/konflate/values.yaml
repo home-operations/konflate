@@ -1,40 +1,51 @@
 ---
 # Default values for konflate.
 
+# -- Number of konflate replicas (it's stateless behind the Service).
 replicaCount: 1
 
 image:
+  # -- Image repository.
   repository: ghcr.io/home-operations/konflate
+  # -- Image pull policy.
   pullPolicy: IfNotPresent
-  # Overrides the image tag; defaults to the chart appVersion.
+  # -- Overrides the image tag; defaults to the chart appVersion.
   tag: ""
   # Pins the image by digest (sha256:…). When set it takes precedence over tag;
   # the release pipeline fills it with the published image's digest.
+  # -- Pin the image by digest (sha256:…); when set, overrides the tag.
   digest: ""
 
+# -- Image pull secrets for private registries.
 imagePullSecrets: []
+# -- Override the chart name used in resource names.
 nameOverride: ""
+# -- Override the full release name.
 fullnameOverride: ""
 
 # konflate configuration (the non-secret KONFLATE_* environment variables).
 config:
   # KONFLATE_REPO — forge URI of the repository to review (required), e.g.
   # github://owner/repo, gitlab://group/repo, forgejo://git.example.com/owner/repo.
+  # -- (required) Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo).
   repo: ""
   # KONFLATE_CLUSTER_PATH — directory flate renders from (the GitRepository root
   # that Flux spec.path values resolve against). Empty = repo root, which is
   # correct for the standard layout (root-relative paths like ./kubernetes/...).
+  # -- Directory flate renders from; empty = repo root (correct for the standard root-relative layout).
   clusterPath: ""
   # KONFLATE_REFRESH_INTERVAL — how often each open PR re-renders if no webhook
   # refreshed it sooner, and how often the open-PR list is reconciled (Go
   # duration, e.g. "15m"). The missed-webhook backstop.
+  # -- How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).
   refreshInterval: 30m
-  # KONFLATE_LOG_LEVEL — debug | info | warn | error.
+  # -- Log level: debug, info, warn, or error.
   logLevel: info
-  # KONFLATE_LOG_FORMAT — json | text.
+  # -- Log format: json or text.
   logFormat: json
   # KONFLATE_MAX_DIFF_CONC — max concurrent diff renders. 0 = auto (derived from
   # the pod's CPU limit via GOMAXPROCS, capped at 4).
+  # -- Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).
   maxDiffConcurrency: 0
   # --- flate render tuning (advanced) ---------------------------------------
   # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
@@ -43,41 +54,41 @@ config:
   # sizing that volume matters as much as these caps. Quote values; use "0" to
   # disable a cache.
   #
-  # KONFLATE_HELM_TEMPLATE_CACHE_MB — in-memory Helm template cache (the biggest
-  # CPU saver). Default 256. "0" disables.
+  # -- Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = flate default (256); "0" disables.
   helmTemplateCacheMb: ""
-  # KONFLATE_HELM_RENDER_CACHE_MB — persistent on-disk Helm render cache, reused
-  # across renders, PRs, and restarts. Default 1024. "0" disables.
+  # -- Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables.
   helmRenderCacheMb: ""
-  # KONFLATE_STAGE_CACHE_MB — persistent kustomize stage cache. Default 2048.
-  # "0" disables size-based eviction (unbounded growth).
+  # -- Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); "0" disables size-based eviction.
   stageCacheMb: ""
-  # KONFLATE_SOURCE_RETRY_ATTEMPTS — tries per source fetch on transient network
-  # errors. Default 3; "1" disables retry.
+  # -- Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry.
   sourceRetryAttempts: ""
-  # KONFLATE_RENDER_CONCURRENCY — cap on reconcile goroutines within one render.
-  # Empty/"0" = auto (NumCPU*4).
+  # -- Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4).
   renderConcurrency: ""
   # KONFLATE_DIFF_TIMEOUT — hard cap on a single PR render end-to-end (Go
   # duration). Frees a render slot if a PR hangs or is hostile. Default 10m;
   # lower on public/untrusted instances. Empty uses the default; "0" disables.
+  # -- Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances.
   diffTimeout: ""
   # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
   # KONFLATE_CLOSED_PR_MAX — cap on retained merged PRs (most-recent win); this
   # count, not the age, is what bounds memory. 0 disables the cap.
+  # -- Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap.
   closedPrMax: 25
   # KONFLATE_CLOSED_PR_TTL — how long a merged PR is kept (Go duration, e.g.
   # "720h" = 30d). 0 disables the age cap. In-memory: a restart clears the shelf.
+  # -- How long a merged PR is kept (Go duration); 0 disables the age cap. In-memory — a restart clears the shelf.
   closedPrTtl: 336h
   # KONFLATE_MERGE_COMMAND — optional Go text/template for the "copy to merge"
   # command shown on the review screen and PR list. konflate never runs it; the
   # reviewer pastes it into their own shell. Empty = the forge default
   # (gh / glab / tea). Only .Number and .Repo are available, both shell-safe.
   # Example: "gh pr merge {{ .Number }} --repo {{ .Repo }} --squash --delete-branch"
+  # -- Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it.
   mergeCommand: ""
   # Extra raw env vars merged into the container (advanced). konflate already
   # derives GOMEMLIMIT from the cgroup memory limit (90%) and GOMAXPROCS from the
   # CPU limit (Go runtime), so set those here only to override.
+  # -- Extra raw env vars merged into the container (advanced).
   extraEnv: []
   # - name: GOMEMLIMIT
   #   value: "900MiB"
@@ -88,23 +99,31 @@ config:
 secret:
   # Pre-existing Secret with keys KONFLATE_TOKEN / KONFLATE_WEBHOOK_SECRET /
   # KONFLATE_PUSH_TOKEN. Takes precedence over the inline values below.
+  # -- Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below.
   existingSecret: ""
-  # KONFLATE_TOKEN — forge API token. Empty ⇒ anonymous mode.
+  # -- Forge API token. Empty = anonymous, read-only mode.
   token: ""
-  # KONFLATE_WEBHOOK_SECRET — enables POST /hooks (authenticated mode).
+  # -- Webhook secret; enables POST /hooks (authenticated mode).
   webhookSecret: ""
-  # KONFLATE_PUSH_TOKEN — enables POST /api/prs/{n}/refresh (authenticated mode).
+  # -- Push token; enables POST /api/prs/{n}/refresh (authenticated mode).
   pushToken: ""
 
 serviceAccount:
+  # -- Create a ServiceAccount.
   create: true
+  # -- Automount the ServiceAccount API token.
   automount: true
+  # -- Annotations for the ServiceAccount.
   annotations: {}
+  # -- ServiceAccount name; generated from the release name if empty.
   name: ""
 
+# -- Annotations added to the pod.
 podAnnotations: {}
+# -- Labels added to the pod.
 podLabels: {}
 
+# -- Pod-level securityContext (runs as non-root uid/gid 65532 with the RuntimeDefault seccomp profile).
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
@@ -113,6 +132,7 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# -- Container securityContext (no privilege escalation, read-only root filesystem, drops ALL capabilities).
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
@@ -121,21 +141,27 @@ securityContext:
       - ALL
 
 service:
+  # -- Service type.
   type: ClusterIP
-  # UI / API / websocket port.
+  # -- UI / API / websocket port.
   port: 8080
-  # Operational /metrics port.
+  # -- Operational /metrics port.
   metricsPort: 9090
 
 ingress:
+  # -- Expose the UI via an Ingress.
   enabled: false
+  # -- IngressClass name.
   className: ""
+  # -- Ingress annotations.
   annotations: {}
+  # -- Ingress hosts and their paths.
   hosts:
     - host: konflate.example.com
       paths:
         - path: /
           pathType: Prefix
+  # -- Ingress TLS configuration.
   tls: []
   # - secretName: konflate-tls
   #   hosts:
@@ -145,31 +171,36 @@ ingress:
 # Gateway API. Renders one HTTPRoute pointing at the UI service port. Named
 # `httpRoute` (not `route`) to avoid confusion with the OpenShift Route kind.
 httpRoute:
+  # -- Expose the UI via a Gateway API HTTPRoute (alternative to ingress).
   enabled: false
-  # Defaults to gateway.networking.k8s.io/v1 / HTTPRoute when left empty.
+  # -- HTTPRoute apiVersion; empty defaults to gateway.networking.k8s.io/v1.
   apiVersion: ""
+  # -- HTTPRoute kind; empty defaults to HTTPRoute.
   kind: ""
+  # -- HTTPRoute annotations.
   annotations: {}
+  # -- HTTPRoute labels.
   labels: {}
-  # Gateways (and listeners) this route attaches to.
+  # -- Gateways (and listeners) this route attaches to.
   parentRefs: []
   #  - name: gateway
   #    namespace: gateway
   #    sectionName: https
-  # Hostnames matched against the Host header (templated).
+  # -- Hostnames matched against the Host header (templated).
   hostnames: []
   #  - konflate.example.com
-  # Custom rules prepended before the default rule (templated).
+  # -- Custom rules prepended before the default rule (templated).
   additionalRules: []
-  # Filters applied to the default rule.
+  # -- Filters applied to the default rule.
   filters: []
-  # Match conditions for the default rule.
+  # -- Match conditions for the default rule.
   matches:
     - path:
         type: PathPrefix
         value: /
   # Redirect HTTP→HTTPS (301) instead of routing to the backend. Requires a
   # Gateway with both HTTP and HTTPS listeners; matches/filters are ignored.
+  # -- Redirect HTTP→HTTPS (301) instead of routing to the backend (needs HTTP+HTTPS listeners).
   httpsRedirect: false
 
 # Persist konflate's on-disk caches across restarts: the flate source cache
@@ -179,17 +210,21 @@ httpRoute:
 # a fresh full clone. The per-diff clone dir is always ephemeral. Recommended
 # for any non-trivial repo.
 persistence:
+  # -- Persist caches + the git mirror across restarts (recommended for any non-trivial repo).
   enabled: false
+  # -- Use an existing PVC instead of creating one.
   existingClaim: ""
+  # -- StorageClass for the created PVC.
   storageClass: ""
+  # -- PVC access modes.
   accessModes:
     - ReadWriteOnce
+  # -- PVC size.
   size: 5Gi
+  # -- PVC annotations.
   annotations: {}
 
-# A memory LIMIT drives GOMEMLIMIT (konflate sets it to 90% so the GC tightens
-# before an OOM-kill). A CPU LIMIT right-sizes GOMAXPROCS via the Go runtime;
-# with only a request, GOMAXPROCS falls back to the node's full core count.
+# -- Pod resource requests/limits. A memory limit drives GOMEMLIMIT (set to 90%); a CPU limit right-sizes GOMAXPROCS.
 resources: {}
 # limits:
 #   memory: 1Gi
@@ -197,12 +232,14 @@ resources: {}
 #   cpu: 50m
 #   memory: 256Mi
 
+# -- Liveness probe.
 livenessProbe:
   httpGet:
     path: /healthz
     port: http
   initialDelaySeconds: 10
   periodSeconds: 20
+# -- Readiness probe.
 readinessProbe:
   httpGet:
     path: /readyz
@@ -212,20 +249,31 @@ readinessProbe:
 
 monitoring:
   serviceMonitor:
-    # Requires the Prometheus Operator CRDs.
+    # -- Create a Prometheus Operator ServiceMonitor (requires its CRDs).
     enabled: false
+    # -- Scrape interval.
     interval: 30s
+    # -- Scrape timeout.
     scrapeTimeout: 10s
+    # -- Metrics path.
     path: /metrics
+    # -- ServiceMonitor labels.
     labels: {}
+    # -- ServiceMonitor annotations.
     annotations: {}
+    # -- Prometheus metric relabelings.
     metricRelabelings: []
+    # -- Prometheus relabelings.
     relabelings: []
 
+# -- Node selector for pod scheduling.
 nodeSelector: {}
+# -- Tolerations for pod scheduling.
 tolerations: []
+# -- Affinity rules for pod scheduling.
 affinity: {}
 
-# Additional volumes / mounts on the Deployment.
+# -- Additional volumes on the Deployment.
 volumes: []
+# -- Additional volume mounts on the container.
 volumeMounts: []

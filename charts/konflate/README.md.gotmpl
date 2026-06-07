@@ -1,0 +1,37 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Usage
+
+konflate ships as an OCI Helm chart. The only required value is `config.repo` — the
+forge URI of the repository to review:
+
+```sh
+helm install konflate oci://ghcr.io/home-operations/charts/konflate \
+  --set config.repo=github://owner/repo
+```
+
+By default konflate runs **anonymous and read-only**: no forge token, and the inbound
+webhook/refresh endpoints are disabled. To raise API rate limits or review private
+repositories set a token (`secret.token`); to enable webhook/push refreshes set
+`secret.webhookSecret` / `secret.pushToken` (or point `secret.existingSecret` at a
+Secret holding the `KONFLATE_*` keys).
+
+Persisting the on-disk caches and the git mirror is recommended for any non-trivial
+repo — set `persistence.enabled=true`. Expose the UI with either `ingress` or a
+Gateway API `httpRoute`.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

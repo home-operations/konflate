@@ -58,3 +58,8 @@ jobs:
 
       - name: Run helm lint
         run: mise run helm-lint
+
+      # Regenerate the chart README from Chart.yaml + values.yaml and fail if it
+      # drifted from what's committed (same shape as fmt-check / tidy-check).
+      - name: Check chart docs are current
+        run: mise run helm-docs-check
