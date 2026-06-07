@@ -73,6 +73,19 @@ repository:tag, with tag defaulting to the chart appVersion.
 {{- end }}
 
 {{/*
+Image for the `helm test` connection pod (konflate's own image is distroless, so
+the test uses a small image with a shell). A digest wins over the tag when set.
+*/}}
+{{- define "konflate.testImage" -}}
+{{- $img := .Values.tests.image -}}
+{{- if $img.digest -}}
+{{- printf "%s@%s" $img.repository $img.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $img.repository $img.tag -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Name of the Secret holding the sensitive KONFLATE_* values, or "" if none:
 an existing Secret wins; otherwise a chart-managed Secret is used only when at
 least one inline value is set.

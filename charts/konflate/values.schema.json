@@ -740,6 +740,45 @@
       "title": "serviceAccount",
       "type": "object"
     },
+    "tests": {
+      "description": "Config for the chart's `helm test` hook — a one-shot pod that curls the Service's /readyz to prove the release serves. Used only by `helm test`, never the workload.",
+      "properties": {
+        "image": {
+          "properties": {
+            "digest": {
+              "default": "sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028",
+              "description": "`helm test` image digest (sha256:…); pins immutably and wins over the tag when set.",
+              "title": "digest",
+              "type": "string"
+            },
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "`helm test` image pull policy.",
+              "title": "pullPolicy",
+              "type": "string"
+            },
+            "repository": {
+              "default": "docker.io/library/busybox",
+              "description": "`helm test` pod image; needs a shell with wget (konflate's own image is distroless).",
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "1.37.0",
+              "description": "`helm test` image tag.",
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "image",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "tests",
+      "type": "object"
+    },
     "tolerations": {
       "description": "Tolerations for pod scheduling.",
       "items": {

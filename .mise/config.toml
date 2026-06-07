@@ -85,6 +85,19 @@ run = "helm lint charts/konflate"
 description = "Render the Helm chart with example values"
 run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"
 
+[tasks.helm-test]
+description = "Install the chart into the current cluster (e.g. a kind context) and run `helm test`"
+# image.tag=latest: the chart's appVersion is a release-time placeholder (0.0.0),
+# so point at the published moving tag — the smoke test only needs a konflate that
+# serves /readyz. The repo is a placeholder; startup doesn't block on it. The trap
+# uninstalls on success or failure so the namespace is left clean.
+run = """
+trap 'helm uninstall konflate-e2e -n konflate-e2e --wait >/dev/null 2>&1 || true' EXIT
+set -e
+helm install konflate-e2e charts/konflate -n konflate-e2e --create-namespace --wait --timeout 5m --set image.tag=latest --set config.repo=github://home-operations/konflate-e2e
+helm test konflate-e2e -n konflate-e2e --logs
+"""
+
 [tasks.generate]
 description = "Regenerate the chart's committed README + values.schema.json from Chart.yaml + values.yaml"
 run = """
