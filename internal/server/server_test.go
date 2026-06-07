@@ -1,6 +1,7 @@
 package server
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -755,6 +756,63 @@ func TestServer_HealthAndSecurityHeaders(t *testing.T) {
 	}
 	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self'") {
 		t.Errorf("missing/weak CSP: %q", csp)
+	}
+}
+
+// TestServer_GzipJSON checks that JSON API responses are gzip-compressed when
+// the client accepts it, stay plain when it doesn't, and that a non-JSON
+// response (the text/plain health check) is never compressed.
+func TestServer_GzipJSON(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
+	h := s.mainHandler()
+
+	// With Accept-Encoding: gzip the JSON response is compressed, advertises it,
+	// drops its Content-Length, and gunzips back to a valid payload.
+	rec := do(h, "GET", "/api/meta", nil, map[string]string{"Accept-Encoding": "gzip"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("meta: got %d, want 200", rec.Code)
+	}
+	if enc := rec.Header().Get("Content-Encoding"); enc != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", enc)
+	}
+	if vary := rec.Header().Get("Vary"); !strings.Contains(vary, "Accept-Encoding") {
+		t.Errorf("Vary = %q, want it to include Accept-Encoding", vary)
+	}
+	if cl := rec.Header().Get("Content-Length"); cl != "" {
+		t.Errorf("Content-Length = %q, want empty (compressed length differs)", cl)
+	}
+	gr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatalf("gzip reader: %v", err)
+	}
+	var m api.Meta
+	if err := json.NewDecoder(gr).Decode(&m); err != nil {
+		t.Fatalf("decode gunzipped meta: %v", err)
+	}
+	if m.Repo != "acme/web" {
+		t.Errorf("gunzipped meta = %+v, want repo acme/web", m)
+	}
+
+	// Without Accept-Encoding the same endpoint returns plain (uncompressed) JSON.
+	rec = do(h, "GET", "/api/meta", nil, nil)
+	if enc := rec.Header().Get("Content-Encoding"); enc != "" {
+		t.Errorf("no Accept-Encoding: Content-Encoding = %q, want none", enc)
+	}
+	var plain api.Meta
+	mustJSON(t, rec, &plain) // decodes directly — proves the body isn't gzipped
+	if plain.Repo != "acme/web" {
+		t.Errorf("plain meta = %+v, want repo acme/web", plain)
+	}
+
+	// A non-JSON response (the text/plain health check) is never compressed, even
+	// when the client accepts gzip — the middleware keys off the response type.
+	rec = do(h, "GET", "/healthz", nil, map[string]string{"Accept-Encoding": "gzip"})
+	if enc := rec.Header().Get("Content-Encoding"); enc != "" {
+		t.Errorf("healthz Content-Encoding = %q, want none (text/plain not compressed)", enc)
+	}
+	if !strings.Contains(rec.Body.String(), "ok") {
+		t.Errorf("healthz body = %q, want plain text containing ok", rec.Body.String())
 	}
 }
 

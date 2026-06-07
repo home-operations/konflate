@@ -7,14 +7,18 @@ package server
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -190,7 +194,7 @@ func (s *Server) mainHandler() http.Handler {
 
 	mux.Handle("GET /", s.uiHandler())
 
-	return s.recoverer(s.accessLog(s.securityHeaders(mux)))
+	return s.recoverer(s.accessLog(s.securityHeaders(s.gzipJSON(mux))))
 }
 
 // securityHeaders applies a strict CSP and related headers to every response.
@@ -206,6 +210,97 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// gzipPool reuses gzip writers across requests.
+var gzipPool = sync.Pool{New: func() any { return gzip.NewWriter(io.Discard) }}
+
+// gzipJSON compresses application/json responses — the rendered diff is large
+// and highly compressible — when the client accepts gzip. It keys off the
+// Content-Type the handler set, so only JSON is wrapped: the embedded UI (which
+// does its own Range/conditional handling) and the hijacked websocket pass
+// through untouched, as do clients that don't send Accept-Encoding: gzip.
+func (s *Server) gzipJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz := &gzipResponseWriter{ResponseWriter: w}
+		defer gz.close()
+		next.ServeHTTP(gz, r)
+	})
+}
+
+// gzipResponseWriter starts compressing only once it sees a JSON Content-Type
+// (decided on the first WriteHeader/Write); until then it's a transparent
+// pass-through, so a non-JSON response — or the websocket upgrade, which
+// hijacks before writing — is never wrapped.
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	gz       *gzip.Writer
+	decided  bool
+	compress bool
+}
+
+func (g *gzipResponseWriter) decide() {
+	if g.decided {
+		return
+	}
+	g.decided = true
+	if !strings.HasPrefix(g.Header().Get("Content-Type"), "application/json") {
+		return
+	}
+	g.compress = true
+	h := g.Header()
+	h.Set("Content-Encoding", "gzip")
+	h.Add("Vary", "Accept-Encoding")
+	h.Del("Content-Length") // the compressed length differs; let it chunk
+	g.gz = gzipPool.Get().(*gzip.Writer)
+	g.gz.Reset(g.ResponseWriter)
+}
+
+func (g *gzipResponseWriter) WriteHeader(code int) {
+	g.decide()
+	g.ResponseWriter.WriteHeader(code)
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+	g.decide()
+	if g.compress {
+		return g.gz.Write(b)
+	}
+	return g.ResponseWriter.Write(b)
+}
+
+// close flushes and returns the gzip writer to the pool; a no-op when
+// compression never started.
+func (g *gzipResponseWriter) close() {
+	if g.gz != nil {
+		_ = g.gz.Close()
+		gzipPool.Put(g.gz)
+		g.gz = nil
+	}
+}
+
+func (g *gzipResponseWriter) Flush() {
+	if g.gz != nil {
+		_ = g.gz.Flush()
+	}
+	if f, ok := g.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (g *gzipResponseWriter) Unwrap() http.ResponseWriter { return g.ResponseWriter }
+
+// Hijack lets the websocket upgrade reach the underlying conn (it hijacks
+// before any write, so compression never started).
+func (g *gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := g.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("gzipResponseWriter: underlying ResponseWriter is not a Hijacker")
 }
 
 func (s *Server) accessLog(next http.Handler) http.Handler {
