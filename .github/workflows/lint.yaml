@@ -49,7 +49,7 @@ jobs:
         run: mise run lint
 
   helm-lint:
-    name: Helm Checks
+    name: Helm Lint
     runs-on: ubuntu-24.04
     permissions:
       contents: read

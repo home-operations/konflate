@@ -54,7 +54,7 @@ jobs:
         run: mise run test
 
   ui:
-    name: UI
+    name: UI Tests
     runs-on: ubuntu-24.04
     permissions:
       contents: read

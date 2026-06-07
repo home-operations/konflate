@@ -91,16 +91,12 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      # Build args come from mise, matching the release build (the Dockerfile reads
-      # NODE_VERSION / GO_VERSION).
       - name: Resolve toolchain versions
         id: tools
         run: |
           echo "go=$(mise config get tools.go)" >> "$GITHUB_OUTPUT"
           echo "node=$(mise config get tools.node)" >> "$GITHUB_OUTPUT"
 
-      # Build this PR's image (not a published tag) so the test exercises the code
-      # under review; the GHA layer cache speeds repeat builds.
       - name: Build image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
@@ -118,8 +114,6 @@ jobs:
 
       - name: Helm install + test
         env:
-          # Install the kind-loaded PR image; Never so the kubelet uses it instead
-          # of pulling the (nonexistent) e2e tag from the registry.
           KONFLATE_TEST_IMAGE_TAG: e2e
           KONFLATE_TEST_PULL_POLICY: Never
         run: |-

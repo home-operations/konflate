@@ -82,19 +82,6 @@ helm install konflate oci://ghcr.io/home-operations/charts/konflate \
 
 Notable values (see [`charts/konflate/values.yaml`](charts/konflate/values.yaml)):
 
-| Value                                            | Purpose                                                                      |
-| ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `config.repo` _(required)_                       | the [forge URI](#the-forge-uri) to review                                    |
-| `config.refreshInterval`                         | per-PR auto-refresh / re-list interval (default `30m`)                       |
-| `secret.token` / `.webhookSecret` / `.pushToken` | sensitive env, written to a Secret (or use `secret.existingSecret`)          |
-| `persistence.enabled`                            | keep the flate source cache across restarts (PVC)                            |
-| `ingress.enabled`                                | expose the UI via an Ingress                                                 |
-| `httpRoute.enabled`                              | expose the UI via a Gateway API `HTTPRoute` (set `parentRefs` + `hostnames`) |
-| `monitoring.serviceMonitor.enabled`              | scrape `/metrics` (Prometheus Operator)                                      |
-
-The pod runs read-only-rootfs as nonroot (65532) with the cache + clone dirs on
-mounted volumes.
-
 ## Configuration
 
 All configuration is via environment variables.
