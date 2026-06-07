@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.17](https://github.com/home-operations/konflate/compare/0.1.16...0.1.17) (2026-06-07)
+
+
+### Bug Fixes
+
+* **deps:** update dependency simple-icons (16.23.0 → 16.23.0) ([#57](https://github.com/home-operations/konflate/issues/57)) ([cdd8896](https://github.com/home-operations/konflate/commit/cdd8896164f268da91dfb6009fa5964950793f3b))
+* **deps:** update dependency svelte (5.56.2 → 5.56.2) ([#58](https://github.com/home-operations/konflate/issues/58)) ([2664dc5](https://github.com/home-operations/konflate/commit/2664dc5517ba38ce615e81f7db5567b95adb5bb8))
+* **engine:** adopt flate v0.3.3 Tree API — make clusterPath work ([#59](https://github.com/home-operations/konflate/issues/59)) ([3cf815f](https://github.com/home-operations/konflate/commit/3cf815f502af0ccb9d64134fa09a8816cc00de2e))
+
 ## [0.1.16](https://github.com/home-operations/konflate/compare/0.1.15...0.1.16) (2026-06-07)
 
 
