@@ -1175,6 +1175,9 @@ button.sum-pill:hover {
   content-visibility: auto;
   contain-intrinsic-size: 600px;
   contain-intrinsic-size: auto 600px;
+  /* A jumped-to section lands below the sticky switcher on mobile; --stuck is
+     the switcher's measured height (Diffs.svelte), 0 on desktop. */
+  scroll-margin-top: var(--stuck, 0px);
 }
 .diff-section + .diff-section {
   border-top: 1px solid var(--border);
@@ -1769,16 +1772,53 @@ kbd {
 @media (max-width: 900px) {
   .diffs {
     grid-template-columns: 1fr;
+    height: auto; /* page-scroll: size to content; .review owns the scroll */
   }
   .rail {
     display: none;
   }
-  /* With the tree rail gone, the switcher bar carries the resource navigation. */
+  /* With the tree rail gone, the switcher bar carries the resource navigation,
+     and it's the one bar pinned while the diff scrolls (see below). */
   .diff-switcher {
     display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 6;
   }
   .review-head {
     flex-wrap: wrap;
+  }
+  /* Reclaim the viewport for the diff. On desktop the diff pane scrolls inside
+     fixed chrome, but on a short phone that chrome (topbar + PR title/meta +
+     merge-command) leaves the diff only ~half the screen. So on mobile the
+     whole review column scrolls: the header scrolls away under the sticky
+     switcher and the diff gets the full viewport. The pane and its wrappers
+     stop being scroll containers and size to content; .review scrolls instead.
+     (Diffs.svelte points the scrollspy + lazy-mount observer at .review here.) */
+  .review {
+    overflow-y: auto;
+  }
+  .review-body {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+  .diff-main {
+    overflow: visible;
+  }
+  .diff-pane {
+    flex: none;
+    overflow: visible;
+  }
+  /* The per-section header isn't sticky on mobile — the switcher (which shows
+     the current resource's name) is the single pinned bar, so there's nothing
+     for a second sticky element to fight or overlap. */
+  .res-header {
+    position: static;
+  }
+  /* The last section can still scroll up under the switcher so it can become
+     the current section (the scrollspy keys off "top crossed the top"). */
+  .diff-section:last-child {
+    min-height: 100dvh;
   }
 }
 

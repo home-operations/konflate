@@ -803,6 +803,33 @@ test('mobile: back and prev/next share one header row, title below (compact chro
   await expect(page.locator('.kbd-btn:visible')).toHaveCount(0);
 });
 
+test('mobile: the PR header scrolls away and the switcher stays pinned', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  await page.goto('/#/pr/142');
+  await page.locator('.impact').waitFor();
+
+  // On mobile the whole review column scrolls (not the inner diff pane), so the
+  // header can scroll away and the diff gets the full viewport. The switcher is
+  // the one bar pinned throughout.
+  const review = page.locator('.review');
+  const head = page.locator('.review-head');
+  const switcher = page.locator('.diff-switcher');
+  await expect(switcher).toBeVisible();
+  const headYBefore = (await head.boundingBox())?.y ?? 0;
+
+  await review.evaluate((el) => (el.scrollTop = el.scrollHeight));
+
+  // The scrollspy is wired to .review (not the now-static pane), so scrolling
+  // still drives the selection to the last resource…
+  await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
+  // …the switcher stayed pinned at the top…
+  await expect(switcher).toBeVisible();
+  // …and the header scrolled up out of the way.
+  const headYAfter = (await head.boundingBox())?.y ?? 0;
+  expect(headYAfter).toBeLessThan(headYBefore);
+});
+
 test('captures list + overview screenshots (light)', async ({ page }) => {
   await stubApi(page);
   await page.addInitScript(() => localStorage.setItem('konflate-theme', 'light'));
