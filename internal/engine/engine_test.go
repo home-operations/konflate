@@ -1,10 +1,14 @@
 package engine
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/home-operations/flate/pkg/manifest"
+	"github.com/home-operations/flate/pkg/orchestrator"
 
 	"github.com/home-operations/konflate/internal/diff"
 )
@@ -20,6 +24,44 @@ func res(kind, ns, name string, extra map[string]any) map[string]any {
 		m[k] = v
 	}
 	return m
+}
+
+func TestRenderUsable(t *testing.T) {
+	t.Parallel()
+	ok := &orchestrator.Result{} // a non-nil Result = that side bootstrapped and rendered
+	cases := []struct {
+		name       string
+		base, head orchestrator.Rendered
+		err        error
+		want       bool
+	}{
+		{"clean render", rendered(ok), rendered(ok), nil, true},
+		// Per-resource reconcile failures are advisory: flate still produced a
+		// diff (Result non-nil) and the failures surface via Failures, so the
+		// diff must still render — the regression this guards against.
+		{"per-resource failures still usable", rendered(ok), rendered(ok), errors.New("reconcile completed with 2 failure(s)"), true},
+		// A nil Result is a fatal Bootstrap error on that side — nothing to show.
+		{"fatal base bootstrap", rendered(nil), rendered(ok), errors.New("bootstrap: boom"), false},
+		{"fatal head bootstrap", rendered(ok), rendered(nil), errors.New("bootstrap: boom"), false},
+		// An incomplete render (DiffTimeout / cancellation) would mislead, so a
+		// context error aborts even though Result is non-nil.
+		{"deadline exceeded", rendered(ok), rendered(ok), fmt.Errorf("render: %w", context.DeadlineExceeded), false},
+		{"canceled", rendered(ok), rendered(ok), context.Canceled, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := renderUsable(tc.base, tc.head, tc.err); got != tc.want {
+				t.Errorf("renderUsable(%s) = %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// rendered wraps a Result in the orchestrator.Rendered shape renderUsable reads
+// (the embedded *Orchestrator is unused by the gate).
+func rendered(result *orchestrator.Result) orchestrator.Rendered {
+	return orchestrator.Rendered{Result: result}
 }
 
 func TestPairChanges(t *testing.T) {

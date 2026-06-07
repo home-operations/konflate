@@ -12,6 +12,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"runtime"
 	"slices"
@@ -112,11 +113,15 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	// files differ between the merge-base and head trees, plus the dependency
 	// closure flate computes — not the whole cluster, the dominant cold-start
 	// cost saver), sharing e.cache so the head render reuses the base render's
-	// fetched charts / OCI layers / git sources, concurrently. A nil Result
-	// means a fatal Bootstrap error; per-resource render failures keep the
-	// Result non-nil and are surfaced via renderFailures below.
+	// fetched charts / OCI layers / git sources, concurrently.
+	//
+	// Per flate's contract the returned err is advisory: a side's Result is nil
+	// only on a fatal Bootstrap error, whereas per-resource reconcile failures
+	// keep Result non-nil and ARE the diff's render failures — they must flow to
+	// renderFailures below, not abort the whole diff (a PR that breaks a chart is
+	// exactly the one a reviewer needs to see). renderUsable gates on that.
 	base, head, err := orchestrator.RenderTrees(ctx, baseTree, headTree, e.renderCfg())
-	if err != nil {
+	if !renderUsable(base, head, err) {
 		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
 	}
 
@@ -128,6 +133,23 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		Images:   imageChanges(changes),
 		Failures: renderFailures(head.Result.Failed),
 	})
+}
+
+// renderUsable reports whether a RenderTrees outcome yields a diff worth
+// returning. flate's err is advisory (see RenderTrees), so this gates on what's
+// actually usable rather than on err being nil:
+//   - A nil Result is a fatal Bootstrap error — that side never rendered, so
+//     there is no diff to show.
+//   - A cancelled or timed-out context (konflate's DiffTimeout) left the render
+//     incomplete: resources that never reconciled would read as missing, so a
+//     partial diff would mislead.
+//   - Otherwise a non-nil err is per-resource reconcile failures: the diff is
+//     real and those failures surface via renderFailures, so proceed.
+func renderUsable(base, head orchestrator.Rendered, err error) bool {
+	if base.Result == nil || head.Result == nil {
+		return false
+	}
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
 // renderCfg is the flate render tuning shared by both sides of a
