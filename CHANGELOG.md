@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.14](https://github.com/home-operations/konflate/compare/0.1.13...0.1.14) (2026-06-07)
+
+
+### Features
+
+* **ui:** bundle Geist + Geist Mono; sans for prose, mono for code ([#43](https://github.com/home-operations/konflate/issues/43)) ([1a51a1d](https://github.com/home-operations/konflate/commit/1a51a1d58731f18a939b540791eb8abfac03ee2b))
+
+
+### Performance Improvements
+
+* **ui:** lazy-mount diff tables as they near the viewport ([#46](https://github.com/home-operations/konflate/issues/46)) ([e798156](https://github.com/home-operations/konflate/commit/e798156502adaa14198a499c89e31e095289e8ea))
+
 ## [0.1.13](https://github.com/home-operations/konflate/compare/0.1.12...0.1.13) (2026-06-06)
 
 
