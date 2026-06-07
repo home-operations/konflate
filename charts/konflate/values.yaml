@@ -300,7 +300,7 @@ volumeMounts: []
 tests:
   image:
     # -- `helm test` pod image; needs a shell with wget (konflate's own image is distroless).
-    repository: docker.io/library/busybox
+    repository: mirror.gcr.io/busybox
     # -- `helm test` image tag.
     tag: "1.37.0"
     # -- `helm test` image digest (sha256:…); pins immutably and wins over the tag when set.

@@ -758,7 +758,7 @@
               "type": "string"
             },
             "repository": {
-              "default": "docker.io/library/busybox",
+              "default": "mirror.gcr.io/busybox",
               "description": "`helm test` pod image; needs a shell with wget (konflate's own image is distroless).",
               "title": "repository",
               "type": "string"
