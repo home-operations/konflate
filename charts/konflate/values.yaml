@@ -13,6 +13,7 @@ image:
   tag: ""
   # Pins the image by digest (sha256:…). When set it takes precedence over tag;
   # the release pipeline fills it with the published image's digest.
+
   # -- Pin the image by digest (sha256:…); when set, overrides the tag.
   digest: ""
 
@@ -27,16 +28,19 @@ fullnameOverride: ""
 config:
   # KONFLATE_REPO — forge URI of the repository to review (required), e.g.
   # github://owner/repo, gitlab://group/repo, forgejo://git.example.com/owner/repo.
+
   # -- (required) Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo).
   repo: ""
   # KONFLATE_CLUSTER_PATH — directory flate renders from (the GitRepository root
   # that Flux spec.path values resolve against). Empty = repo root, which is
   # correct for the standard layout (root-relative paths like ./kubernetes/...).
+
   # -- Directory flate renders from; empty = repo root (correct for the standard root-relative layout).
   clusterPath: ""
   # KONFLATE_REFRESH_INTERVAL — how often each open PR re-renders if no webhook
   # refreshed it sooner, and how often the open-PR list is reconciled (Go
   # duration, e.g. "15m"). The missed-webhook backstop.
+
   # -- How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).
   refreshInterval: 30m
   # -- Log level: debug, info, warn, or error.
@@ -45,6 +49,7 @@ config:
   logFormat: json
   # KONFLATE_MAX_DIFF_CONC — max concurrent diff renders. 0 = auto (derived from
   # the pod's CPU limit via GOMAXPROCS, capped at 4).
+
   # -- Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).
   maxDiffConcurrency: 0
   # --- flate render tuning (advanced) ---------------------------------------
@@ -53,7 +58,7 @@ config:
   # disk caches live under the persisted cache volume (see `persistence`), so
   # sizing that volume matters as much as these caps. Quote values; use "0" to
   # disable a cache.
-  #
+
   # -- Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = flate default (256); "0" disables.
   helmTemplateCacheMb: ""
   # -- Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables.
@@ -67,15 +72,18 @@ config:
   # KONFLATE_DIFF_TIMEOUT — hard cap on a single PR render end-to-end (Go
   # duration). Frees a render slot if a PR hangs or is hostile. Default 10m;
   # lower on public/untrusted instances. Empty uses the default; "0" disables.
+
   # -- Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances.
   diffTimeout: ""
   # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
   # KONFLATE_CLOSED_PR_MAX — cap on retained merged PRs (most-recent win); this
   # count, not the age, is what bounds memory. 0 disables the cap.
+
   # -- Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap.
   closedPrMax: 25
   # KONFLATE_CLOSED_PR_TTL — how long a merged PR is kept (Go duration, e.g.
   # "720h" = 30d). 0 disables the age cap. In-memory: a restart clears the shelf.
+
   # -- How long a merged PR is kept (Go duration); 0 disables the age cap. In-memory — a restart clears the shelf.
   closedPrTtl: 336h
   # KONFLATE_MERGE_COMMAND — optional Go text/template for the "copy to merge"
@@ -83,22 +91,23 @@ config:
   # reviewer pastes it into their own shell. Empty = the forge default
   # (gh / glab / tea). Only .Number and .Repo are available, both shell-safe.
   # Example: "gh pr merge {{ .Number }} --repo {{ .Repo }} --squash --delete-branch"
+
   # -- Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it.
   mergeCommand: ""
   # Extra raw env vars merged into the container (advanced). konflate already
   # derives GOMEMLIMIT from the cgroup memory limit (90%) and GOMAXPROCS from the
   # CPU limit (Go runtime), so set those here only to override.
+
   # -- Extra raw env vars merged into the container (advanced).
   extraEnv: []
   # - name: GOMEMLIMIT
   #   value: "900MiB"
 
-# Sensitive settings (forge token + inbound secrets). Provide them inline and a
-# Secret is created, or point at an existing Secret whose keys are the KONFLATE_*
-# variable names. Leave everything empty for anonymous, read-only mode.
+# Sensitive settings — a forge token plus inbound webhook/push secrets (all empty = anonymous, read-only mode).
 secret:
   # Pre-existing Secret with keys KONFLATE_TOKEN / KONFLATE_WEBHOOK_SECRET /
   # KONFLATE_PUSH_TOKEN. Takes precedence over the inline values below.
+
   # -- Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below.
   existingSecret: ""
   # -- Forge API token. Empty = anonymous, read-only mode.
@@ -167,9 +176,7 @@ ingress:
   #   hosts:
   #     - konflate.example.com
 
-# Gateway API HTTPRoute — an alternative to `ingress` for clusters using the
-# Gateway API. Renders one HTTPRoute pointing at the UI service port. Named
-# `httpRoute` (not `route`) to avoid confusion with the OpenShift Route kind.
+# Gateway API HTTPRoute — an alternative to `ingress` for exposing the UI; renders one route to the UI service port. Named `httpRoute` (not `route`) to avoid confusion with the OpenShift Route kind.
 httpRoute:
   # -- Expose the UI via a Gateway API HTTPRoute (alternative to ingress).
   enabled: false
@@ -186,9 +193,11 @@ httpRoute:
   #  - name: gateway
   #    namespace: gateway
   #    sectionName: https
+
   # -- Hostnames matched against the Host header (templated).
   hostnames: []
   #  - konflate.example.com
+
   # -- Custom rules prepended before the default rule (templated).
   additionalRules: []
   # -- Filters applied to the default rule.
@@ -200,15 +209,11 @@ httpRoute:
         value: /
   # Redirect HTTP→HTTPS (301) instead of routing to the backend. Requires a
   # Gateway with both HTTP and HTTPS listeners; matches/filters are ignored.
+
   # -- Redirect HTTP→HTTPS (301) instead of routing to the backend (needs HTTP+HTTPS listeners).
   httpsRedirect: false
 
-# Persist konflate's on-disk caches across restarts: the flate source cache
-# (Helm charts / OCI layers / git objects), the persistent Helm-render and
-# kustomize-stage caches, and the bare git mirror of the repo. When disabled an
-# emptyDir is used and all of it is rebuilt on restart — a slower cold start and
-# a fresh full clone. The per-diff clone dir is always ephemeral. Recommended
-# for any non-trivial repo.
+# Persist konflate's on-disk caches and the bare git mirror across restarts; with it disabled they live in an emptyDir and are rebuilt on each restart. Recommended for any non-trivial repo.
 persistence:
   # -- Persist caches + the git mirror across restarts (recommended for any non-trivial repo).
   enabled: false

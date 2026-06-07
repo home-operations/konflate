@@ -1,0 +1,770 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "affinity": {
+      "description": "Affinity rules for pod scheduling.",
+      "required": [],
+      "title": "affinity",
+      "type": "object"
+    },
+    "config": {
+      "description": "konflate configuration (the non-secret KONFLATE_* environment variables).",
+      "properties": {
+        "closedPrMax": {
+          "default": 25,
+          "description": "Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap.",
+          "title": "closedPrMax",
+          "type": "integer"
+        },
+        "closedPrTtl": {
+          "default": "336h",
+          "description": "How long a merged PR is kept (Go duration); 0 disables the age cap. In-memory — a restart clears the shelf.",
+          "title": "closedPrTtl",
+          "type": "string"
+        },
+        "clusterPath": {
+          "default": "",
+          "description": "Directory flate renders from; empty = repo root (correct for the standard root-relative layout).",
+          "title": "clusterPath",
+          "type": "string"
+        },
+        "diffTimeout": {
+          "default": "",
+          "description": "Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); \"0\" disables. Lower on untrusted instances.",
+          "title": "diffTimeout",
+          "type": "string"
+        },
+        "extraEnv": {
+          "description": "Extra raw env vars merged into the container (advanced).",
+          "items": {
+            "required": []
+          },
+          "title": "extraEnv",
+          "type": "array"
+        },
+        "helmRenderCacheMb": {
+          "default": "",
+          "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",
+          "title": "helmRenderCacheMb",
+          "type": "string"
+        },
+        "helmTemplateCacheMb": {
+          "default": "",
+          "description": "Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = flate default (256); \"0\" disables.",
+          "title": "helmTemplateCacheMb",
+          "type": "string"
+        },
+        "logFormat": {
+          "default": "json",
+          "description": "Log format: json or text.",
+          "title": "logFormat",
+          "type": "string"
+        },
+        "logLevel": {
+          "default": "info",
+          "description": "Log level: debug, info, warn, or error.",
+          "title": "logLevel",
+          "type": "string"
+        },
+        "maxDiffConcurrency": {
+          "default": 0,
+          "description": "Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).",
+          "title": "maxDiffConcurrency",
+          "type": "integer"
+        },
+        "mergeCommand": {
+          "default": "",
+          "description": "Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it.",
+          "title": "mergeCommand",
+          "type": "string"
+        },
+        "refreshInterval": {
+          "default": "30m",
+          "description": "How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).",
+          "title": "refreshInterval",
+          "type": "string"
+        },
+        "renderConcurrency": {
+          "default": "",
+          "description": "Advanced: cap on reconcile goroutines within one render. Empty/\"0\" = auto (NumCPU*4).",
+          "title": "renderConcurrency",
+          "type": "string"
+        },
+        "repo": {
+          "default": "",
+          "description": "(required) Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo).",
+          "title": "repo",
+          "type": "string"
+        },
+        "sourceRetryAttempts": {
+          "default": "",
+          "description": "Advanced: tries per source fetch on transient network errors. Empty = default (3); \"1\" disables retry.",
+          "title": "sourceRetryAttempts",
+          "type": "string"
+        },
+        "stageCacheMb": {
+          "default": "",
+          "description": "Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); \"0\" disables size-based eviction.",
+          "title": "stageCacheMb",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "config",
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "default": "",
+      "description": "Override the full release name.",
+      "title": "fullnameOverride",
+      "type": "string"
+    },
+    "global": {
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "httpRoute": {
+      "description": "Gateway API HTTPRoute — an alternative to `ingress` for exposing the UI; renders one route to the UI service port. Named `httpRoute` (not `route`) to avoid confusion with the OpenShift Route kind.",
+      "properties": {
+        "additionalRules": {
+          "description": "Custom rules prepended before the default rule (templated).",
+          "items": {
+            "required": []
+          },
+          "title": "additionalRules",
+          "type": "array"
+        },
+        "annotations": {
+          "description": "HTTPRoute annotations.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "apiVersion": {
+          "default": "",
+          "description": "HTTPRoute apiVersion; empty defaults to gateway.networking.k8s.io/v1.",
+          "title": "apiVersion",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Expose the UI via a Gateway API HTTPRoute (alternative to ingress).",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "filters": {
+          "description": "Filters applied to the default rule.",
+          "items": {
+            "required": []
+          },
+          "title": "filters",
+          "type": "array"
+        },
+        "hostnames": {
+          "description": "Hostnames matched against the Host header (templated).",
+          "items": {
+            "required": []
+          },
+          "title": "hostnames",
+          "type": "array"
+        },
+        "httpsRedirect": {
+          "default": false,
+          "description": "Redirect HTTP→HTTPS (301) instead of routing to the backend (needs HTTP+HTTPS listeners).",
+          "title": "httpsRedirect",
+          "type": "boolean"
+        },
+        "kind": {
+          "default": "",
+          "description": "HTTPRoute kind; empty defaults to HTTPRoute.",
+          "title": "kind",
+          "type": "string"
+        },
+        "labels": {
+          "description": "HTTPRoute labels.",
+          "required": [],
+          "title": "labels",
+          "type": "object"
+        },
+        "matches": {
+          "description": "Match conditions for the default rule.",
+          "items": {
+            "anyOf": [
+              {
+                "properties": {
+                  "path": {
+                    "properties": {
+                      "type": {
+                        "default": "PathPrefix",
+                        "title": "type",
+                        "type": "string"
+                      },
+                      "value": {
+                        "default": "/",
+                        "title": "value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "title": "path",
+                    "type": "object"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            ],
+            "required": []
+          },
+          "title": "matches",
+          "type": "array"
+        },
+        "parentRefs": {
+          "description": "Gateways (and listeners) this route attaches to.",
+          "items": {
+            "required": []
+          },
+          "title": "parentRefs",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "httpRoute",
+      "type": "object"
+    },
+    "image": {
+      "properties": {
+        "digest": {
+          "default": "",
+          "description": "Pin the image by digest (sha256:…); when set, overrides the tag.",
+          "title": "digest",
+          "type": "string"
+        },
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "description": "Image pull policy.",
+          "title": "pullPolicy",
+          "type": "string"
+        },
+        "repository": {
+          "default": "ghcr.io/home-operations/konflate",
+          "description": "Image repository.",
+          "title": "repository",
+          "type": "string"
+        },
+        "tag": {
+          "default": "",
+          "description": "Overrides the image tag; defaults to the chart appVersion.",
+          "title": "tag",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "image",
+      "type": "object"
+    },
+    "imagePullSecrets": {
+      "description": "Image pull secrets for private registries.",
+      "items": {
+        "required": []
+      },
+      "title": "imagePullSecrets",
+      "type": "array"
+    },
+    "ingress": {
+      "properties": {
+        "annotations": {
+          "description": "Ingress annotations.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "className": {
+          "default": "",
+          "description": "IngressClass name.",
+          "title": "className",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Expose the UI via an Ingress.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "hosts": {
+          "description": "Ingress hosts and their paths.",
+          "items": {
+            "anyOf": [
+              {
+                "properties": {
+                  "host": {
+                    "default": "konflate.example.com",
+                    "title": "host",
+                    "type": "string"
+                  },
+                  "paths": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "path": {
+                              "default": "/",
+                              "title": "path",
+                              "type": "string"
+                            },
+                            "pathType": {
+                              "default": "Prefix",
+                              "title": "pathType",
+                              "type": "string"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
+                        }
+                      ],
+                      "required": []
+                    },
+                    "title": "paths",
+                    "type": "array"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            ],
+            "required": []
+          },
+          "title": "hosts",
+          "type": "array"
+        },
+        "tls": {
+          "description": "Ingress TLS configuration.",
+          "items": {
+            "required": []
+          },
+          "title": "tls",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "ingress",
+      "type": "object"
+    },
+    "livenessProbe": {
+      "description": "Liveness probe.",
+      "properties": {
+        "httpGet": {
+          "properties": {
+            "path": {
+              "default": "/healthz",
+              "title": "path",
+              "type": "string"
+            },
+            "port": {
+              "default": "http",
+              "title": "port",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "httpGet",
+          "type": "object"
+        },
+        "initialDelaySeconds": {
+          "default": 10,
+          "title": "initialDelaySeconds",
+          "type": "integer"
+        },
+        "periodSeconds": {
+          "default": 20,
+          "title": "periodSeconds",
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "title": "livenessProbe",
+      "type": "object"
+    },
+    "monitoring": {
+      "properties": {
+        "serviceMonitor": {
+          "properties": {
+            "annotations": {
+              "description": "ServiceMonitor annotations.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Create a Prometheus Operator ServiceMonitor (requires its CRDs).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "interval": {
+              "default": "30s",
+              "description": "Scrape interval.",
+              "title": "interval",
+              "type": "string"
+            },
+            "labels": {
+              "description": "ServiceMonitor labels.",
+              "required": [],
+              "title": "labels",
+              "type": "object"
+            },
+            "metricRelabelings": {
+              "description": "Prometheus metric relabelings.",
+              "items": {
+                "required": []
+              },
+              "title": "metricRelabelings",
+              "type": "array"
+            },
+            "path": {
+              "default": "/metrics",
+              "description": "Metrics path.",
+              "title": "path",
+              "type": "string"
+            },
+            "relabelings": {
+              "description": "Prometheus relabelings.",
+              "items": {
+                "required": []
+              },
+              "title": "relabelings",
+              "type": "array"
+            },
+            "scrapeTimeout": {
+              "default": "10s",
+              "description": "Scrape timeout.",
+              "title": "scrapeTimeout",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "serviceMonitor",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "monitoring",
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "",
+      "description": "Override the chart name used in resource names.",
+      "title": "nameOverride",
+      "type": "string"
+    },
+    "nodeSelector": {
+      "description": "Node selector for pod scheduling.",
+      "required": [],
+      "title": "nodeSelector",
+      "type": "object"
+    },
+    "persistence": {
+      "description": "Persist konflate's on-disk caches and the bare git mirror across restarts; with it disabled they live in an emptyDir and are rebuilt on each restart. Recommended for any non-trivial repo.",
+      "properties": {
+        "accessModes": {
+          "description": "PVC access modes.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "required": []
+          },
+          "title": "accessModes",
+          "type": "array"
+        },
+        "annotations": {
+          "description": "PVC annotations.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Persist caches + the git mirror across restarts (recommended for any non-trivial repo).",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "default": "",
+          "description": "Use an existing PVC instead of creating one.",
+          "title": "existingClaim",
+          "type": "string"
+        },
+        "size": {
+          "default": "5Gi",
+          "description": "PVC size.",
+          "title": "size",
+          "type": "string"
+        },
+        "storageClass": {
+          "default": "",
+          "description": "StorageClass for the created PVC.",
+          "title": "storageClass",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "persistence",
+      "type": "object"
+    },
+    "podAnnotations": {
+      "description": "Annotations added to the pod.",
+      "required": [],
+      "title": "podAnnotations",
+      "type": "object"
+    },
+    "podLabels": {
+      "description": "Labels added to the pod.",
+      "required": [],
+      "title": "podLabels",
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "description": "Pod-level securityContext (runs as non-root uid/gid 65532 with the RuntimeDefault seccomp profile).",
+      "properties": {
+        "fsGroup": {
+          "default": 65532,
+          "title": "fsGroup",
+          "type": "integer"
+        },
+        "runAsGroup": {
+          "default": 65532,
+          "title": "runAsGroup",
+          "type": "integer"
+        },
+        "runAsNonRoot": {
+          "default": true,
+          "title": "runAsNonRoot",
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "default": 65532,
+          "title": "runAsUser",
+          "type": "integer"
+        },
+        "seccompProfile": {
+          "properties": {
+            "type": {
+              "default": "RuntimeDefault",
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "seccompProfile",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "podSecurityContext",
+      "type": "object"
+    },
+    "readinessProbe": {
+      "description": "Readiness probe.",
+      "properties": {
+        "httpGet": {
+          "properties": {
+            "path": {
+              "default": "/readyz",
+              "title": "path",
+              "type": "string"
+            },
+            "port": {
+              "default": "http",
+              "title": "port",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "httpGet",
+          "type": "object"
+        },
+        "initialDelaySeconds": {
+          "default": 5,
+          "title": "initialDelaySeconds",
+          "type": "integer"
+        },
+        "periodSeconds": {
+          "default": 10,
+          "title": "periodSeconds",
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "title": "readinessProbe",
+      "type": "object"
+    },
+    "replicaCount": {
+      "default": 1,
+      "description": "Number of konflate replicas (it's stateless behind the Service).",
+      "title": "replicaCount",
+      "type": "integer"
+    },
+    "resources": {
+      "description": "Pod resource requests/limits. A memory limit drives GOMEMLIMIT (set to 90%); a CPU limit right-sizes GOMAXPROCS.",
+      "required": [],
+      "title": "resources",
+      "type": "object"
+    },
+    "secret": {
+      "description": "Sensitive settings — a forge token plus inbound webhook/push secrets (all empty = anonymous, read-only mode).",
+      "properties": {
+        "existingSecret": {
+          "default": "",
+          "description": "Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below.",
+          "title": "existingSecret",
+          "type": "string"
+        },
+        "pushToken": {
+          "default": "",
+          "description": "Push token; enables POST /api/prs/{n}/refresh (authenticated mode).",
+          "title": "pushToken",
+          "type": "string"
+        },
+        "token": {
+          "default": "",
+          "description": "Forge API token. Empty = anonymous, read-only mode.",
+          "title": "token",
+          "type": "string"
+        },
+        "webhookSecret": {
+          "default": "",
+          "description": "Webhook secret; enables POST /hooks (authenticated mode).",
+          "title": "webhookSecret",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "secret",
+      "type": "object"
+    },
+    "securityContext": {
+      "description": "Container securityContext (no privilege escalation, read-only root filesystem, drops ALL capabilities).",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "default": false,
+          "title": "allowPrivilegeEscalation",
+          "type": "boolean"
+        },
+        "capabilities": {
+          "properties": {
+            "drop": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "title": "drop",
+              "type": "array"
+            }
+          },
+          "required": [],
+          "title": "capabilities",
+          "type": "object"
+        },
+        "readOnlyRootFilesystem": {
+          "default": true,
+          "title": "readOnlyRootFilesystem",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "securityContext",
+      "type": "object"
+    },
+    "service": {
+      "properties": {
+        "metricsPort": {
+          "default": 9090,
+          "description": "Operational /metrics port.",
+          "title": "metricsPort",
+          "type": "integer"
+        },
+        "port": {
+          "default": 8080,
+          "description": "UI / API / websocket port.",
+          "title": "port",
+          "type": "integer"
+        },
+        "type": {
+          "default": "ClusterIP",
+          "description": "Service type.",
+          "title": "type",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "service",
+      "type": "object"
+    },
+    "serviceAccount": {
+      "properties": {
+        "annotations": {
+          "description": "Annotations for the ServiceAccount.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "automount": {
+          "default": true,
+          "description": "Automount the ServiceAccount API token.",
+          "title": "automount",
+          "type": "boolean"
+        },
+        "create": {
+          "default": true,
+          "description": "Create a ServiceAccount.",
+          "title": "create",
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "description": "ServiceAccount name; generated from the release name if empty.",
+          "title": "name",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "serviceAccount",
+      "type": "object"
+    },
+    "tolerations": {
+      "description": "Tolerations for pod scheduling.",
+      "items": {
+        "required": []
+      },
+      "title": "tolerations",
+      "type": "array"
+    },
+    "volumeMounts": {
+      "description": "Additional volume mounts on the container.",
+      "items": {
+        "required": []
+      },
+      "title": "volumeMounts",
+      "type": "array"
+    },
+    "volumes": {
+      "description": "Additional volumes on the Deployment.",
+      "items": {
+        "required": []
+      },
+      "title": "volumes",
+      "type": "array"
+    }
+  },
+  "required": [],
+  "type": "object"
+}

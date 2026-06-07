@@ -7,6 +7,7 @@
 # `mise tasks` lists tasks; `mise run <task>` runs one.
 
 [tools]
+"aqua:dadav/helm-schema" = "0.23.4"
 go = "1.26.4"
 golangci-lint = "2.12.2"
 helm = "4.2.0"
@@ -84,15 +85,23 @@ run = "helm lint charts/konflate"
 description = "Render the Helm chart with example values"
 run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"
 
-[tasks.helm-docs]
-description = "Generate the Helm chart README from Chart.yaml + values.yaml"
-run = "helm-docs --chart-search-root=charts --log-level=warn"
-
-[tasks.helm-docs-check]
-description = "Fail if the chart README is stale (CI gate)"
+[tasks.generate]
+description = "Regenerate the chart's committed README + values.schema.json from Chart.yaml + values.yaml"
 run = """
 helm-docs --chart-search-root=charts --log-level=warn
-git diff --exit-code charts/konflate/README.md
+# required/additionalProperties are skipped so the schema stays permissive:
+# values.yaml supplies every default (nothing is user-required) and the free-form
+# maps (annotations, extraEnv, …) must stay open. Descriptions come from each key's
+# `# --` helm-docs line, so they match the README.
+helm-schema --chart-search-root charts/konflate --skip-auto-generation required,additionalProperties
+oxfmt charts/konflate/values.schema.json
+"""
+
+[tasks.generate-check]
+description = "Fail if the generated chart README/schema are stale (CI gate)"
+run = """
+mise run generate
+git diff --exit-code charts/konflate/README.md charts/konflate/values.schema.json
 """
 
 [tasks.dev]
