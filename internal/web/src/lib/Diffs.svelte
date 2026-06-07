@@ -22,6 +22,14 @@
 
   let pane = $state<HTMLElement | null>(null);
 
+  // Lazy-mount: every resource's <section> wrapper and its sticky header stay
+  // in the DOM (so the tree, scrollspy, deep-links and j/k keep working), but
+  // the heavy diff <table> inside only mounts once its section nears the
+  // viewport. Mount-once — a section never unmounts — so expand state and the
+  // scroll position never churn. On a large PR this turns "build every table up
+  // front" into "build the few you're actually looking at": the render win.
+  let mounted = $state<Record<string, boolean>>({});
+
   // The selection the scrollspy last derived. Navigation (tree click, j/k,
   // deep link) only scrolls when the route disagrees with it, so scroll-driven
   // route updates never re-scroll under the reader. Diffs remounts per PR (the
@@ -32,6 +40,10 @@
     const target = sel;
     const present = resources; // re-run when the rendered resource set changes
     if (!pane || target === spySel) return;
+    // A jumped-to section (deep link, tree click, j/k) mounts immediately so its
+    // real table is in place as we scroll to it — no skeleton at the destination,
+    // and the scroll lands on real content rather than a placeholder estimate.
+    if (target !== 'summary') mounted[target] = true;
     // CSS.escape: `sel` comes from the URL hash, and an unescaped quote/bracket
     // would make querySelector throw inside the effect.
     const section = pane.querySelector(`[data-sel="${CSS.escape(target)}"]`);
@@ -69,6 +81,55 @@
         replace({ name: 'review', pr: router.route.pr, sel: cur === 'summary' ? null : cur });
       }
     });
+  }
+
+  // One observer for every resource section, rooted on the scroll pane. The
+  // generous margin mounts a section a couple of viewports before it scrolls in,
+  // so the real table is ready and there's no skeleton flash in normal reading.
+  // Sections register through the `lazy` action; any that mount before this
+  // effect builds the observer wait in `pending`.
+  let io: IntersectionObserver | null = null;
+  const pending = new Set<HTMLElement>();
+
+  $effect(() => {
+    if (!pane) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      // No observer (an ancient browser, or a non-DOM env): mount everything,
+      // i.e. fall back to the previous always-rendered behavior.
+      for (const r of resources) mounted[r.id] = true;
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const id = (e.target as HTMLElement).dataset.sel;
+          if (id) mounted[id] = true;
+          obs.unobserve(e.target); // mount-once: never tear a mounted table back down
+        }
+      },
+      { root: pane, rootMargin: '200% 0px' },
+    );
+    io = obs;
+    for (const el of pending) obs.observe(el);
+    pending.clear();
+    return () => {
+      obs.disconnect();
+      if (io === obs) io = null;
+    };
+  });
+
+  // Action on each resource <section>: observe it (or queue it until the
+  // observer exists), and stop observing if the section is removed.
+  function lazy(node: HTMLElement) {
+    if (io) io.observe(node);
+    else pending.add(node);
+    return {
+      destroy() {
+        io?.unobserve(node);
+        pending.delete(node);
+      },
+    };
   }
 </script>
 
@@ -113,7 +174,9 @@
         <Overview />
       </section>
       {#each resources as r (r.id)}
-        <section class="diff-section" data-sel={r.id}><Diff resource={r} /></section>
+        <section class="diff-section" data-sel={r.id} use:lazy>
+          <Diff resource={r} active={mounted[r.id] ?? false} />
+        </section>
       {/each}
     </div>
   </div>

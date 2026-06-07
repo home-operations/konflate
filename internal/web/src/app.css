@@ -1173,6 +1173,13 @@ button.sum-pill:hover {
 .diff-section:last-child {
   min-height: 100%;
 }
+/* The block a parked (not-yet-mounted) section's diff table leaves behind to
+   reserve its approximate height — see Diff.svelte. Kept blank: the lazy-mount
+   observer fills it a couple of viewports before it scrolls into view, so it's
+   effectively never seen during normal reading. */
+.diff-parked {
+  width: 100%;
+}
 /* Mobile-only resource switcher. The tree rail is the navigator on wide screens;
    where it's hidden (the ≤900px media query) this bar takes over, cycling
    Summary + every resource — the touch counterpart to the j/k keys. */
