@@ -60,6 +60,15 @@ type Config struct {
 	// once read (see Token).
 	PushToken string `env:"KONFLATE_PUSH_TOKEN,unset"`
 
+	// RenderForkPRs controls whether pull requests from FORKS (cross-repo, whose
+	// head branch lives in a contributor's repository) are rendered. Rendering
+	// runs the PR's manifests/charts through flate, which fetches the sources they
+	// declare — so a fork PR is untrusted external code with real attack surface
+	// (SSRF via attacker-chosen source URLs, resource exhaustion). Off by default:
+	// fork PRs are listed but shown as "not rendered (fork)" until an operator
+	// opts in. Same-repo PRs (the maintainers' own branches) always render.
+	RenderForkPRs bool `env:"KONFLATE_RENDER_FORK_PRS" envDefault:"false"`
+
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
 

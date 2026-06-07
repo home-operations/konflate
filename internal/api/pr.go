@@ -22,8 +22,12 @@ type PR struct {
 	HeadRef   string    `json:"headRef"` // PR head branch
 	HeadSHA   string    `json:"headSha"` // head commit SHA
 	BaseRef   string    `json:"baseRef"` // target branch
-	Labels    []Label   `json:"labels"`
-	URL       string    `json:"url"`
+	// Fork is true when the head is in a different repository than the base (a
+	// cross-repo / fork PR) — an untrusted external contribution. Rendering of
+	// these is gated on KONFLATE_RENDER_FORK_PRS.
+	Fork   bool    `json:"fork"`
+	Labels []Label `json:"labels"`
+	URL    string  `json:"url"`
 }
 
 // Label is a forge label with its display color (a hex string without '#'; may

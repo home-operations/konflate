@@ -10,6 +10,10 @@ const (
 	JobRunning JobStatus = "running" // a worker is rendering it
 	JobReady   JobStatus = "ready"   // Diff is populated
 	JobError   JobStatus = "error"   // Error is populated
+	// JobBlocked: not rendered by policy — currently a fork (cross-repo) PR while
+	// KONFLATE_RENDER_FORK_PRS is off. The PR is listed but its untrusted content
+	// is never fetched or rendered.
+	JobBlocked JobStatus = "blocked"
 )
 
 // PRStatus is one pull request plus the state of its diff job. It is the

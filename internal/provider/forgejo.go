@@ -98,5 +98,9 @@ func forgejoToPR(pr *forgejo.PullRequest) api.PR {
 	if pr.Base != nil {
 		out.BaseRef = pr.Base.Ref
 	}
+	// Cross-repo (fork) when the head and base point at different repositories.
+	if pr.Head != nil && pr.Base != nil {
+		out.Fork = pr.Head.RepoID != pr.Base.RepoID
+	}
 	return out
 }

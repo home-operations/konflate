@@ -76,7 +76,10 @@ func githubToPR(pr *github.PullRequest) api.PR {
 		HeadRef:      pr.GetHead().GetRef(),
 		HeadSHA:      pr.GetHead().GetSHA(),
 		BaseRef:      pr.GetBase().GetRef(),
-		Labels:       labels,
-		URL:          pr.GetHTMLURL(),
+		// Cross-repo when the head repo differs from the base repo. A nil/deleted
+		// head repo yields "" != base, i.e. treated as a fork (fail safe).
+		Fork:   pr.GetHead().GetRepo().GetFullName() != pr.GetBase().GetRepo().GetFullName(),
+		Labels: labels,
+		URL:    pr.GetHTMLURL(),
 	}
 }
