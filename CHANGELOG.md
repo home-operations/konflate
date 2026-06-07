@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.16](https://github.com/home-operations/konflate/compare/0.1.15...0.1.16) (2026-06-07)
+
+
+### Features
+
+* **deps:** update dependency simple-icons (16.22.0 → 16.23.0) ([#50](https://github.com/home-operations/konflate/issues/50)) ([7fa1b4c](https://github.com/home-operations/konflate/commit/7fa1b4c289f777f08983b90c083645e0cbecfd38))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.3.2-0.20260607015718-c639cb85dfa0 → v0.3.2) ([#49](https://github.com/home-operations/konflate/issues/49)) ([a7ba802](https://github.com/home-operations/konflate/commit/a7ba80213b82cb67da4c62e1fe11773fefb501a1))
+* **engine:** surface per-resource render failures instead of aborting the diff ([#52](https://github.com/home-operations/konflate/issues/52)) ([1ec5699](https://github.com/home-operations/konflate/commit/1ec56997fa37a3c863cdd6046176e85d7192ca18))
+* **ui:** on mobile, scroll the review so the diff gets the full screen ([#55](https://github.com/home-operations/konflate/issues/55)) ([c1a0a67](https://github.com/home-operations/konflate/commit/c1a0a67f0889f7145a6381d960027100f198c259))
+
 ## [0.1.15](https://github.com/home-operations/konflate/compare/0.1.14...0.1.15) (2026-06-07)
 
 
