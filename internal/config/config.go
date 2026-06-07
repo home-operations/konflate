@@ -89,6 +89,14 @@ type Config struct {
 	// layers, git objects). Shared across diff jobs; persisted across restarts.
 	CacheDir string `env:"KONFLATE_CACHE_DIR"`
 
+	// CacheTTL bounds how long an unused entry stays in the on-disk source cache
+	// (Helm charts, OCI layers, git sources) before a periodic sweep prunes it.
+	// Without it the cache only grows — every distinct source a PR ever rendered
+	// stays on the (operator-mounted) volume forever. Bare git mirrors are kept
+	// regardless (re-cloning them is expensive). <=0 disables the sweep (cache
+	// grows unbounded; an operator's explicit choice). In Go duration form.
+	CacheTTL time.Duration `env:"KONFLATE_CACHE_TTL" envDefault:"168h"` // 7d
+
 	// CloneDir is the base directory for ephemeral per-diff PR head/base
 	// clones. Cleaned up after each diff job completes.
 	CloneDir string `env:"KONFLATE_CLONE_DIR"`
@@ -98,6 +106,15 @@ type Config struct {
 	// (each job holds two in-process flate orchestrators). Unset or 0 derives a
 	// default from the CPU budget (GOMAXPROCS, capped at 4); see Load.
 	MaxDiffConcurrency int `env:"KONFLATE_MAX_DIFF_CONC"`
+
+	// MaxDiffResources caps how many changed resources a single diff fully
+	// renders (each carries pre-highlighted unified + side-by-side rows — the
+	// dominant memory and payload cost of a DiffResult). A pathological or
+	// sweeping PR that touches thousands of resources is truncated to this many;
+	// the impact banner still reports the true total and the UI flags the diff as
+	// truncated. <=0 disables the cap. The reviewer rarely reads past a few
+	// hundred resource diffs anyway.
+	MaxDiffResources int `env:"KONFLATE_MAX_DIFF_RESOURCES" envDefault:"500"`
 
 	// --- flate render tuning ---------------------------------------------
 	// These map onto flate's orchestrator config; the defaults mirror flate's

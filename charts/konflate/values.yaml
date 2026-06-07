@@ -74,6 +74,8 @@ config:
 
   # -- Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.
   renderForkPrs: false
+  # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
+  maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------
   # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
   # flate's own CLI and suit most setups — leave these empty to use them. The
@@ -87,6 +89,8 @@ config:
   helmRenderCacheMb: ""
   # -- Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); "0" disables size-based eviction.
   stageCacheMb: ""
+  # -- Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); "0" disables the sweep.
+  cacheTtl: ""
   # -- Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry.
   sourceRetryAttempts: ""
   # -- Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4).
@@ -251,13 +255,13 @@ persistence:
   # -- PVC annotations.
   annotations: {}
 
-# -- Pod resource requests/limits. A memory limit drives GOMEMLIMIT (set to 90%); a CPU limit right-sizes GOMAXPROCS.
-resources: {}
-# limits:
-#   memory: 1Gi
-# requests:
-#   cpu: 50m
-#   memory: 256Mi
+# -- Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters.
+resources:
+  limits:
+    memory: 1Gi
+  requests:
+    cpu: 50m
+    memory: 256Mi
 
 # -- Liveness probe.
 livenessProbe:

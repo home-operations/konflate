@@ -73,6 +73,11 @@ func run() error {
 		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	defer stop()
 
+	// Best-effort background GC of flate's on-disk source cache so it doesn't
+	// grow without bound across the process lifetime. Stops with ctx; disabled
+	// when CacheTTL <= 0.
+	go engine.RunCacheGC(ctx, cfg.CacheDir, cfg.CacheTTL, logger)
+
 	return srv.Run(ctx)
 }
 

@@ -169,6 +169,76 @@ func TestRender_AddedAndRemoved(t *testing.T) {
 	}
 }
 
+// TestRender_EscapesHTMLInValues verifies a manifest value carrying HTML markup
+// is escaped in the rendered diff, never emitted as a live tag. A fork PR is
+// untrusted content, so a crafted value (a <script> in a ConfigMap) must not
+// reach the browser as markup — defense-in-depth behind the strict CSP. Only
+// chroma's own <span> markup is allowed in row HTML.
+func TestRender_EscapesHTMLInValues(t *testing.T) {
+	t.Parallel()
+	const payload = "<script>alert(1)</script>"
+	old := doc(t, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\ndata:\n  a: \"1\"\n")
+	neu := doc(t, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\ndata:\n  a: \"1\"\n  evil: '<script>alert(1)</script>'\n")
+
+	res, err := Render(RenderInput{
+		PRNumber: 1,
+		Changes:  []Change{{Status: "changed", Kind: "ConfigMap", Name: "x", Parent: "HelmRelease x/y", Old: old, New: neu}},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	r := res.Resources[0]
+	// The security property: the raw tag never appears in any rendered row.
+	if unifiedHasHTML(r.Unified, "<script") || sideHasHTML(r.Side, "<script") {
+		t.Errorf("raw <script> tag leaked unescaped into the rendered diff; payload=%q", payload)
+	}
+	// And the value still renders, escaped, so the reviewer sees the change.
+	if !unifiedHasHTML(r.Unified, "&lt;") {
+		t.Error("expected the payload's '<' to be HTML-escaped (&lt;) in the rendered rows")
+	}
+}
+
+// TestRender_TruncatesAtCap verifies the per-resource render is capped at
+// MaxResources while the summary and impact still report the true totals, and
+// that the no-cap path renders everything.
+func TestRender_TruncatesAtCap(t *testing.T) {
+	t.Parallel()
+	mk := func(n int) Change {
+		y := doc(t, fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c%d\n", n))
+		return Change{Status: "added", Kind: "ConfigMap", Name: fmt.Sprintf("c%d", n), Parent: "HelmRelease x/y", New: y}
+	}
+	changes := make([]Change, 5)
+	for i := range changes {
+		changes[i] = mk(i)
+	}
+
+	res, err := Render(RenderInput{PRNumber: 1, Changes: changes, MaxResources: 2})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if len(res.Resources) != 2 {
+		t.Errorf("rendered %d resources, want 2 (capped)", len(res.Resources))
+	}
+	if res.Truncated != 3 {
+		t.Errorf("Truncated = %d, want 3", res.Truncated)
+	}
+	// Summary and impact reflect the TRUE total (all 5), not the capped render.
+	if res.Summary.Added != 5 {
+		t.Errorf("Summary.Added = %d, want 5 (true total despite truncation)", res.Summary.Added)
+	}
+	if res.Impact.Resources != 5 {
+		t.Errorf("Impact.Resources = %d, want 5 (true total)", res.Impact.Resources)
+	}
+
+	full, err := Render(RenderInput{PRNumber: 1, Changes: changes})
+	if err != nil {
+		t.Fatalf("Render (no cap): %v", err)
+	}
+	if full.Truncated != 0 || len(full.Resources) != 5 {
+		t.Errorf("no-cap render: Truncated=%d resources=%d, want 0/5", full.Truncated, len(full.Resources))
+	}
+}
+
 func unifiedKinds(rows []api.UnifiedRow) map[string]bool {
 	m := map[string]bool{}
 	for _, r := range rows {
@@ -186,6 +256,15 @@ func unifiedHasSpan(rows []api.UnifiedRow) bool {
 func unifiedHasHTML(rows []api.UnifiedRow, substr string) bool {
 	for _, r := range rows {
 		if strings.Contains(r.HTML, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func sideHasHTML(rows []api.SideRow, substr string) bool {
+	for _, r := range rows {
+		if strings.Contains(r.Left.HTML, substr) || strings.Contains(r.Right.HTML, substr) {
 			return true
 		}
 	}
