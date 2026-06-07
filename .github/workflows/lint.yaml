@@ -70,8 +70,3 @@ jobs:
 
       - name: Check generated chart files are current
         run: mise run generate-check
-
-      - name: Run helm unit tests
-        run: |-
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
-          mise run helm-unittest

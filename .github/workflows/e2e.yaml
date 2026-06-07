@@ -19,6 +19,46 @@ permissions:
   contents: read
 
 jobs:
+  ui-e2e:
+    name: UI E2E (headless Chromium)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          experimental: true
+          install_args: --locked
+
+      - name: Cache npm
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install dependencies
+        run: mise run ui-install
+
+      - name: Install Playwright browser
+        run: cd internal/web && npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: mise run ui-test
+
   helm-e2e:
     name: Helm E2E (kind)
     runs-on: ubuntu-24.04
@@ -51,28 +91,30 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Cache Docker layers
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('Dockerfile', 'go.sum', 'internal/web/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-buildx-
-
-      # Build this PR's image (not a published tag) and load it into kind, so the
-      # test exercises the code under review. Build args come from mise, matching
-      # the release build (Dockerfile reads NODE_VERSION / GO_VERSION). The layer
-      # cache is swapped in place so actions/cache persists it for the next run.
-      - name: Build and load image
+      # Build args come from mise, matching the release build (the Dockerfile reads
+      # NODE_VERSION / GO_VERSION).
+      - name: Resolve toolchain versions
+        id: tools
         run: |
-          docker buildx build --load \
-            --cache-from type=local,src=/tmp/.buildx-cache \
-            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
-            --build-arg GO_VERSION="$(mise config get tools.go)" \
-            --build-arg NODE_VERSION="$(mise config get tools.node)" \
-            --tag ghcr.io/home-operations/konflate:e2e .
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-          kind load docker-image ghcr.io/home-operations/konflate:e2e --name konflate-e2e
+          echo "go=$(mise config get tools.go)" >> "$GITHUB_OUTPUT"
+          echo "node=$(mise config get tools.node)" >> "$GITHUB_OUTPUT"
+
+      # Build this PR's image (not a published tag) so the test exercises the code
+      # under review; the GHA layer cache speeds repeat builds.
+      - name: Build image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/home-operations/konflate:e2e
+          build-args: |
+            GO_VERSION=${{ steps.tools.outputs.go }}
+            NODE_VERSION=${{ steps.tools.outputs.node }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load image into kind
+        run: kind load docker-image ghcr.io/home-operations/konflate:e2e --name konflate-e2e
 
       - name: Helm install + test
         env:

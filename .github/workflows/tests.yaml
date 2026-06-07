@@ -86,8 +86,8 @@ jobs:
       - name: Build
         run: mise run ui-build
 
-  ui-e2e:
-    name: UI E2E (headless Chromium)
+  helm-unittest:
+    name: Helm Unit Tests
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -103,25 +103,7 @@ jobs:
           experimental: true
           install_args: --locked
 
-      - name: Cache npm
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('internal/web/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-npm-
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('internal/web/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-playwright-
-
-      - name: Install dependencies
-        run: mise run ui-install
-
-      - name: Install Playwright browser
-        run: cd internal/web && npx playwright install --with-deps chromium
-
-      - name: Run Playwright tests
-        run: mise run ui-test
+      - name: Run helm unit tests
+        run: |-
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
+          mise run helm-unittest
