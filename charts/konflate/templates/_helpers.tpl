@@ -74,15 +74,12 @@ repository:tag, with tag defaulting to the chart appVersion.
 
 {{/*
 Image for the `helm test` connection pod (konflate's own image is distroless, so
-the test uses a small image with a shell). A digest wins over the tag when set.
+the test uses a small image with a shell). The tag is pinned as
+`version@sha256:digest`, so Renovate updates the version and digest together.
 */}}
 {{- define "konflate.testImage" -}}
 {{- $img := .Values.tests.image -}}
-{{- if $img.digest -}}
-{{- printf "%s@%s" $img.repository $img.digest -}}
-{{- else -}}
 {{- printf "%s:%s" $img.repository $img.tag -}}
-{{- end -}}
 {{- end }}
 
 {{/*
