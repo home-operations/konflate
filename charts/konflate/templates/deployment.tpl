@@ -61,6 +61,10 @@ spec:
             - name: KONFLATE_MAX_DIFF_CONC
               value: {{ .Values.config.maxDiffConcurrency | quote }}
             {{- end }}
+            {{- if ne (toString .Values.config.maxDiffResources) "" }}
+            - name: KONFLATE_MAX_DIFF_RESOURCES
+              value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}
+            {{- end }}
             {{- /* toString, not `with`: an explicit 0 (disable a cache) must
                    still emit — `with` would treat int 0 as empty and drop it,
                    silently reviving the default. Empty string = use the default.
@@ -77,6 +81,10 @@ spec:
             {{- if ne (toString .Values.config.stageCacheMb) "" }}
             - name: KONFLATE_STAGE_CACHE_MB
               value: {{ tpl (toString .Values.config.stageCacheMb) $ | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.cacheTtl) "" }}
+            - name: KONFLATE_CACHE_TTL
+              value: {{ tpl (toString .Values.config.cacheTtl) $ | quote }}
             {{- end }}
             {{- if ne (toString .Values.config.sourceRetryAttempts) "" }}
             - name: KONFLATE_SOURCE_RETRY_ATTEMPTS

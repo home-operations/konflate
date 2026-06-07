@@ -268,3 +268,58 @@ func TestMirror_SkipsOversizedFiles(t *testing.T) {
 		t.Error("big.yaml exceeds maxFileBytes and should be skipped")
 	}
 }
+
+// TestMirror_ExtractsSymlinkAsRegularFile verifies a symlink committed to the
+// repo is materialized as a regular file whose contents are the link target
+// string — never a live symlink. go-git's File.Contents yields the blob (the
+// target path), and extractTree writes it with os.WriteFile, so flate later
+// reads inert text instead of following a link out of the tree. A hostile repo
+// konflate doesn't own could otherwise smuggle host files (e.g. a link to
+// /etc/passwd, or one escaping the extraction root) into a render.
+func TestMirror_ExtractsSymlinkAsRegularFile(t *testing.T) {
+	src := t.TempDir()
+	repo, err := git.PlainInit(src, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	write(t, src, "real.yaml", "a: 1\n")
+	// A symlink whose target escapes the extraction root. If extractTree created
+	// a real symlink, a reader following it would leave the tree; as a regular
+	// file the target is harmless text.
+	if err := os.Symlink("../../../../etc/passwd", filepath.Join(src, "link.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, wt, "C0")
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Storer.SetReference(
+		plumbing.NewHashReference(plumbing.NewBranchReferenceName("feature"), head.Hash()),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	if err != nil {
+		t.Fatalf("Trees: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+
+	info, err := os.Lstat(filepath.Join(res.HeadDir, "link.yaml"))
+	if err != nil {
+		t.Fatalf("symlink entry was not extracted: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("symlink was materialized as a live symlink; it must be a regular file")
+	}
+	// The regular file holds the link target text, not whatever it pointed at.
+	if got, _ := read(res.HeadDir, "link.yaml"); got != "../../../../etc/passwd" {
+		t.Errorf("extracted symlink content = %q, want the inert target string", got)
+	}
+}

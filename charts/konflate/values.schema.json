@@ -10,6 +10,12 @@
     "config": {
       "description": "konflate configuration (the non-secret KONFLATE_* environment variables).",
       "properties": {
+        "cacheTtl": {
+          "default": "",
+          "description": "Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); \"0\" disables the sweep.",
+          "title": "cacheTtl",
+          "type": "string"
+        },
         "closedPrMax": {
           "default": 25,
           "description": "Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap.",
@@ -71,6 +77,12 @@
           "description": "Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).",
           "title": "maxDiffConcurrency",
           "type": "integer"
+        },
+        "maxDiffResources": {
+          "default": "",
+          "description": "Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); \"0\" disables.",
+          "title": "maxDiffResources",
+          "type": "string"
         },
         "mergeCommand": {
           "default": "",
@@ -610,7 +622,38 @@
       "type": "integer"
     },
     "resources": {
-      "description": "Pod resource requests/limits. A memory limit drives GOMEMLIMIT (set to 90%); a CPU limit right-sizes GOMAXPROCS.",
+      "description": "Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters.",
+      "properties": {
+        "limits": {
+          "properties": {
+            "memory": {
+              "default": "1Gi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "limits",
+          "type": "object"
+        },
+        "requests": {
+          "properties": {
+            "cpu": {
+              "default": "50m",
+              "title": "cpu",
+              "type": "string"
+            },
+            "memory": {
+              "default": "256Mi",
+              "title": "memory",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "requests",
+          "type": "object"
+        }
+      },
       "required": [],
       "title": "resources",
       "type": "object"

@@ -65,6 +65,7 @@ type flateEngine struct {
 	concurrency            int
 	sourceRetry            source.RetryConfig
 	diffTimeout            time.Duration
+	maxDiffResources       int
 }
 
 // New builds the production Engine from config.
@@ -90,7 +91,8 @@ func New(cfg *config.Config) Engine {
 			MaxWait:  3 * time.Second,
 			Jitter:   0.1,
 		},
-		diffTimeout: cfg.DiffTimeout,
+		diffTimeout:      cfg.DiffTimeout,
+		maxDiffResources: cfg.MaxDiffResources,
 	}
 }
 
@@ -141,11 +143,12 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 
 	changes := pairChanges(base.Result.Manifests, head.Result.Manifests)
 	return diff.Render(diff.RenderInput{
-		PRNumber: pr.Number,
-		HeadSHA:  pr.HeadSHA,
-		Changes:  changes,
-		Images:   imageChanges(changes),
-		Failures: renderFailures(head.Result.Failed),
+		PRNumber:     pr.Number,
+		HeadSHA:      pr.HeadSHA,
+		Changes:      changes,
+		Images:       imageChanges(changes),
+		Failures:     renderFailures(head.Result.Failed),
+		MaxResources: e.maxDiffResources,
 	})
 }
 
@@ -175,6 +178,11 @@ func renderUsable(base, head orchestrator.Rendered, err error) bool {
 //     carries one in cleartext.
 //   - AllowMissingSecrets lets public/token-less renders proceed without the
 //     cluster's real secrets (missing auth secrets become skips).
+//   - GitDepth bounds GitRepository source clones to a shallow single commit.
+//     A PR can declare an arbitrary GitRepository source, and konflate may
+//     watch a repo it doesn't own; without a depth cap a hostile or huge source
+//     would clone its full history (disk/CPU exhaustion). Matches flate's own
+//     CLI default; commit-pinned refs still full-clone as flate requires.
 //
 // e.cache is the long-lived source cache reused across every PR; CacheDir
 // roots flate's persistent stage + on-disk Helm render caches on the same
@@ -185,6 +193,7 @@ func (e *flateEngine) renderCfg() orchestrator.Config {
 		CacheDir:               e.cacheDir,
 		WipeSecrets:            true,
 		AllowMissingSecrets:    true,
+		GitDepth:               1,
 		StageCacheBytes:        e.stageCacheBytes,
 		HelmTemplateCacheBytes: e.helmTemplateCacheBytes,
 		HelmRenderCacheBytes:   e.helmRenderCacheBytes,

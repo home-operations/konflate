@@ -26,6 +26,11 @@ type RenderInput struct {
 	Changes  []Change
 	Images   []api.ImageChange
 	Failures []api.RenderFailure
+	// MaxResources caps how many changes are fully rendered into per-resource
+	// rows (the dominant memory/payload cost). Excess changes are dropped from
+	// the rendered set and counted in DiffResult.Truncated; the summary and
+	// impact still reflect the full change set. <=0 means no cap.
+	MaxResources int
 }
 
 // Row and cell kinds, matching the api string-literal unions.
@@ -56,12 +61,10 @@ func Render(in RenderInput) (api.DiffResult, error) {
 		Warnings:  Lint(in.Changes, in.Images),
 	}
 
-	for i, c := range in.Changes {
-		res, err := buildResource(fmt.Sprintf("r%d", i), c, hl)
-		if err != nil {
-			return api.DiffResult{}, err
-		}
-		out.Resources = append(out.Resources, res)
+	// Summary reflects the true totals across every change, even when the
+	// per-resource render below is capped — so the topbar counts and the impact
+	// banner agree on the real blast radius regardless of truncation.
+	for _, c := range in.Changes {
 		switch c.Status {
 		case "added":
 			out.Summary.Added++
@@ -70,6 +73,24 @@ func Render(in RenderInput) (api.DiffResult, error) {
 		default:
 			out.Summary.Changed++
 		}
+	}
+
+	// Cap the per-resource render — the dominant memory and payload cost (each
+	// resource carries pre-highlighted unified + side-by-side rows). A sweeping
+	// or pathological PR is truncated to MaxResources rendered diffs; the counts
+	// above already reflect the full set, and Truncated tells the UI the review
+	// is partial.
+	rendered := in.Changes
+	if in.MaxResources > 0 && len(rendered) > in.MaxResources {
+		out.Truncated = len(rendered) - in.MaxResources
+		rendered = rendered[:in.MaxResources]
+	}
+	for i, c := range rendered {
+		res, err := buildResource(fmt.Sprintf("r%d", i), c, hl)
+		if err != nil {
+			return api.DiffResult{}, err
+		}
+		out.Resources = append(out.Resources, res)
 	}
 	out.Tree = buildTree(out.Resources)
 	return out, nil

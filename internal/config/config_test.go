@@ -107,6 +107,7 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		{"StageCacheMB", cfg.StageCacheMB, 2048},
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
 		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
+		{"MaxDiffResources", cfg.MaxDiffResources, 500},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s default = %d, want %d", c.name, c.got, c.want)
@@ -114,6 +115,9 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	}
 	if cfg.DiffTimeout != 10*time.Minute {
 		t.Errorf("DiffTimeout default = %v, want 10m", cfg.DiffTimeout)
+	}
+	if cfg.CacheTTL != 168*time.Hour {
+		t.Errorf("CacheTTL default = %v, want 168h", cfg.CacheTTL)
 	}
 }
 

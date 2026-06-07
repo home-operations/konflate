@@ -59,6 +59,13 @@
     <span class="impact-pill" class:add={d.summary.added > 0}>+{d.summary.added} added</span>
     <span class="impact-pill" class:chg={d.summary.changed > 0}>{d.summary.changed} changed</span>
     <span class="impact-pill" class:del={d.summary.removed > 0}>−{d.summary.removed} removed</span>
+    <!-- The diff was capped: counts above are the true totals, but this many
+         resources were not rendered. The review here is partial. -->
+    {#if d.truncated}
+      <span class="impact-pill trunc" title="This diff exceeded the render cap; {d.truncated} resource diffs were not rendered."
+        >{d.truncated} not shown</span
+      >
+    {/if}
   </div>
 
   {#if d.warnings?.length}

@@ -143,6 +143,7 @@ export interface DiffResult {
   chromaCss: string;
   tree: DiffTreeParent[] | null;
   resources: DiffResource[] | null;
+  truncated?: number; // resources omitted because the diff exceeded the render cap; 0/absent = complete
 }
 
 export interface DiffEnvelope {

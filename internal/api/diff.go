@@ -69,6 +69,14 @@ type DiffResult struct {
 	// reference resources by ID; the frontend fetches the matching Resource
 	// from this slice when a tree leaf is selected.
 	Resources []DiffResource `json:"resources"`
+
+	// Truncated is the number of changed resources omitted because the diff
+	// exceeded the render cap (KONFLATE_MAX_DIFF_RESOURCES) — a bound on the
+	// memory and payload a single pathological/sweeping PR can cost. 0 means the
+	// diff is complete. Summary and Impact still reflect the true totals; only
+	// the per-resource render set is capped, so the UI warns the review is
+	// partial.
+	Truncated int `json:"truncated,omitempty"`
 }
 
 // DiffSummary carries the three counts shown in the topbar.

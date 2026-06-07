@@ -991,6 +991,12 @@ button.sum-pill:hover {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
   background: color-mix(in srgb, var(--danger) 10%, var(--panel));
 }
+/* Truncation pill: the diff was capped, so flag it in the caution color. */
+.impact-pill.trunc {
+  color: var(--caution);
+  border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
+  background: color-mix(in srgb, var(--caution) 10%, var(--panel));
+}
 /* Overview sections sit flat on the pane — headed lists, not boxed cards. */
 .ov-section {
   margin-bottom: 16px;
