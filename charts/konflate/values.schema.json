@@ -718,8 +718,8 @@
           "type": "object"
         },
         "automount": {
-          "default": true,
-          "description": "Automount the ServiceAccount API token.",
+          "default": false,
+          "description": "Automount the ServiceAccount API token (off by default: konflate talks to forges, not the cluster API).",
           "title": "automount",
           "type": "boolean"
         },

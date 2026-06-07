@@ -36,6 +36,10 @@ Gateway API `httpRoute`.
 
 * <https://github.com/home-operations/konflate>
 
+## Requirements
+
+Kubernetes: `>=1.25.0-0`
+
 ## Values
 
 | Key | Type | Default | Description |
@@ -111,7 +115,7 @@ Gateway API `httpRoute`.
 | service.port | int | `8080` | UI / API / websocket port. |
 | service.type | string | `"ClusterIP"` | Service type. |
 | serviceAccount.annotations | object | `{}` | Annotations for the ServiceAccount. |
-| serviceAccount.automount | bool | `true` | Automount the ServiceAccount API token. |
+| serviceAccount.automount | bool | `false` | Automount the ServiceAccount API token (off by default: konflate talks to forges, not the cluster API). |
 | serviceAccount.create | bool | `true` | Create a ServiceAccount. |
 | serviceAccount.name | string | `""` | ServiceAccount name; generated from the release name if empty. |
 | tests.image.digest | string | `"sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028"` | `helm test` image digest (sha256:…); pins immutably and wins over the tag when set. |

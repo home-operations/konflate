@@ -133,8 +133,8 @@ secret:
 serviceAccount:
   # -- Create a ServiceAccount.
   create: true
-  # -- Automount the ServiceAccount API token.
-  automount: true
+  # -- Automount the ServiceAccount API token (off by default: konflate talks to forges, not the cluster API).
+  automount: false
   # -- Annotations for the ServiceAccount.
   annotations: {}
   # -- ServiceAccount name; generated from the release name if empty.
