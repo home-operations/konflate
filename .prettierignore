@@ -1,3 +1,5 @@
 *.toml
 CHANGELOG.md
 .release-please-manifest.json
+charts/konflate/README.md
+charts/konflate/values.schema.json

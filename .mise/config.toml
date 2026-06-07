@@ -7,12 +7,15 @@
 # `mise tasks` lists tasks; `mise run <task>` runs one.
 
 [tools]
+"aqua:dadav/helm-schema" = "0.23.4"
 go = "1.26.4"
 golangci-lint = "2.12.2"
 helm = "4.2.0"
+helm-docs = "1.14.2"
 lefthook = "2.1.9"
 node = "24.16.0"
 oxfmt = "0.53.0"
+yq = "4.53.3"
 zizmor = "1.25.2"
 
 [tasks.build]
@@ -78,9 +81,41 @@ run = "npm run test:e2e"
 description = "Lint the Helm chart"
 run = "helm lint charts/konflate"
 
+[tasks.helm-unittest]
+description = "Run helm-unittest template tests (needs the helm-unittest plugin)"
+run = "helm unittest charts/konflate"
+
 [tasks.helm-template]
 description = "Render the Helm chart with example values"
 run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"
+
+[tasks.helm-test]
+description = "Install the chart into the current cluster (e.g. a kind context) and run `helm test`"
+# The e2e workflow builds the PR's image, kind-loads it, and sets
+# KONFLATE_TEST_IMAGE_TAG=e2e + pull policy Never so the test runs the code under
+# review; locally these default to the published `latest` for a quick chart check
+# (the chart appVersion is a release-time placeholder, so a tag is always needed).
+# config.repo is a placeholder; startup doesn't block on it. The trap cleans up.
+run = """
+trap 'helm uninstall konflate-e2e -n konflate-e2e --wait >/dev/null 2>&1 || true' EXIT
+set -e
+helm install konflate-e2e charts/konflate -n konflate-e2e --create-namespace --wait --timeout 5m --set image.tag="${KONFLATE_TEST_IMAGE_TAG:-latest}" --set image.pullPolicy="${KONFLATE_TEST_PULL_POLICY:-IfNotPresent}" --set config.repo=github://home-operations/konflate-e2e
+helm test konflate-e2e -n konflate-e2e --logs
+"""
+
+[tasks.generate]
+description = "Regenerate the chart's committed README + values.schema.json from Chart.yaml + values.yaml"
+run = """
+helm-docs --chart-search-root=charts --log-level=warn
+helm-schema --chart-search-root charts/konflate --skip-auto-generation required,additionalProperties --append-newline
+"""
+
+[tasks.generate-check]
+description = "Fail if the generated chart README/schema are stale (CI gate)"
+run = """
+mise run generate
+git diff --exit-code charts/konflate/README.md charts/konflate/values.schema.json
+"""
 
 [tasks.dev]
 description = "Run konflate locally (set KONFLATE_REPO=... first)"

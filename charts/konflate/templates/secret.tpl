@@ -9,12 +9,12 @@ metadata:
 type: Opaque
 stringData:
   {{- with .Values.secret.token }}
-  KONFLATE_TOKEN: {{ . | quote }}
+  KONFLATE_TOKEN: {{ tpl . $ | quote }}
   {{- end }}
   {{- with .Values.secret.webhookSecret }}
-  KONFLATE_WEBHOOK_SECRET: {{ . | quote }}
+  KONFLATE_WEBHOOK_SECRET: {{ tpl . $ | quote }}
   {{- end }}
   {{- with .Values.secret.pushToken }}
-  KONFLATE_PUSH_TOKEN: {{ . | quote }}
+  KONFLATE_PUSH_TOKEN: {{ tpl . $ | quote }}
   {{- end }}
 {{- end }}

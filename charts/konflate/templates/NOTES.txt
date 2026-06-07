@@ -1,4 +1,4 @@
-konflate is reviewing {{ .Values.config.repo }}.
+konflate is reviewing {{ tpl .Values.config.repo $ }}.
 
 Open the UI:
 
@@ -8,7 +8,7 @@ Open the UI:
 {{ if .Values.ingress.enabled -}}
 Or via ingress:
 {{- range .Values.ingress.hosts }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ tpl .host $ }}
 {{- end }}
 {{ end -}}
 
@@ -16,7 +16,7 @@ Or via ingress:
 No forge token or inbound secrets are configured: konflate makes unauthenticated
 (anonymous) forge requests — always read-only, but subject to the forge's lower
 anonymous rate limit — and the webhook (POST /hooks) and push endpoints are
-disabled. Open PRs still re-render automatically every {{ .Values.config.refreshInterval | default "30m" }}.
+disabled. Open PRs still re-render automatically every {{ tpl (.Values.config.refreshInterval | default "30m") $ }}.
 
 Set `secret.token` to raise the rate limit and review private repos; set
 `secret.webhookSecret` / `secret.pushToken` to enable inbound re-render triggers.

@@ -92,6 +92,13 @@ jobs:
           experimental: true
           install_args: --locked
 
+      - name: Pin the released image digest into the chart
+        env:
+          DIGEST: ${{ needs.release.outputs.digest }}
+        run: |
+          [ -n "${DIGEST}" ] || { echo "::error::empty image digest from build job"; exit 1; }
+          yq -i '.image.digest = strenv(DIGEST)' charts/konflate/values.yaml
+
       - name: Package Helm chart
         run: |
           helm package charts/konflate \

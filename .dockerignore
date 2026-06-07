@@ -1,7 +1,6 @@
 .git
 .github
 **/node_modules
-# The UI is rebuilt in the image's node stage; never ship the host's build.
 internal/web/dist
 cover.out
 *.md
