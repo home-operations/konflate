@@ -36,6 +36,15 @@ jobs:
           experimental: true
           install_args: --locked
 
+      - name: Cache Go modules and build
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
       - name: Check go.mod tidiness
         run: |
           go mod tidy
@@ -60,6 +69,13 @@ jobs:
         with:
           experimental: true
           install_args: --locked
+
+      - name: Cache npm
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
 
       - name: Install dependencies
         run: mise run ui-install
@@ -86,6 +102,20 @@ jobs:
         with:
           experimental: true
           install_args: --locked
+
+      - name: Cache npm
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
 
       - name: Install dependencies
         run: mise run ui-install

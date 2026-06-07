@@ -48,15 +48,30 @@ jobs:
           kubectl version
           kubectl get nodes
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Cache Docker layers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('Dockerfile', 'go.sum', 'internal/web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-buildx-
+
       # Build this PR's image (not a published tag) and load it into kind, so the
       # test exercises the code under review. Build args come from mise, matching
-      # the release build (Dockerfile reads NODE_VERSION / GO_VERSION).
+      # the release build (Dockerfile reads NODE_VERSION / GO_VERSION). The layer
+      # cache is swapped in place so actions/cache persists it for the next run.
       - name: Build and load image
         run: |
-          docker build \
+          docker buildx build --load \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
             --build-arg GO_VERSION="$(mise config get tools.go)" \
             --build-arg NODE_VERSION="$(mise config get tools.node)" \
             --tag ghcr.io/home-operations/konflate:e2e .
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
           kind load docker-image ghcr.io/home-operations/konflate:e2e --name konflate-e2e
 
       - name: Helm install + test
