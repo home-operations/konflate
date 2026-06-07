@@ -1,5 +1,18 @@
 ---
 # Default values for konflate.
+#
+# Most string, list, and map values below are rendered through Helm's `tpl`, so you
+# can embed template expressions that resolve at install time, e.g.:
+#
+#   config:
+#     repo: github://my-org/{{ .Release.Name }}
+#   ingress:
+#     hosts:
+#       - host: konflate.{{ .Values.global.domain }}
+#
+# Passed through verbatim (NOT tpl'd): config.mergeCommand — it is itself a Go
+# text/template konflate renders per-PR with .Number/.Repo — plus plain numbers and
+# booleans. To emit a literal brace, escape it: write `{{ "{{" }}` for `{{`.
 
 # -- Number of konflate replicas (it's stateless behind the Service).
 replicaCount: 1

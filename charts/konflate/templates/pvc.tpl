@@ -8,15 +8,15 @@ metadata:
     {{- include "konflate.labels" . | nindent 4 }}
   {{- with .Values.persistence.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
   {{- end }}
 spec:
   accessModes:
-    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+    {{- tpl (toYaml .Values.persistence.accessModes) $ | nindent 4 }}
   resources:
     requests:
       storage: {{ .Values.persistence.size | quote }}
   {{- with .Values.persistence.storageClass }}
-  storageClassName: {{ . }}
+  storageClassName: {{ tpl . $ }}
   {{- end }}
 {{- end }}
