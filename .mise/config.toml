@@ -13,6 +13,7 @@ helm = "4.2.0"
 lefthook = "2.1.9"
 node = "24.16.0"
 oxfmt = "0.53.0"
+yq = "4.53.3"
 zizmor = "1.25.2"
 
 [tasks.build]

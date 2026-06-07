@@ -102,9 +102,7 @@ jobs:
           DIGEST: ${{ needs.release.outputs.digest }}
         run: |
           [ -n "${DIGEST}" ] || { echo "::error::empty image digest from build job"; exit 1; }
-          sed -i "s#^  digest: .*#  digest: \"${DIGEST}\"#" charts/konflate/values.yaml
-          grep -q "^  digest: \"${DIGEST}\"$" charts/konflate/values.yaml \
-            || { echo "::error::failed to write digest into values.yaml"; exit 1; }
+          yq -i '.image.digest = strenv(DIGEST)' charts/konflate/values.yaml
 
       - name: Package Helm chart
         run: |
