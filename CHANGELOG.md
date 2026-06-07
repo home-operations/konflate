@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.18](https://github.com/home-operations/konflate/compare/0.1.17...0.1.18) (2026-06-07)
+
+
+### Features
+
+* **chart:** digest pinning, generated README + values schema, tpl values, and hardening ([#56](https://github.com/home-operations/konflate/issues/56)) ([7db7929](https://github.com/home-operations/konflate/commit/7db7929f8bac36ad704ad449d3880da4d225856d))
+
 ## [0.1.17](https://github.com/home-operations/konflate/compare/0.1.16...0.1.17) (2026-06-07)
 
 
