@@ -80,7 +80,13 @@ helm install konflate oci://ghcr.io/home-operations/charts/konflate \
   --set secret.token="$GITHUB_TOKEN"
 ```
 
-Notable values (see [`charts/konflate/values.yaml`](charts/konflate/values.yaml)):
+Every value is documented in the chart's generated README,
+[`charts/konflate/README.md`](charts/konflate/README.md), built from
+[`values.yaml`](charts/konflate/values.yaml) — which also ships a
+[`values.schema.json`](charts/konflate/values.schema.json) for editor
+autocompletion and `helm install`-time validation. The `config.*` and `secret.*`
+chart values map onto the `KONFLATE_*` environment variables in
+[Configuration](#configuration) below.
 
 ## Configuration
 
@@ -231,10 +237,13 @@ mise run ui-test        # Playwright headless-Chromium UI tests
 mise run build          # go build ./...
 mise run test           # unit + server tests (race-enabled in CI)
 mise run lint           # golangci-lint
+mise run generate       # regenerate the chart README + values.schema.json
+mise run helm-lint      # lint the Helm chart
+mise run helm-unittest  # helm-unittest template tests
 mise run dev            # run konflate locally (set KONFLATE_REPO first)
 ```
 
-Tests come in three tiers:
+Tests come in four tiers:
 
 - **Unit** — pure logic (config, diff render/lint/impact, engine pairing,
   webhook crypto, provider mapping) plus the HTTP server and the websocket hub
@@ -242,6 +251,10 @@ Tests come in three tiers:
 - **UI** (`mise run ui-test`) — Playwright drives the real built UI in headless
   Chromium with the API and websocket stubbed by a fixture, asserting the
   3-panel render, filtering, and split view. Runs in CI.
+- **Chart** — `helm lint`, [`helm-unittest`](charts/konflate/tests) template
+  tests (image/digest, secret conditionals, verbatim `mergeCommand`, conditional
+  env), and a kind-backed `helm test` smoke check that installs the chart and
+  probes `/readyz` (`mise run helm-test`). Run in CI.
 - **Integration** (`-tags integration`, env-gated) — renders a real PR with the
   real engine; skips unless `KONFLATE_REPO` + `KONFLATE_INTEGRATION_PR` are set:
 
