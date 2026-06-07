@@ -60,10 +60,16 @@ Service account name to use.
 {{- end }}
 
 {{/*
-Container image reference (tag defaults to the chart appVersion).
+Container image reference. A digest pins immutably and wins when set (the
+release pipeline fills it with the published image's digest); otherwise it's
+repository:tag, with tag defaulting to the chart appVersion.
 */}}
 {{- define "konflate.image" -}}
-{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
 {{- end }}
 
 {{/*
