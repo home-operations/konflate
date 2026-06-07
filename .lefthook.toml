@@ -2,3 +2,21 @@
 git_url = "https://github.com/home-operations/.github"
 ref = "main"
 configs = ["lefthook.common.toml"]
+
+# The generated chart README is .prettierignore'd; exclude it from the shared
+# markdown formatter too, so oxfmt isn't handed a file it then drops (it exits
+# non-zero when every input is ignored, which would block the commit).
+[pre-commit.commands.format-markdown]
+exclude = ["charts/konflate/README.md"]
+
+# Regenerate the chart README whenever its inputs change, and stage it. The
+# README is a different file than the trigger, and lefthook's stage_fixed only
+# re-stages glob-matched staged files, so add it explicitly (see CI's
+# helm-docs-check, which is the backstop for commits that skip the hook).
+[pre-commit.commands.helm-docs]
+glob = [
+  "charts/konflate/Chart.yaml",
+  "charts/konflate/values.yaml",
+  "charts/konflate/README.md.gotmpl",
+]
+run = "mise run helm-docs && git add charts/konflate/README.md"

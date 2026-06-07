@@ -86,18 +86,12 @@ run = "helm template konflate charts/konflate --set config.repo=github://owner/r
 
 [tasks.helm-docs]
 description = "Generate the Helm chart README from Chart.yaml + values.yaml"
-# oxfmt after helm-docs so the committed README matches the lefthook/CI
-# markdown formatter (otherwise the freshness check below would always drift).
-run = """
-helm-docs --chart-search-root=charts --log-level=warn
-oxfmt charts/konflate/README.md
-"""
+run = "helm-docs --chart-search-root=charts --log-level=warn"
 
 [tasks.helm-docs-check]
 description = "Fail if the chart README is stale (CI gate)"
 run = """
 helm-docs --chart-search-root=charts --log-level=warn
-oxfmt charts/konflate/README.md
 git diff --exit-code charts/konflate/README.md
 """
 
