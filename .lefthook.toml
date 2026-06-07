@@ -3,11 +3,14 @@ git_url = "https://github.com/home-operations/.github"
 ref = "main"
 configs = ["lefthook.common.toml"]
 
-# The generated chart README is .prettierignore'd; exclude it from the shared
-# markdown formatter too, so oxfmt isn't handed a file it then drops (it exits
+# The generated chart README/schema are .prettierignore'd; exclude them from the
+# shared formatters too, so oxfmt isn't handed a file it then drops (it exits
 # non-zero when every input is ignored, which would block the commit).
 [pre-commit.commands.format-markdown]
 exclude = ["charts/konflate/README.md"]
+
+[pre-commit.commands.format-json]
+exclude = ["charts/konflate/values.schema.json"]
 
 # Regenerate the chart's committed README + values.schema.json whenever their
 # inputs change, and stage them. They're different files than the trigger, and

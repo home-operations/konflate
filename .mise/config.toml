@@ -92,9 +92,9 @@ helm-docs --chart-search-root=charts --log-level=warn
 # required/additionalProperties are skipped so the schema stays permissive:
 # values.yaml supplies every default (nothing is user-required) and the free-form
 # maps (annotations, extraEnv, …) must stay open. Descriptions come from each key's
-# `# --` helm-docs line, so they match the README.
-helm-schema --chart-search-root charts/konflate --skip-auto-generation required,additionalProperties
-oxfmt charts/konflate/values.schema.json
+# `# --` helm-docs line, so they match the README. --append-newline gives a clean
+# EOF; the file is .prettierignore'd (a generated artifact), so oxfmt skips it.
+helm-schema --chart-search-root charts/konflate --skip-auto-generation required,additionalProperties --append-newline
 """
 
 [tasks.generate-check]
