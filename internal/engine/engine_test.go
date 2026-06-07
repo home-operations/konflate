@@ -250,19 +250,6 @@ func TestImageChanges(t *testing.T) {
 	}
 }
 
-func TestSplitImageRef(t *testing.T) {
-	t.Parallel()
-	cases := []struct{ ref, repo, ver string }{
-		{"ghcr.io/app:1.0", "ghcr.io/app", "1.0"},
-		{"ghcr.io/app@sha256:abc", "ghcr.io/app", "sha256:abc"},
-		{"registry:5000/app", "registry:5000/app", ""}, // colon is a port, not a tag
-		{"registry:5000/app:1.2", "registry:5000/app", "1.2"},
-		{"nginx", "nginx", ""},
-	}
-	for _, tt := range cases {
-		repo, ver := splitImageRef(tt.ref)
-		if repo != tt.repo || ver != tt.ver {
-			t.Errorf("splitImageRef(%q) = (%q,%q), want (%q,%q)", tt.ref, repo, ver, tt.repo, tt.ver)
-		}
-	}
-}
+// splitImageRef's behavior now lives in flate's image.Split (tested in
+// flate); konflate's collectImages composes image.Extract + image.Split,
+// exercised end to end by TestImageChanges above.

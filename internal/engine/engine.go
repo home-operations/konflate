@@ -11,16 +11,14 @@ package engine
 import (
 	"cmp"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
-	"reflect"
 	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	flatediff "github.com/home-operations/flate/pkg/diff"
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
 	"github.com/home-operations/flate/pkg/source"
@@ -109,53 +107,44 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	baseTree := joinPath(clone.BaseDir, e.clusterPath)
 	headTree := joinPath(clone.HeadDir, e.clusterPath)
 
-	// Changed-only mode (flate's PathOrig): each side reconciles only the
-	// resources whose source files differ between the merge-base and head trees,
-	// plus the dependency closure flate computes — not the whole cluster. This is
-	// the dominant cold-start cost saver: a one-file PR renders a handful of
-	// resources instead of every HelmRelease/Kustomization. pairChanges over the
-	// two scoped outputs yields the same diff a full render would (unchanged
-	// resources never enter either side). Render the base first so its fetched
-	// sources warm the shared cache for the head render.
-	base, err := e.render(ctx, baseTree, headTree)
+	// flate's RenderTrees owns the two-orchestrator dance: each side
+	// reconciles changed-only against the other (only resources whose source
+	// files differ between the merge-base and head trees, plus the dependency
+	// closure flate computes — not the whole cluster, the dominant cold-start
+	// cost saver), sharing e.cache so the head render reuses the base render's
+	// fetched charts / OCI layers / git sources, concurrently. A nil Result
+	// means a fatal Bootstrap error; per-resource render failures keep the
+	// Result non-nil and are surfaced via renderFailures below.
+	base, head, err := orchestrator.RenderTrees(ctx, baseTree, headTree, e.renderCfg())
 	if err != nil {
-		return api.DiffResult{}, fmt.Errorf("engine: render base of PR #%d: %w", pr.Number, err)
-	}
-	head, err := e.render(ctx, headTree, baseTree)
-	if err != nil {
-		return api.DiffResult{}, fmt.Errorf("engine: render head of PR #%d: %w", pr.Number, err)
+		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
 	}
 
-	changes := pairChanges(base.Manifests, head.Manifests)
+	changes := pairChanges(base.Result.Manifests, head.Result.Manifests)
 	return diff.Render(diff.RenderInput{
 		PRNumber: pr.Number,
 		HeadSHA:  pr.HeadSHA,
 		Changes:  changes,
 		Images:   imageChanges(changes),
-		Failures: renderFailures(head.Failed),
+		Failures: renderFailures(head.Result.Failed),
 	})
 }
 
-// render runs one flate orchestrator over the cluster at path in changed-only
-// mode: origPath is the opposite (merge-base or head) tree, so flate reconciles
-// only the resources whose source files differ between the two — plus the
-// dependency closure it computes (substituteFrom producers, consumers of a
-// changed source, etc.) — instead of the whole cluster. Render is flate's embed
-// entry point (Bootstrap + Run + collect). Two flags harden it for a tool that
-// may be exposed:
+// renderCfg is the flate render tuning shared by both sides of a
+// RenderTrees comparison (Path/PathOrig are set by RenderTrees). Two flags
+// harden it for a tool that may be exposed:
 //   - WipeSecrets replaces Secret cleartext with placeholders, so no secret
-//     value can reach the diff (and thus a response) even if a manifest carries
-//     one in cleartext.
+//     value can reach the diff (and thus a response) even if a manifest
+//     carries one in cleartext.
 //   - AllowMissingSecrets lets public/token-less renders proceed without the
 //     cluster's real secrets (missing auth secrets become skips).
-func (e *flateEngine) render(ctx context.Context, path, origPath string) (*orchestrator.Result, error) {
-	o, err := orchestrator.New(orchestrator.Config{
-		Path:        path,
-		PathOrig:    origPath,
-		SourceCache: e.cache,
-		// CacheDir roots flate's persistent stage + on-disk Helm render caches on
-		// the same (operator-mounted) volume as the source cache, so they survive
-		// restarts and are reused across PRs.
+//
+// e.cache is the long-lived source cache reused across every PR; CacheDir
+// roots flate's persistent stage + on-disk Helm render caches on the same
+// (operator-mounted) volume so they survive restarts.
+func (e *flateEngine) renderCfg() orchestrator.Config {
+	return orchestrator.Config{
+		SourceCache:            e.cache,
 		CacheDir:               e.cacheDir,
 		WipeSecrets:            true,
 		AllowMissingSecrets:    true,
@@ -164,12 +153,7 @@ func (e *flateEngine) render(ctx context.Context, path, origPath string) (*orche
 		HelmRenderCacheBytes:   e.helmRenderCacheBytes,
 		Concurrency:            e.concurrency,
 		SourceRetry:            e.sourceRetry,
-	})
-	if err != nil {
-		return nil, err
 	}
-	defer o.Stop()
-	return o.Render(ctx)
 }
 
 func joinPath(dir, sub string) string {
@@ -182,48 +166,38 @@ func joinPath(dir, sub string) string {
 // childEntry is one rendered resource together with the parent (HelmRelease /
 // Kustomization) that produced it and its helm.sh/chart label (captured before
 // normalize strips it, so a chart-version bump can be flagged).
-type childEntry struct {
-	parent   manifest.NamedResource
-	resource map[string]any
-	chart    string
-}
-
-// pairChanges diffs two flate render outputs into resource-level changes.
-// Manifests is keyed by the producing parent; each parent maps to the list of
-// child resources it rendered. A child is matched across the two sides by
-// (parent, kind, namespace, name); unchanged children are dropped. The result
-// is sorted for deterministic output.
+// pairChanges diffs two flate render outputs (each keyed by producing
+// parent) into konflate's resource-level changes. The pairing,
+// normalization, byte-equality drop, and chart-label capture are flate's
+// diff.Changes; konflate layers only its secret/cert scrub (the redact
+// hook) on top of flate's default strip lists. flate.Change maps 1:1 onto
+// our diff.Change (Parent struct → "Kind ns/name" label), already sorted
+// by parent then identity.
 func pairChanges(base, head map[manifest.NamedResource][]map[string]any) []diff.Change {
-	baseIdx := indexChildren(base)
-	headIdx := indexChildren(head)
-
-	keys := unionKeys(baseIdx, headIdx)
-	changes := make([]diff.Change, 0, len(keys))
-	for _, k := range keys {
-		old, inBase := baseIdx[k]
-		nw, inHead := headIdx[k]
-		switch {
-		case inBase && inHead:
-			if reflect.DeepEqual(old.resource, nw.resource) {
-				continue // unchanged
-			}
-			changes = append(changes, change("changed", nw.parent, old.resource, nw.resource, old.chart, nw.chart))
-		case inHead:
-			changes = append(changes, change("added", nw.parent, nil, nw.resource, "", nw.chart))
-		default:
-			changes = append(changes, change("removed", old.parent, old.resource, nil, old.chart, ""))
+	fc := flatediff.Changes(
+		flatediff.DocsFromManifests(base, nil),
+		flatediff.DocsFromManifests(head, nil),
+		flatediff.Options{
+			StripAttrs:  flatediff.DefaultStripAttrs,
+			StripFields: flatediff.DefaultStripFields,
+			Normalize:   redact,
+		},
+	)
+	out := make([]diff.Change, len(fc))
+	for i, c := range fc {
+		out[i] = diff.Change{
+			Status:    string(c.Status),
+			Kind:      c.Kind,
+			Namespace: c.Namespace,
+			Name:      c.Name,
+			Parent:    parentLabel(manifest.NamedResource{Kind: c.Parent.Kind, Namespace: c.Parent.Namespace, Name: c.Parent.Name}),
+			Old:       c.Old,
+			New:       c.New,
+			OldChart:  c.OldChart,
+			NewChart:  c.NewChart,
 		}
 	}
-
-	slices.SortFunc(changes, func(a, b diff.Change) int {
-		return cmp.Or(
-			cmp.Compare(a.Parent, b.Parent),
-			cmp.Compare(a.Kind, b.Kind),
-			cmp.Compare(a.Namespace, b.Namespace),
-			cmp.Compare(a.Name, b.Name),
-		)
-	})
-	return changes
+	return out
 }
 
 // unionKeys returns the deduplicated keys present across the given maps.
@@ -241,79 +215,25 @@ func unionKeys[K comparable, V any](ms ...map[K]V) []K {
 	return out
 }
 
-// stripAttrs are the metadata annotation/label keys dropped before diffing.
-// They rotate on every Helm chart bump (the chart version, value checksums) and
-// carry no review-relevant signal, so leaving them in surfaces a spurious
-// change on every resource a touched chart renders — even resources the PR
-// doesn't change. Mirrors flate's diff defaults (defaultStripAttrs); a trailing
-// "/" is a prefix match, so "checksum/" drops checksum/config, checksum/secret,
-// and any other checksum/<x> a chart emits.
-var stripAttrs = []string{
-	"helm.sh/chart",
-	"checksum/",
-	"app.kubernetes.io/version",
-	"chart",
-}
-
-// stripFields are dotted spec field-paths whose value a chart templates from the
-// render clock, so it rotates on every render. Mirrors flate's diff defaults
-// (defaultStripFields): volsync's spec.restic.unlock ({{ now }}, via the
-// TrueCharts common library) would otherwise show a spurious change on every
-// backed-up app whenever the two sides render a moment apart.
-var stripFields = []string{
-	"spec.restic.unlock",
-}
-
-// normalize rewrites a rendered manifest in place so render-time noise doesn't
-// register as a change. flate renders each side of the diff fresh, so anything
-// non-deterministic or review-irrelevant in the output would otherwise surface
-// as a phantom change on every PR that touches a neighbouring chart. Three
-// classes are scrubbed:
+// redact is the konflate-specific scrub passed to flate's diff.Changes as
+// Options.Normalize. flate already strips the chart-bump attributes and
+// render-clock spec fields (via DefaultStripAttrs / DefaultStripFields)
+// and summarizes ConfigMap binaryData; this adds the two scrubs flate
+// leaves to the consumer's policy, run on the deep copy before the
+// byte-equality check so they never read as a change (nor reach a
+// response):
 //
-//   - Chart-bump attributes (helm.sh/chart, checksum/*, …) and render-clock
-//     spec field-paths (spec.restic.unlock) — dropped via flate's
-//     manifest.StripResourceAttributes / StripResourceFields, mirroring its own
-//     pre-diff normalization defaults.
-//   - ConfigMap binaryData — opaque base64 blobs collapsed to a content
-//     summary; the review signal is "did the bytes change", not which base64
-//     character flipped.
-//   - Secret values and PEM cert/key material — see redactSecretValues /
-//     redactCerts. Charts that mint a TLS cert at render time (Helm
-//     genSignedCert) produce a different cert on every render; flate only wipes
-//     the Secrets it reads for auth, not the ones a chart renders into output.
-func normalize(m map[string]any) {
-	manifest.StripResourceAttributes(m, stripAttrs)
-	manifest.StripResourceFields(m, stripFields)
-	switch manifest.DocKind(m) {
-	case manifest.KindConfigMap:
-		summarizeBinaryData(m)
-	case manifest.KindSecret:
+//   - Secret data/stringData values — opaque and often render-random or
+//     sensitive; whether keys were added/removed still shows.
+//   - PEM cert/key material anywhere (a chart-minted TLS cert, a CRD/
+//     webhook caBundle injected at render time) — different on every
+//     render; flate only wipes the Secrets it reads for auth, not the ones
+//     a chart renders into output.
+func redact(m map[string]any) {
+	if manifest.DocKind(m) == manifest.KindSecret {
 		redactSecretValues(m)
 	}
 	redactCerts(m)
-}
-
-// summarizeBinaryData collapses each ConfigMap.binaryData value to a stable,
-// content-derived placeholder (verbatim base64 diffs are gibberish to a
-// reviewer and pathologically large for the renderer).
-func summarizeBinaryData(m map[string]any) {
-	bd, ok := m["binaryData"].(map[string]any)
-	if !ok {
-		return
-	}
-	for k, v := range bd {
-		bd[k] = binaryDataSummary(v)
-	}
-}
-
-func binaryDataSummary(v any) string {
-	s, _ := v.(string)
-	raw := []byte(s)
-	if dec, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s)); err == nil {
-		raw = dec
-	}
-	sum := sha256.Sum256(raw)
-	return fmt.Sprintf("<binary %d bytes, sha256:%s>", len(raw), hex.EncodeToString(sum[:])[:16])
 }
 
 // redactSecretValues replaces every data / stringData value with a constant
@@ -398,54 +318,6 @@ func pemToken(pem string) (string, bool) {
 // indexChildren flattens the parent→children map into a key→entry map, keyed by
 // parent + child coordinates so a child is paired only with its counterpart
 // under the same parent. Each manifest is normalized first.
-func indexChildren(m map[manifest.NamedResource][]map[string]any) map[string]childEntry {
-	idx := make(map[string]childEntry)
-	for parent, children := range m {
-		for _, res := range children {
-			chart := chartLabel(res) // before normalize strips helm.sh/chart
-			normalize(res)
-			kind, ns, name := coords(res)
-			key := strings.Join([]string{parentLabel(parent), kind, ns, name}, "\x00")
-			idx[key] = childEntry{parent: parent, resource: res, chart: chart}
-		}
-	}
-	return idx
-}
-
-// chartLabel returns a manifest's "helm.sh/chart" label ("<name>-<version>"),
-// or "" if absent.
-func chartLabel(m map[string]any) string {
-	meta, ok := m["metadata"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	labels, ok := meta["labels"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	s, _ := labels["helm.sh/chart"].(string)
-	return s
-}
-
-func change(status string, parent manifest.NamedResource, old, nw map[string]any, oldChart, newChart string) diff.Change {
-	src := nw
-	if src == nil {
-		src = old
-	}
-	kind, ns, name := coords(src)
-	return diff.Change{
-		Status:    status,
-		Kind:      kind,
-		Namespace: ns,
-		Name:      name,
-		Parent:    parentLabel(parent),
-		Old:       old,
-		New:       nw,
-		OldChart:  oldChart,
-		NewChart:  newChart,
-	}
-}
-
 // renderFailures converts flate's per-parent render failures into the API shape.
 func renderFailures(failed map[manifest.NamedResource]store.StatusInfo) []api.RenderFailure {
 	if len(failed) == 0 {
@@ -459,16 +331,6 @@ func renderFailures(failed map[manifest.NamedResource]store.StatusInfo) []api.Re
 		return cmp.Or(cmp.Compare(a.Parent, b.Parent), cmp.Compare(a.Message, b.Message))
 	})
 	return out
-}
-
-// coords extracts kind/namespace/name from a manifest map.
-func coords(m map[string]any) (kind, ns, name string) {
-	kind, _ = m["kind"].(string)
-	if meta, ok := m["metadata"].(map[string]any); ok {
-		name, _ = meta["name"].(string)
-		ns, _ = meta["namespace"].(string)
-	}
-	return kind, ns, name
 }
 
 func parentLabel(nr manifest.NamedResource) string {
