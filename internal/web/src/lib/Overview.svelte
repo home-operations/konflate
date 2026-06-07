@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from './router.svelte';
-  import { store, openSel } from './store.svelte';
+  import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
@@ -11,7 +11,7 @@
   // a warning can deep-link to the diff it flags. Null when the resource didn't
   // render into the diff (e.g. it only changed indirectly).
   function warningTarget(resource: string): string | null {
-    return d?.resources?.find((r) => r.title === resource)?.id ?? null;
+    return diffIndex().idByTitle.get(resource) ?? null;
   }
   function openWarning(id: string): void {
     if (router.route.name === 'review') openSel(router.route.pr, id);

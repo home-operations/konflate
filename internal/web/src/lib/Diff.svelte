@@ -36,7 +36,7 @@
   // value (PR titles, file paths, warnings — anything forge-controlled) into
   // these fields, and never relax this without adding client-side sanitization.
   import type { DiffResource, SideCell } from './types';
-  import { store } from './store.svelte';
+  import { diffIndex } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiAlertOctagon, mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
@@ -51,7 +51,7 @@
   // This resource's lint warnings, shown in its sticky header — in the stacked
   // scroll the global danger strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
-  const warns = $derived((store.diff?.warnings ?? []).filter((w) => w.resource === resource.title));
+  const warns = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
   const dangers = $derived(warns.filter((w) => w.level === 'danger'));
   const cautions = $derived(warns.filter((w) => w.level !== 'danger'));
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from './router.svelte';
-  import { store, openSel } from './store.svelte';
+  import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import { mdiAlertOctagon, mdiFileDocumentOutline } from './icons';
 
@@ -8,11 +8,10 @@
   const d = $derived(store.diff);
   // A null selection (bare #/pr/N) defaults to the Summary node.
   const sel = $derived(router.route.name === 'review' ? (router.route.sel ?? 'summary') : null);
-  // Resources carrying a danger warning, keyed by their "Kind ns/name" label.
-  const dangerLabels = $derived(
-    new Set((d?.warnings ?? []).filter((w) => w.level === 'danger').map((w) => w.resource)),
-  );
-  const dangerCount = $derived((d?.warnings ?? []).filter((w) => w.level === 'danger').length);
+  // Resource titles ("Kind ns/name") carrying a danger warning, and the total
+  // danger count — both from the shared diff index (computed once per diff).
+  const dangerLabels = $derived(diffIndex().dangerResources);
+  const dangerCount = $derived(diffIndex().dangerCount);
 
   function open(id: string) {
     if (router.route.name === 'review') openSel(router.route.pr, id);
