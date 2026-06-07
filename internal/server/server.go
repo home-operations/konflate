@@ -73,7 +73,10 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // signal-triggered shutdown.
 func (s *Server) Run(ctx context.Context) error {
 	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, s.cfg.MaxDiffConcurrency)
+	s.queue = newQueue(
+		ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
+		s.metrics, s.log, s.cfg.MaxDiffConcurrency, s.cfg.RenderForkPRs,
+	)
 
 	mainSrv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.cfg.Port),

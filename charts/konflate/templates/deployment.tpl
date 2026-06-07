@@ -61,6 +61,10 @@ spec:
             - name: KONFLATE_MAX_DIFF_CONC
               value: {{ .Values.config.maxDiffConcurrency | quote }}
             {{- end }}
+            # Always emitted so the (security-relevant) fork-render posture is
+            # explicit in the rendered manifest, not implied by a default.
+            - name: KONFLATE_RENDER_FORK_PRS
+              value: {{ .Values.config.renderForkPrs | quote }}
             {{- if ne (toString .Values.config.maxDiffResources) "" }}
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}

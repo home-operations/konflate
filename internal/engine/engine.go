@@ -50,6 +50,11 @@ type flateEngine struct {
 	// mirror is the persistent bare clone of the repo; each diff fetches the
 	// base/head refs into it incrementally instead of re-cloning.
 	mirror *gitclone.Mirror
+	// pullHeadRef maps a PR number to the forge's server-side pull head ref
+	// (refs/pull/N/head; refs/merge-requests/N/head on GitLab). The mirror fetches
+	// the head from this ref rather than the head branch, so cross-repo (fork) PRs
+	// — whose branch lives in the contributor's repo — still resolve.
+	pullHeadRef func(number int) string
 	// cache is shared across every diff for this repo instance and, within a
 	// single diff, across the base and head renders — so the head render reuses
 	// the Helm charts / OCI layers / git sources the base render already
@@ -80,6 +85,7 @@ func New(cfg *config.Config) Engine {
 		selfURLs:               []string{cfg.Forge.CloneURL()},
 		cacheDir:               cfg.CacheDir,
 		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token),
+		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,
 		helmTemplateCacheBytes: int64(cfg.HelmTemplateCacheMB) * mib,
@@ -107,7 +113,7 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		defer cancel()
 	}
 
-	clone, err := e.mirror.Trees(ctx, pr.HeadRef, pr.BaseRef)
+	clone, err := e.mirror.Trees(ctx, e.pullHeadRef(pr.Number), pr.BaseRef)
 	if err != nil {
 		return api.DiffResult{}, fmt.Errorf("engine: clone PR #%d: %w", pr.Number, err)
 	}

@@ -87,6 +87,24 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
 
+  - it: gates fork PRs off by default (KONFLATE_RENDER_FORK_PRS=false)
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RENDER_FORK_PRS
+            value: "false"
+
+  - it: opts into rendering fork PRs when renderForkPrs is true
+    set:
+      config.renderForkPrs: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RENDER_FORK_PRS
+            value: "true"
+
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
       - notContains:

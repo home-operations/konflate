@@ -82,7 +82,9 @@ func gitlabToPR(mr *gitlab.BasicMergeRequest) api.PR {
 		HeadRef:      mr.SourceBranch,
 		HeadSHA:      mr.SHA,
 		BaseRef:      mr.TargetBranch,
-		Labels:       labels,
-		URL:          mr.WebURL,
+		// Cross-project (fork) when the MR source and target projects differ.
+		Fork:   mr.SourceProjectID != mr.TargetProjectID,
+		Labels: labels,
+		URL:    mr.WebURL,
 	}
 }

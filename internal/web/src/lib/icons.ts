@@ -37,6 +37,7 @@ export {
   mdiSortDescending,
   mdiSourceBranch,
   mdiSourcePull,
+  mdiSourceFork,
   mdiFilterOutline,
   mdiTrayFull,
   mdiUnfoldMoreHorizontal,

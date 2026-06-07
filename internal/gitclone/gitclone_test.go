@@ -136,19 +136,52 @@ func assertMergeBaseTrees(t *testing.T, res *Result) {
 	}
 }
 
-// TestMirror_HeadRefGone verifies that a head ref the remote no longer advertises
-// (the PR's branch was deleted after a merge) surfaces as ErrHeadRefGone, so the
-// server can reconcile the PR instead of recording a render failure.
+// TestMirror_HeadRefGone verifies that a pull head ref the remote no longer
+// advertises (the request was deleted) surfaces as ErrHeadRefGone, so the server
+// can reconcile the PR instead of recording a render failure.
 func TestMirror_HeadRefGone(t *testing.T) {
 	t.Parallel()
 	src := buildRepo(t)
 
-	// "master" (the base) exists; "feature" was deleted; fetching it must report
-	// the ref as gone rather than an opaque error.
-	_, err := newTestMirror(t, src).Trees(context.Background(), "deleted-after-merge", "master")
+	// "master" (the base) exists; pull request 999 does not, so its head ref is
+	// absent — fetching it must report the ref as gone rather than an opaque error.
+	_, err := newTestMirror(t, src).Trees(context.Background(), "refs/pull/999/head", "master")
 	if !errors.Is(err, ErrHeadRefGone) {
 		t.Fatalf("Trees with a missing head ref: got %v, want ErrHeadRefGone", err)
 	}
+}
+
+// TestMirror_ForkPullHead verifies the head is fetched via the forge's pull head
+// ref (refs/pull/N/head) — the ref the base repo publishes for a cross-repo
+// (fork) PR, whose branch never lands in the base repo's refs/heads — so such
+// PRs still render.
+func TestMirror_ForkPullHead(t *testing.T) {
+	t.Parallel()
+	src := buildRepo(t)
+
+	// Publish the head at refs/pull/1/head (as a forge does for a fork PR) and
+	// delete refs/heads/feature, so the pull ref is the only way to reach the head.
+	repo, err := git.PlainOpen(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feat, err := repo.Reference(plumbing.NewBranchReferenceName("feature"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Storer.SetReference(plumbing.NewHashReference("refs/pull/1/head", feat.Hash())); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Storer.RemoveReference(plumbing.NewBranchReferenceName("feature")); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/pull/1/head", "master")
+	if err != nil {
+		t.Fatalf("Trees via pull head ref: %v", err)
+	}
+	defer res.Cleanup()
+	assertMergeBaseTrees(t, res)
 }
 
 func TestMirror_MergeBaseTrees(t *testing.T) {
@@ -156,7 +189,7 @@ func TestMirror_MergeBaseTrees(t *testing.T) {
 	src := buildRepo(t)
 
 	// the default branch from PlainInit is "master"
-	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}
@@ -172,7 +205,7 @@ func TestMirror_Reuse(t *testing.T) {
 	src := buildRepo(t)
 	m := newTestMirror(t, src)
 
-	first, err := m.Trees(context.Background(), "feature", "master")
+	first, err := m.Trees(context.Background(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees (first): %v", err)
 	}
@@ -181,7 +214,7 @@ func TestMirror_Reuse(t *testing.T) {
 		t.Fatalf("mirror bare repo not present after first render: %v", err)
 	}
 
-	second, err := m.Trees(context.Background(), "feature", "master")
+	second, err := m.Trees(context.Background(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees (reuse): %v", err)
 	}
@@ -206,7 +239,7 @@ func TestMirror_Concurrent(t *testing.T) {
 	errs := make([]error, n)
 	for i := range n {
 		wg.Go(func() {
-			res, err := m.Trees(context.Background(), "feature", "master")
+			res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
 			if err != nil {
 				errs[i] = err
 				return
@@ -255,7 +288,7 @@ func TestMirror_SkipsOversizedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}

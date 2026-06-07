@@ -90,7 +90,7 @@
 
   // pending/running render as icons below and ready carries signal badges, so
   // this fallback only labels the terminal error state.
-  const statusLabel: Record<string, string> = { error: 'failed' };
+  const statusLabel: Record<string, string> = { error: 'failed', blocked: 'fork · not rendered' };
 
   // A '#'-prefixed color for a label dot, or '' when the forge gave no usable
   // hex (e.g. GitLab) — validated so a stray value can't reach the style binding.
