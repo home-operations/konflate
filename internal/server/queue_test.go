@@ -44,7 +44,7 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, true)
 	pr := api.PR{Number: 1}
 
 	q.enqueue(pr)
@@ -64,6 +64,52 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	mu.Unlock()
 	if got != 2 {
 		t.Fatalf("diff called %d times, want exactly 2 (one render + one coalesced re-render)", got)
+	}
+}
+
+// TestQueue_ForkGate verifies fork (cross-repo) PRs are not rendered unless
+// rendering is opted in: with the gate off they are recorded as blocked and the
+// engine is never called; same-repo PRs are unaffected; with the gate on a fork
+// PR renders like any other.
+func TestQueue_ForkGate(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	calls := 0
+	diff := func(_ context.Context, pr api.PR) (api.DiffResult, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		return api.DiffResult{PRNumber: pr.Number}, nil
+	}
+
+	st := newStore()
+
+	// Gate off: a fork PR is blocked synchronously and never rendered.
+	off := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, false)
+	off.enqueue(api.PR{Number: 1, Open: true, Fork: true})
+	if env, ok := st.get(1); !ok || env.Status != api.JobBlocked {
+		t.Fatalf("fork PR with gate off: status=%q ok=%v, want %q", env.Status, ok, api.JobBlocked)
+	}
+	mu.Lock()
+	zero := calls
+	mu.Unlock()
+	if zero != 0 {
+		t.Fatalf("fork PR was rendered despite the gate (%d calls)", zero)
+	}
+
+	// A same-repo PR is unaffected by the gate.
+	off.enqueue(api.PR{Number: 2, Open: true})
+	waitTerminal(t, st, 2)
+
+	// Gate on: the fork PR renders.
+	on := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, true)
+	on.enqueue(api.PR{Number: 3, Open: true, Fork: true})
+	waitTerminal(t, st, 3)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("rendered %d PRs, want 2 (same-repo + opted-in fork)", calls)
 	}
 }
 
@@ -87,7 +133,7 @@ func TestQueue_CoalesceUsesLatestMetadata(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, true)
 
 	q.enqueue(api.PR{Number: 1, HeadSHA: "old"})
 	<-started // "old" is rendering
@@ -118,7 +164,7 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 	t.Parallel()
 	diff := func(context.Context, api.PR) (api.DiffResult, error) { panic("boom") }
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, true)
 
 	st.upsertPR(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 1})
@@ -142,7 +188,7 @@ func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
 	st := newStore()
 	st.upsertPR(api.PR{Number: 1})
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from when the PR was open
-	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1, true)
 
 	q.enqueue(api.PR{Number: 1})
 
@@ -177,7 +223,7 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, true)
 
 	q.enqueue(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 2})

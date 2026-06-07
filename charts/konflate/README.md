@@ -58,6 +58,7 @@ Kubernetes: `>=1.25.0-0`
 | config.mergeCommand | string | `""` | Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it. |
 | config.refreshInterval | string | `"30m"` | How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). |
 | config.renderConcurrency | string | `""` | Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4). |
+| config.renderForkPrs | bool | `false` | Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances. |
 | config.repo | required | `""` | Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo). |
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
 | config.stageCacheMb | string | `""` | Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); "0" disables size-based eviction. |

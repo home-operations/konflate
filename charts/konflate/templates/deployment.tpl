@@ -61,6 +61,10 @@ spec:
             - name: KONFLATE_MAX_DIFF_CONC
               value: {{ .Values.config.maxDiffConcurrency | quote }}
             {{- end }}
+            # Always emitted so the (security-relevant) fork-render posture is
+            # explicit in the rendered manifest, not implied by a default.
+            - name: KONFLATE_RENDER_FORK_PRS
+              value: {{ .Values.config.renderForkPrs | quote }}
             {{- /* toString, not `with`: an explicit 0 (disable a cache) must
                    still emit — `with` would treat int 0 as empty and drop it,
                    silently reviving the default. Empty string = use the default.
