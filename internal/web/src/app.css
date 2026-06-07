@@ -1164,6 +1164,18 @@ button.sum-pill:hover {
 /* All sections (Summary + every resource diff) stack in one scrolling pane —
    review by scrolling, not by clicking each resource. The sticky .res-header
    inside each section marks where you are; a rule separates the sections. */
+/* Skip the layout + paint of sections scrolled out of view. The lazy-mount
+   (Diffs.svelte) keeps an off-screen section's DOM cheap; this keeps a
+   mounted-but-scrolled-away one from costing layout/paint on every reflow.
+   contain-intrinsic-size reserves space while a section is skipped so the
+   scrollbar stays stable: the first (fixed) value is the fallback older
+   engines parse; the 'auto' form, where supported, then remembers each
+   section's real height so the scroll position never jumps. */
+.diff-section {
+  content-visibility: auto;
+  contain-intrinsic-size: 600px;
+  contain-intrinsic-size: auto 600px;
+}
 .diff-section + .diff-section {
   border-top: 1px solid var(--border);
 }
