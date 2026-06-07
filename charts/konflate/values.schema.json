@@ -90,6 +90,12 @@
           "title": "renderConcurrency",
           "type": "string"
         },
+        "renderForkPrs": {
+          "default": false,
+          "description": "Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.",
+          "title": "renderForkPrs",
+          "type": "boolean"
+        },
         "repo": {
           "default": "",
           "description": "(required) Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo).",

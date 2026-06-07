@@ -65,6 +65,15 @@ config:
 
   # -- Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).
   maxDiffConcurrency: 0
+  # KONFLATE_RENDER_FORK_PRS — render pull requests from forks (cross-repo, whose
+  # head branch lives in a contributor's repository). These are untrusted
+  # external code: rendering runs their manifests through flate, which fetches
+  # the sources they declare (SSRF, resource exhaustion). Off by default — fork
+  # PRs are listed but shown as "not rendered" until you opt in. Keep this false
+  # on any public/shared instance.
+
+  # -- Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.
+  renderForkPrs: false
   # --- flate render tuning (advanced) ---------------------------------------
   # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
   # flate's own CLI and suit most setups — leave these empty to use them. The
