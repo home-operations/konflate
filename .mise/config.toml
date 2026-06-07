@@ -81,6 +81,10 @@ run = "npm run test:e2e"
 description = "Lint the Helm chart"
 run = "helm lint charts/konflate"
 
+[tasks.helm-unittest]
+description = "Run helm-unittest template tests (needs the helm-unittest plugin)"
+run = "helm unittest charts/konflate"
+
 [tasks.helm-template]
 description = "Render the Helm chart with example values"
 run = "helm template konflate charts/konflate --set config.repo=github://owner/repo"

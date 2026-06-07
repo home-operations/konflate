@@ -1,0 +1,82 @@
+suite: deployment
+templates:
+  - deployment.tpl
+set:
+  config.repo: github://owner/repo
+tests:
+  - it: defaults the image to repository:appVersion when no digest or tag is set
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/home-operations/konflate:0.0.0
+
+  - it: prefers the digest over the tag when set
+    set:
+      image.digest: sha256:deadbeef
+      image.tag: ignored
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/home-operations/konflate@sha256:deadbeef
+
+  - it: uses an explicit tag when no digest is set
+    set:
+      image.tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/home-operations/konflate:v1.2.3
+
+  - it: renders config.repo through tpl
+    set:
+      config.repo: github://owner/{{ .Release.Name }}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_REPO
+            value: github://owner/RELEASE-NAME
+
+  - it: passes mergeCommand through verbatim (it is konflate's own Go template, not tpl'd)
+    set:
+      config.mergeCommand: "gh pr merge {{ .Number }} --repo {{ .Repo }}"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_MERGE_COMMAND
+            value: "gh pr merge {{ .Number }} --repo {{ .Repo }}"
+
+  - it: omits KONFLATE_MAX_DIFF_CONC when maxDiffConcurrency is 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_MAX_DIFF_CONC
+
+  - it: emits KONFLATE_MAX_DIFF_CONC when maxDiffConcurrency is greater than 0
+    set:
+      config.maxDiffConcurrency: 4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_MAX_DIFF_CONC
+            value: "4"
+
+  - it: emits a cache var explicitly set to "0" (disable) rather than dropping it
+    set:
+      config.helmTemplateCacheMb: "0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_HELM_TEMPLATE_CACHE_MB
+            value: "0"
+
+  - it: does not automount the ServiceAccount token
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
