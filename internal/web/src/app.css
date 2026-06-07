@@ -39,6 +39,15 @@
   --caution-bg: #272115;
 }
 
+/* Font families: UI/prose in Geist (sans), code + identifiers in Geist Mono.
+   Both are bundled via @fontsource-variable (imported in main.ts); the system
+   stacks are the fallback until the woff2 loads (or if it fails). Theme-
+   independent, so they live on :root rather than the .light/.dark token blocks. */
+:root {
+  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -50,8 +59,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  /* Mono-first: the whole app reads as an instrument, not a web page. */
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* Sans (Geist) for the UI chrome and prose; code and identifiers — diffs,
+     SHAs, resource names, image refs — use mono (Geist Mono) where defined. */
+  font-family: var(--font-sans);
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
 }
@@ -330,7 +340,7 @@ a.repo:focus-visible .repo-ext {
 .error-box {
   color: var(--danger);
   white-space: pre-wrap;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 /* The PR number, shown first in the meta row (list + review) behind a
@@ -831,7 +841,7 @@ button.sum-pill:hover {
   gap: 3px;
 }
 .sha {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .sha-wrap {
   display: inline-flex;
@@ -925,7 +935,7 @@ button.sum-pill:hover {
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text);
   background: var(--panel-alt);
@@ -1053,6 +1063,7 @@ button.sum-pill:hover {
   color: var(--caution);
 }
 .warning-res {
+  font-family: var(--font-mono); /* the flagged resource — Kind ns/name */
   font-size: 12px;
   font-weight: 600;
 }
@@ -1083,7 +1094,7 @@ button.sum-pill:hover {
   gap: 4px;
 }
 .img-name {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -1092,7 +1103,7 @@ button.sum-pill:hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .img-ver {
   overflow-wrap: anywhere;
@@ -1107,6 +1118,7 @@ button.sum-pill:hover {
   color: var(--muted);
 }
 .img-refs {
+  font-family: var(--font-mono); /* referencing resources — Kind ns/name */
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -1114,12 +1126,12 @@ button.sum-pill:hover {
   padding: 4px 0;
 }
 .failure-parent {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 .failure-msg {
   color: var(--danger);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
 }
@@ -1187,7 +1199,7 @@ button.sum-pill:hover {
   font-variant-numeric: tabular-nums;
 }
 .switcher-name {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -1269,7 +1281,7 @@ button.sum-pill:hover {
 }
 .leaf-name {
   flex: 1 1 auto;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 .tree-item.status-added .leaf-name {
@@ -1300,6 +1312,7 @@ button.sum-pill:hover {
   z-index: 1;
 }
 .res-title {
+  font-family: var(--font-mono); /* a resource identifier — Kind ns/name */
   font-weight: 600;
   flex: 1 1 auto;
   word-break: break-all;
@@ -1310,6 +1323,11 @@ button.sum-pill:hover {
 .res-title-quiet {
   color: var(--muted);
   font-weight: 500;
+}
+/* The Summary header's "Overview" is a label, not an identifier — keep it in the
+   UI (sans) font rather than inheriting .res-title's mono. */
+.res-title-quiet {
+  font-family: inherit;
 }
 .res-status {
   font-size: 10px;
@@ -1380,7 +1398,7 @@ button.sum-pill:hover {
 table.diff {
   width: 100%;
   border-collapse: collapse;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1580,7 +1598,7 @@ td.side-blank {
   color: var(--muted);
 }
 kbd {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   border: 1px solid var(--border);
   border-bottom-width: 2px;
@@ -1679,7 +1697,7 @@ kbd {
   white-space: nowrap;
 }
 .row-title.mono {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 .row-title mark {
