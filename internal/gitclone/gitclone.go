@@ -26,10 +26,18 @@ import (
 )
 
 // ErrHeadRefGone reports that the PR's head ref no longer exists on the remote —
-// typically the PR was merged or closed and its branch deleted between when a
-// render was enqueued and when it ran. Callers treat this as "the PR left the
-// open set", not a render failure.
+// the pull/merge request was deleted, so the forge dropped its head ref. Callers
+// treat this as "the PR left the open set", not a render failure. (A merge or
+// close alone no longer trips this: the forge keeps refs/pull/N/head after merge,
+// and such PRs are reconciled off the open set by the periodic refresh instead.)
 var ErrHeadRefGone = errors.New("gitclone: head ref no longer exists on remote")
+
+// localHeadRef is the mirror-local ref the PR head is fetched into. The head is
+// taken from the forge's pull head ref (refs/pull/N/head), which isn't a branch,
+// so it's mapped into this private namespace rather than refs/heads. Fetches are
+// serialized under Mirror.mu, and each render resolves its head commit before
+// releasing the lock, so one shared local ref is safe.
+const localHeadRef = "refs/konflate/pull-head"
 
 // Result holds the two extracted working trees plus a cleanup func that
 // removes them. Callers must call Cleanup.
@@ -73,9 +81,11 @@ func NewMirror(cacheDir, cloneDir, cloneURL, token string) *Mirror {
 	}
 }
 
-// Trees fetches headRef and baseRef into the mirror, computes the merge-base of
+// Trees fetches the PR head and base into the mirror, computes the merge-base of
 // the two (GitHub-style), and extracts the head and merge-base trees to a fresh
-// working directory. headRef/baseRef are branch names. Callers must call
+// working directory. headRef is a full server-side ref — the forge's pull head
+// ref (refs/pull/N/head), which the base repo publishes for fork and same-repo
+// PRs alike — and baseRef is the target branch name. Callers must call
 // Result.Cleanup.
 func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result, err error) {
 	head, base, err := m.fetch(ctx, headRef, baseRef)
@@ -144,19 +154,23 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 
 	// Refresh the base branch (a no-op right after the seeding clone). A missing
 	// base is a real error — the PR targets it.
-	if err := fetchRef(ctx, repo, m.auth, baseRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	baseFull := "refs/heads/" + baseRef
+	if err := fetchSpec(ctx, repo, m.auth, baseFull, baseFull); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil, nil, fmt.Errorf("gitclone: fetch base %q: %w", baseRef, err)
 	}
-	// A missing head ref means the branch was deleted (merged/closed PR) — report
-	// it as gone so the caller reconciles the PR rather than failing the render.
-	if err := fetchRef(ctx, repo, m.auth, headRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	// headRef is the forge's pull head ref (refs/pull/N/head), which the base repo
+	// publishes for every PR — including forks, whose branch isn't in the base
+	// repo. Fetch it into a private local ref. A missing head ref means the
+	// request was deleted — report it as gone so the caller reconciles the PR
+	// rather than failing the render.
+	if err := fetchSpec(ctx, repo, m.auth, headRef, localHeadRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, git.NoMatchingRefSpecError{}) {
 			return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, ErrHeadRefGone)
 		}
 		return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, err)
 	}
 
-	head, err = resolveCommit(repo, headRef)
+	head, err = resolveCommit(repo, localHeadRef)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gitclone: head %q: %w", headRef, err)
 	}
@@ -206,11 +220,12 @@ func (m *Mirror) openOrClone(ctx context.Context, baseRef string) (*git.Reposito
 	return repo, nil
 }
 
-// fetchRef force-fetches a single branch into the mirror's refs/heads, pulling
-// only that branch (no tags). An explicit refspec lets the mirror accumulate
-// any base/head branch a PR needs, regardless of the branch it was seeded with.
-func fetchRef(ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth, ref string) error {
-	spec := gitconfig.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/heads/%s", ref, ref))
+// fetchSpec force-fetches a single remote ref (src) into a local ref (dst),
+// pulling only that ref (no tags). An explicit, forced refspec lets the mirror
+// accumulate any base branch or pull head a PR needs, regardless of the ref it
+// was seeded with, and overwrite a stale local copy after a force-push.
+func fetchSpec(ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth, src, dst string) error {
+	spec := gitconfig.RefSpec(fmt.Sprintf("+%s:%s", src, dst))
 	return repo.FetchContext(ctx, &git.FetchOptions{
 		Auth:     auth,
 		RefSpecs: []gitconfig.RefSpec{spec},

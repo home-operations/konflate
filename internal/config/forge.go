@@ -54,6 +54,20 @@ type ForgeURI struct {
 // CloneURL returns the HTTPS URL for git-cloning the repository.
 func (f ForgeURI) CloneURL() string { return f.WebBase + "/" + f.RepoPath }
 
+// PullHeadRef returns the server-side ref in the BASE repository that points at
+// the head commit of pull/merge request number n. The base repo publishes this
+// ref for every request — including cross-repo (fork) ones, whose head branch
+// lives in the contributor's repo and so is absent from the base repo's
+// refs/heads — so fetching it resolves fork and same-repo PRs alike. GitHub and
+// Forgejo/Gitea expose refs/pull/<n>/head; GitLab exposes
+// refs/merge-requests/<n>/head.
+func (f ForgeURI) PullHeadRef(n int) string {
+	if f.Kind == ForgeGitLab {
+		return fmt.Sprintf("refs/merge-requests/%d/head", n)
+	}
+	return fmt.Sprintf("refs/pull/%d/head", n)
+}
+
 // ParseForgeURI parses raw into a ForgeURI.
 //
 // Go's url.Parse places everything between // and the first / into the host
