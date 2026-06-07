@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.19](https://github.com/home-operations/konflate/compare/0.1.18...0.1.19) (2026-06-07)
+
+
+### Features
+
+* **container:** update image mirror.gcr.io/busybox (1.37.0 → 1.38.0) ([#63](https://github.com/home-operations/konflate/issues/63)) ([ecbbe60](https://github.com/home-operations/konflate/commit/ecbbe6096652e0c0daf74c1f4a4bea1be8b88018))
+
+
+### Bug Fixes
+
+* **chart:** pin the helm-test image as tag@digest so renovate updates both ([#67](https://github.com/home-operations/konflate/issues/67)) ([8dda6df](https://github.com/home-operations/konflate/commit/8dda6df0786d3f225d9a53ae9027579ecb17574b))
+* **deps:** update dependency svelte (5.56.2 → 5.56.3) ([#64](https://github.com/home-operations/konflate/issues/64)) ([af21e0f](https://github.com/home-operations/konflate/commit/af21e0f1a1265152436053e1f0e680653bb05260))
+
 ## [0.1.18](https://github.com/home-operations/konflate/compare/0.1.17...0.1.18) (2026-06-07)
 
 
