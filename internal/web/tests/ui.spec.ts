@@ -764,7 +764,10 @@ test('list footer: project links, version, license, year — and no topbar GitHu
     'https://discord.gg/home-operations',
   );
   await expect(footer.getByRole('link', { name: 'AGPL-3.0' })).toHaveAttribute('href', /LICENSE/);
-  await expect(footer).toContainText(`© ${new Date().getFullYear()} home-operations`);
+  // The © glyph is now an icon from the library (labeled for screen readers),
+  // alongside the year and owner.
+  await expect(footer.getByRole('img', { name: 'Copyright' })).toBeVisible();
+  await expect(footer).toContainText(`${new Date().getFullYear()} home-operations`);
 
   // The project GitHub link moved out of the topbar into the footer.
   await expect(page.locator('.actions a')).toHaveCount(0);

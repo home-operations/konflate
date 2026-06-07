@@ -1555,6 +1555,13 @@ td.side-blank {
 .foot-sep {
   user-select: none;
 }
+/* The copyright line: align the © icon with the text the same way .foot-link
+   does (it's a span, not a link, so it doesn't share those rules). */
+.foot-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
 
 /* ---- keyboard-shortcuts help ------------------------------------------ */
 .help-overlay {

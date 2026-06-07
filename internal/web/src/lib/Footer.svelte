@@ -5,6 +5,7 @@
   import Icon from './Icon.svelte';
   import {
     mdiScaleBalance,
+    mdiCopyright,
     githubMark,
     discordMark,
     KONFLATE_REPO_URL,
@@ -33,5 +34,5 @@
     <Icon path={mdiScaleBalance} size={14} /> AGPL-3.0
   </a>
   <span class="foot-sep">·</span>
-  <span>© {year} home-operations</span>
+  <span class="foot-copy"><Icon path={mdiCopyright} size={14} label="Copyright" /> {year} home-operations</span>
 </footer>
