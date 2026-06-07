@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/home-operations/flate/pkg/image"
+
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/diff"
 )
@@ -60,52 +62,19 @@ func imageChanges(changes []diff.Change) []api.ImageChange {
 	return out
 }
 
-// collectImages walks a manifest and returns a map of image repository → tag or
-// digest for every container it finds (at any depth — covering Deployments,
-// StatefulSets, bare Pods, CronJob jobTemplates, etc.). nil manifest yields an
+// collectImages returns a map of image repository → tag or digest for every
+// container image referenced in a manifest. The detection is flate's
+// image.Extract — value-based, so it finds references anywhere in the tree
+// (not just under containers[]/initContainers[]: CNPG spec.imageName, a CRD
+// default, a sidecar under an arbitrary field) — and image.Split separates
+// each into (repository, version) robustly (a digest beats a tag; a
+// registry port is not mistaken for the version). nil manifest yields an
 // empty map.
 func collectImages(m map[string]any) map[string]string {
 	out := map[string]string{}
-	walkContainers(m, out)
+	for _, ref := range image.Extract(m) {
+		repo, ver := image.Split(ref)
+		out[repo] = ver
+	}
 	return out
-}
-
-func walkContainers(node any, out map[string]string) {
-	switch v := node.(type) {
-	case map[string]any:
-		for key, val := range v {
-			if key == "containers" || key == "initContainers" {
-				if arr, ok := val.([]any); ok {
-					for _, c := range arr {
-						if cm, ok := c.(map[string]any); ok {
-							if img, ok := cm["image"].(string); ok {
-								repo, ver := splitImageRef(img)
-								out[repo] = ver
-							}
-						}
-					}
-				}
-			}
-			walkContainers(val, out)
-		}
-	case []any:
-		for _, e := range v {
-			walkContainers(e, out)
-		}
-	}
-}
-
-// splitImageRef splits a container image reference into its repository and its
-// version (tag or digest). A digest ("repo@sha256:...") takes precedence; a tag
-// is the segment after the final colon, but only when that segment has no
-// slash — otherwise the colon belongs to a registry port (e.g.
-// "registry:5000/app" has no tag).
-func splitImageRef(ref string) (repo, version string) {
-	if i := strings.LastIndex(ref, "@"); i >= 0 {
-		return ref[:i], ref[i+1:]
-	}
-	if i := strings.LastIndex(ref, ":"); i >= 0 && !strings.Contains(ref[i+1:], "/") {
-		return ref[:i], ref[i+1:]
-	}
-	return ref, ""
 }
