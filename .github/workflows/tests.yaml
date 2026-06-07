@@ -55,7 +55,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # Node comes from mise (the single source of truth), like the Go toolchain.
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:

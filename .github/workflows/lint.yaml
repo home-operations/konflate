@@ -59,7 +59,5 @@ jobs:
       - name: Run helm lint
         run: mise run helm-lint
 
-      # Regenerate the chart README + values.schema.json and fail if either drifted
-      # from what's committed (same shape as fmt-check / tidy-check).
       - name: Check generated chart files are current
         run: mise run generate-check

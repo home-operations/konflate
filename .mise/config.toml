@@ -102,11 +102,6 @@ helm test konflate-e2e -n konflate-e2e --logs
 description = "Regenerate the chart's committed README + values.schema.json from Chart.yaml + values.yaml"
 run = """
 helm-docs --chart-search-root=charts --log-level=warn
-# required/additionalProperties are skipped so the schema stays permissive:
-# values.yaml supplies every default (nothing is user-required) and the free-form
-# maps (annotations, extraEnv, …) must stay open. Descriptions come from each key's
-# `# --` helm-docs line, so they match the README. --append-newline gives a clean
-# EOF; the file is .prettierignore'd (a generated artifact), so oxfmt skips it.
 helm-schema --chart-search-root charts/konflate --skip-auto-generation required,additionalProperties --append-newline
 """
 

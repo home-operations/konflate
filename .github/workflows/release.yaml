@@ -92,11 +92,6 @@ jobs:
           experimental: true
           install_args: --locked
 
-      # Pin the chart's image to the exact digest the build just published, so
-      # the released chart references an immutable image (not a floating tag).
-      # needs.release.outputs.digest comes from the docker/github-builder
-      # reusable workflow; fail closed if it's missing rather than ship a chart
-      # that silently falls back to the tag.
       - name: Pin the released image digest into the chart
         env:
           DIGEST: ${{ needs.release.outputs.digest }}
