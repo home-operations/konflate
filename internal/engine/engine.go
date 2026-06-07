@@ -41,7 +41,12 @@ type Engine interface {
 // renders.
 type flateEngine struct {
 	clusterPath string
-	cacheDir    string
+	// selfURLs is the repo's own remote URL(s). flate aliases a
+	// self-referential GitRepository (a cluster that pulls itself) to the
+	// extracted tree only when its spec.url matches one of these — the
+	// trees carry no .git for flate to read remotes from.
+	selfURLs []string
+	cacheDir string
 	// mirror is the persistent bare clone of the repo; each diff fetches the
 	// base/head refs into it incrementally instead of re-cloning.
 	mirror *gitclone.Mirror
@@ -71,6 +76,7 @@ func New(cfg *config.Config) Engine {
 	}
 	return &flateEngine{
 		clusterPath:            cfg.ClusterPath,
+		selfURLs:               []string{cfg.Forge.CloneURL()},
 		cacheDir:               cfg.CacheDir,
 		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token),
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
@@ -105,9 +111,6 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	}
 	defer clone.Cleanup()
 
-	baseTree := joinPath(clone.BaseDir, e.clusterPath)
-	headTree := joinPath(clone.HeadDir, e.clusterPath)
-
 	// flate's RenderTrees owns the two-orchestrator dance: each side
 	// reconciles changed-only against the other (only resources whose source
 	// files differ between the merge-base and head trees, plus the dependency
@@ -115,12 +118,23 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	// cost saver), sharing e.cache so the head render reuses the base render's
 	// fetched charts / OCI layers / git sources, concurrently.
 	//
+	// Each side is a Tree of its extracted repo root (RepoRoot — the anchor
+	// repo-root-relative spec.path values resolve against) and the cluster's
+	// Flux entry point within it (Path = root + clusterPath). Passing the root
+	// explicitly is what makes clusterPath work: the trees have no .git, so
+	// flate can't infer the root, and a repo-root-relative spec.path
+	// (./kubernetes/...) would otherwise double under the entry-point subdir.
+	// selfURLs lets a self-referential GitRepository alias to the tree.
+	//
 	// Per flate's contract the returned err is advisory: a side's Result is nil
 	// only on a fatal Bootstrap error, whereas per-resource reconcile failures
 	// keep Result non-nil and ARE the diff's render failures — they must flow to
 	// renderFailures below, not abort the whole diff (a PR that breaks a chart is
 	// exactly the one a reviewer needs to see). renderUsable gates on that.
-	base, head, err := orchestrator.RenderTrees(ctx, baseTree, headTree, e.renderCfg())
+	base, head, err := orchestrator.RenderTrees(ctx,
+		orchestrator.Tree{RepoRoot: clone.BaseDir, Path: joinPath(clone.BaseDir, e.clusterPath), SelfURLs: e.selfURLs},
+		orchestrator.Tree{RepoRoot: clone.HeadDir, Path: joinPath(clone.HeadDir, e.clusterPath), SelfURLs: e.selfURLs},
+		e.renderCfg())
 	if !renderUsable(base, head, err) {
 		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
 	}
@@ -153,8 +167,9 @@ func renderUsable(base, head orchestrator.Rendered, err error) bool {
 }
 
 // renderCfg is the flate render tuning shared by both sides of a
-// RenderTrees comparison (Path/PathOrig are set by RenderTrees). Two flags
-// harden it for a tool that may be exposed:
+// RenderTrees comparison (Path / RepoRoot / PathOrig / SelfURLs are set
+// from the per-side Tree). Two flags harden it for a tool that may be
+// exposed:
 //   - WipeSecrets replaces Secret cleartext with placeholders, so no secret
 //     value can reach the diff (and thus a response) even if a manifest
 //     carries one in cleartext.
