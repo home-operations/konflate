@@ -48,7 +48,23 @@ jobs:
           kubectl version
           kubectl get nodes
 
+      # Build this PR's image (not a published tag) and load it into kind, so the
+      # test exercises the code under review. Build args come from mise, matching
+      # the release build (Dockerfile reads NODE_VERSION / GO_VERSION).
+      - name: Build and load image
+        run: |
+          docker build \
+            --build-arg GO_VERSION="$(mise config get tools.go)" \
+            --build-arg NODE_VERSION="$(mise config get tools.node)" \
+            --tag ghcr.io/home-operations/konflate:e2e .
+          kind load docker-image ghcr.io/home-operations/konflate:e2e --name konflate-e2e
+
       - name: Helm install + test
+        env:
+          # Install the kind-loaded PR image; Never so the kubelet uses it instead
+          # of pulling the (nonexistent) e2e tag from the registry.
+          KONFLATE_TEST_IMAGE_TAG: e2e
+          KONFLATE_TEST_PULL_POLICY: Never
         run: |-
           # kind-action writes the kubeconfig to ~/.kube/config but does not export
           # KUBECONFIG to later steps, so set it explicitly for the mise task.

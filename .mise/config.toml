@@ -87,14 +87,15 @@ run = "helm template konflate charts/konflate --set config.repo=github://owner/r
 
 [tasks.helm-test]
 description = "Install the chart into the current cluster (e.g. a kind context) and run `helm test`"
-# image.tag=latest: the chart's appVersion is a release-time placeholder (0.0.0),
-# so point at the published moving tag — the smoke test only needs a konflate that
-# serves /readyz. The repo is a placeholder; startup doesn't block on it. The trap
-# uninstalls on success or failure so the namespace is left clean.
+# The e2e workflow builds the PR's image, kind-loads it, and sets
+# KONFLATE_TEST_IMAGE_TAG=e2e + pull policy Never so the test runs the code under
+# review; locally these default to the published `latest` for a quick chart check
+# (the chart appVersion is a release-time placeholder, so a tag is always needed).
+# config.repo is a placeholder; startup doesn't block on it. The trap cleans up.
 run = """
 trap 'helm uninstall konflate-e2e -n konflate-e2e --wait >/dev/null 2>&1 || true' EXIT
 set -e
-helm install konflate-e2e charts/konflate -n konflate-e2e --create-namespace --wait --timeout 5m --set image.tag=latest --set config.repo=github://home-operations/konflate-e2e
+helm install konflate-e2e charts/konflate -n konflate-e2e --create-namespace --wait --timeout 5m --set image.tag="${KONFLATE_TEST_IMAGE_TAG:-latest}" --set image.pullPolicy="${KONFLATE_TEST_PULL_POLICY:-IfNotPresent}" --set config.repo=github://home-operations/konflate-e2e
 helm test konflate-e2e -n konflate-e2e --logs
 """
 
