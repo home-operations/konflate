@@ -48,20 +48,15 @@ async function stubApi(page: Page) {
 
 const cards = (page: Page) => page.locator('.cards .card');
 
-test('clean filter narrows to warning-free rendered PRs, and the card is flagged', async ({ page }) => {
+test('clean filter narrows to warning-free rendered PRs', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
 
   // All three open PRs are listed to start.
   await expect(cards(page)).toHaveCount(3);
 
-  // Only the clean PR carries the positive "clean" badge.
-  const cleanCard = page.locator('.card', { hasText: 'clean image bump' });
-  const riskyCard = page.locator('.card', { hasText: 'risky rbac change' });
-  await expect(cleanCard.locator('.badge.ok')).toHaveText(/clean/);
-  await expect(riskyCard.locator('.badge.ok')).toHaveCount(0);
-
-  // The clean pill (count 1) filters the list down to just it.
+  // The clean pill (count 1) filters the list down to just the warning-free PR.
+  // (Clean is signalled by the absence of warning badges, not a per-card badge.)
   const cleanPill = page.locator('button.sum-pill', { hasText: 'clean' });
   await expect(cleanPill).toContainText('1');
   await cleanPill.click();

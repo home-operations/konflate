@@ -159,9 +159,6 @@
             {#if pr.refreshError}
               <span class="badge caution" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
             {/if}
-            {#if isClean(pr)}
-              <span class="badge ok" title="Rendered with no danger or caution warnings"><Icon path={mdiCheckCircleOutline} size={13} /> clean</span>
-            {/if}
             {#if pr.signals.danger}
               <span class="badge danger" title="danger warnings"><Icon path={mdiAlertOctagon} size={13} /> {pr.signals.danger}</span>
             {/if}

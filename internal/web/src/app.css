@@ -781,10 +781,6 @@ button.sum-pill:hover {
   color: var(--muted);
   font-weight: 400;
 }
-.badge.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
-}
 .card-status {
   display: inline-flex;
   align-items: center;
