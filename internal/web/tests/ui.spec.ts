@@ -131,7 +131,7 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
 
   // Expand → the merged card appears, de-emphasized and labelled.
   await group.click();
-  const mergedCard = page.locator('.merged-cards .card.merged', { hasText: '#128' });
+  const mergedCard = page.locator('.merged-cards .card-shell.merged', { hasText: '#128' });
   await expect(mergedCard).toBeVisible();
   // No redundant "merged" tag — the group header, dimmed card, purple dot, and
   // "merged …" timestamp already convey it.
@@ -141,7 +141,7 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
   await page.route('**/api/prs/128/diff', (route) =>
     route.fulfill({ json: { status: 'ready', pr: samplePRs[3], diff: { ...diffEnvelope.diff, prNumber: 128 } } }),
   );
-  await mergedCard.click();
+  await mergedCard.locator('.card').click();
   await expect(page).toHaveURL(/#\/pr\/128$/);
   await expect(page.locator('.merged-strip')).toContainText('frozen');
 });
@@ -590,7 +590,7 @@ test('copy buttons copy the full underlying value', async ({ page }) => {
   expect(copied2).toContain('Deployment rook-ceph/rook-ceph-operator');
 });
 
-test('merge command is copyable in the review header and on list cards', async ({ page }) => {
+test('merge command is copyable in the review header (not on list cards)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __copied: string[] }).__copied = [];
     Object.defineProperty(navigator, 'clipboard', {
@@ -614,13 +614,37 @@ test('merge command is copyable in the review header and on list cards', async (
   await bar.locator('.copy-btn').click();
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 
-  // List: one copy affordance per open PR (the merged card carries none).
+  // The PR list no longer carries a copy-merge affordance — it lives only in
+  // the review header now.
   await page.goto('/');
-  await expect(page.locator('.card-actions')).toHaveCount(3);
+  await expect(page.locator('.card-actions')).toHaveCount(0);
+});
+
+test('a list row expands to a brief diff summary; the row still opens the PR', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
   const card = page.locator('.card-li', { hasText: '#142' });
-  await card.hover();
-  await card.locator('.card-actions .copy-btn').click();
-  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+  await expect(card.locator('.card-preview')).toHaveCount(0); // collapsed by default
+
+  // The chevron expands the row and lazy-loads the summary — the cautions, an
+  // image bump, and the render failure, at a glance — without navigating.
+  await card.locator('.card-expand').click();
+  await expect(page).not.toHaveURL(/#\/pr\//);
+  const preview = card.locator('.card-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview.locator('.pv-caution')).toHaveCount(2);
+  await expect(preview.locator('.pv-caution').first()).toContainText('StatefulSet default/postgres');
+  await expect(preview.locator('.pv-image').first()).toContainText('ghcr.io/rook/ceph');
+  await expect(preview.locator('.pv-failure')).toContainText('plex');
+
+  // The chevron toggles it shut again.
+  await card.locator('.card-expand').click();
+  await expect(card.locator('.card-preview')).toHaveCount(0);
+
+  // Clicking the row itself still opens the full review.
+  await card.locator('.card').click();
+  await expect(page).toHaveURL(/#\/pr\/142$/);
 });
 
 test('the review is one scrollable document; scrolling drives the selection', async ({ page }) => {
@@ -694,8 +718,8 @@ test('an open PR with cautions carries a red card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
   // #142 carries a caution signal; #138 doesn't. The merged #128 never does.
-  await expect(page.locator('.card', { hasText: '#142' })).toHaveClass(/caution/);
-  await expect(page.locator('.card', { hasText: '#138' })).not.toHaveClass(/caution/);
+  await expect(page.locator('.card-shell', { hasText: '#142' })).toHaveClass(/caution/);
+  await expect(page.locator('.card-shell', { hasText: '#138' })).not.toHaveClass(/caution/);
 });
 
 test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter', async ({ page }) => {

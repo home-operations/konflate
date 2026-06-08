@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { PRStatus } from './types';
-  import { store, filteredPRs, matchesStatus, sortPRs, openPR, type StatusFilter } from './store.svelte';
+  import { store, filteredPRs, matchesStatus, sortPRs, openPR, ensurePreview, type StatusFilter } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
+  import { slide } from 'svelte/transition';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
-  import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import {
@@ -25,9 +25,9 @@
     mdiSortDescending,
     mdiChevronRight,
     mdiChevronDown,
+    mdiChevronUp,
     mdiCheckCircleOutline,
     mdiTrayFull,
-    mdiConsoleLine,
   } from './icons';
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
@@ -85,6 +85,26 @@
   let mergedExpanded = $state(false);
   const showMerged = $derived(mergedExpanded || filterActive);
 
+  // Per-row inline summary: the chevron toggles it, lazy-loading the PR's diff
+  // summary on first open (the row click still opens the full review). Keyed by
+  // PR number; the data is cached in the store and keyed by headSha there.
+  let expanded = $state<Record<number, boolean>>({});
+  const isExpanded = (n: number): boolean => !!expanded[n];
+  function toggleExpand(n: number, headSha: string): void {
+    expanded[n] = !expanded[n];
+    if (expanded[n]) ensurePreview(n, headSha);
+  }
+
+  // Shorten an "algo:hexdigest" image ref so a digest-pinned bump doesn't blow
+  // out the preview row; tags are short already and shown whole.
+  function shortVer(v: string): string {
+    if (!v) return '∅';
+    const i = v.indexOf(':');
+    if (i < 0) return v;
+    const hex = v.slice(i + 1);
+    return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
+  }
+
   // pending/running render as icons below and ready carries signal badges, so
   // this fallback only labels the terminal error state.
   const statusLabel: Record<string, string> = { error: 'failed', blocked: 'fork · not rendered' };
@@ -114,15 +134,79 @@
   </div>
 {/snippet}
 
+<!-- The inline row summary: the headline facts of a PR's diff, lazy-loaded into
+     store.previews. Read-only — the row click still opens the full review. -->
+{#snippet previewBody(n: number)}
+  {@const pv = store.previews[n]}
+  {#if !pv || pv.state === 'loading'}
+    <div class="pv-msg"><Spinner size={13} /> Loading summary…</div>
+  {:else if pv.state === 'pending'}
+    <div class="pv-msg"><Icon path={mdiTrayFull} size={14} /> Still rendering — open the PR to watch.</div>
+  {:else if pv.state === 'error'}
+    <div class="pv-msg pv-error"><Icon path={mdiAlertCircleOutline} size={14} /> {pv.error}</div>
+  {:else}
+    <div class="pv-impact">
+      {#if pv.summary && pv.summary.added}<span class="pv-stat add">+{pv.summary.added}</span>{/if}
+      {#if pv.summary && pv.summary.changed}<span class="pv-stat chg">~{pv.summary.changed}</span>{/if}
+      {#if pv.summary && pv.summary.removed}<span class="pv-stat del">−{pv.summary.removed}</span>{/if}
+      {#if pv.impact}
+        <span class="pv-dim"
+          >{pv.impact.resources} {pv.impact.resources === 1 ? 'resource' : 'resources'} · {pv.impact.parents}
+          {pv.impact.parents === 1 ? 'app' : 'apps'}{#if pv.impact.crds} · {pv.impact.crds} {pv.impact.crds === 1 ? 'CRD' : 'CRDs'}{/if}</span
+        >
+      {/if}
+      {#if pv.truncated}<span class="pv-trunc">{pv.truncated} not shown</span>{/if}
+    </div>
+
+    {#if pv.warnings?.length}
+      <ul class="pv-list pv-cautions">
+        {#each pv.warnings.slice(0, 8) as w}
+          <li class="pv-caution">
+            <Icon path={mdiAlert} size={13} />
+            <span class="pv-res">{w.resource}</span>
+            <span class="pv-detail">{w.detail}</span>
+          </li>
+        {/each}
+        {#if pv.warnings.length > 8}<li class="pv-more">+{pv.warnings.length - 8} more cautions</li>{/if}
+      </ul>
+    {/if}
+
+    {#if pv.images?.length}
+      <ul class="pv-list pv-images">
+        {#each pv.images.slice(0, 6) as img}
+          <li class="pv-image">
+            <Icon path={mdiPackageVariantClosed} size={13} />
+            <span class="pv-res">{img.name}</span>
+            <span class="pv-delta">{shortVer(img.from)} → {shortVer(img.to)}</span>
+          </li>
+        {/each}
+        {#if pv.images.length > 6}<li class="pv-more">+{pv.images.length - 6} more images</li>{/if}
+      </ul>
+    {/if}
+
+    {#if pv.failures?.length}
+      <ul class="pv-list pv-failures">
+        {#each pv.failures as f}
+          <li class="pv-failure"><Icon path={mdiAlertCircleOutline} size={13} /> <span class="pv-res">{f.parent}</span> <span class="pv-detail">{f.message}</span></li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if !pv.warnings?.length && !pv.images?.length && !pv.failures?.length}
+      <div class="pv-msg pv-clean"><Icon path={mdiCheckCircleOutline} size={14} /> No cautions, image changes, or render failures.</div>
+    {/if}
+  {/if}
+{/snippet}
+
 {#snippet prCard(pr: PRStatus)}
-  <li class="card-li">
-    <button
-      class="card"
+  <li class="card-li" class:expanded={isExpanded(pr.number)}>
+    <div
+      class="card-shell"
       class:merged={!pr.open}
       class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
-      onclick={() => openPR(pr.number)}
     >
-      <div class="card-top">
+      <button class="card" onclick={() => openPR(pr.number)}>
+        <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
         <span class="card-title"><Breakable text={pr.title} /></span>
       </div>
@@ -174,10 +258,23 @@
           <span class="card-status s-{pr.status}">{statusLabel[pr.status] ?? pr.status}</span>
         {/if}
       </div>
-    </button>
-    {#if pr.mergeCommand}
-      <div class="card-actions">
-        <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
+      </button>
+      <!-- Disclosure for the inline summary. Sibling of the card <button> (a
+           button can't nest), only shown once the PR has rendered signals. -->
+      {#if pr.signals}
+        <button
+          class="card-expand"
+          aria-expanded={isExpanded(pr.number)}
+          aria-label={isExpanded(pr.number) ? `Hide summary for #${pr.number}` : `Show summary for #${pr.number}`}
+          onclick={() => toggleExpand(pr.number, pr.headSha)}
+        >
+          <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
+        </button>
+      {/if}
+    </div>
+    {#if isExpanded(pr.number)}
+      <div class="card-preview" transition:slide={{ duration: 120 }}>
+        {@render previewBody(pr.number)}
       </div>
     {/if}
   </li>
