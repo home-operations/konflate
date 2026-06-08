@@ -160,17 +160,32 @@ re-renders](#triggering-re-renders)).
 
 Main server (`KONFLATE_PORT`):
 
-| Method & path                 | Purpose                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET /`                       | The web UI.                                                                                |
-| `GET /api/prs`                | Tracked PRs and each one's diff-job status.                                                |
-| `GET /api/prs/{n}/diff`       | A PR's rendered diff (`200` ready/error, `202` still rendering).                           |
-| `POST /api/prs/{n}/refresh`   | **Auth** (bearer `KONFLATE_PUSH_TOKEN`) — re-render one PR. `501` unless the token is set. |
-| `POST /hooks`                 | Verified forge webhook — re-renders the affected PR. `501` unless the secret is set.       |
-| `GET /ws`                     | Websocket stream of diff-job status events.                                                |
-| `GET /healthz`, `GET /readyz` | Liveness / readiness.                                                                      |
+| Method & path                 | Purpose                                                                                                                                                                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                       | The web UI.                                                                                                                                                                                                                                                                 |
+| `GET /api/prs`                | Tracked PRs and each one's diff-job status.                                                                                                                                                                                                                                 |
+| `GET /api/prs/{n}/diff`       | A PR's rendered diff (`200` ready/error, `202` still rendering).                                                                                                                                                                                                            |
+| `GET /api/prs/{n}/summary`    | The diff's headline facts only — impact, cautions, image bumps, failures — without the per-resource render. JSON by default; `Accept: text/markdown` returns a paste-ready comment body (`?forge=github` for `[!CAUTION]` admonitions, else plain). `200`/`202` as `/diff`. |
+| `POST /api/prs/{n}/refresh`   | **Auth** (bearer `KONFLATE_PUSH_TOKEN`) — re-render one PR. `501` unless the token is set.                                                                                                                                                                                  |
+| `POST /hooks`                 | Verified forge webhook — re-renders the affected PR. `501` unless the secret is set.                                                                                                                                                                                        |
+| `GET /ws`                     | Websocket stream of diff-job status events.                                                                                                                                                                                                                                 |
+| `GET /healthz`, `GET /readyz` | Liveness / readiness.                                                                                                                                                                                                                                                       |
 
 Operational server (`KONFLATE_METRICS_ADDR`): `GET /metrics`.
+
+The summary endpoint doubles as a PR-comment source for CI — ask for Markdown
+and post it straight back (one comment, edited in place on each push):
+
+```bash
+curl -fsS -H 'Accept: text/markdown' \
+  "https://konflate.example.com/api/prs/${PR_NUMBER}/summary" \
+  | gh pr comment "${PR_NUMBER}" --body-file - --edit-last
+```
+
+konflate keeps PRs rendered on its own (webhook/interval), so the diff is
+normally ready when CI asks; a `202` just means "still rendering — try again on
+the next push". The comment carries a `<!-- konflate:pr-N -->` marker so a poster
+can find and update its own comment.
 
 ## Triggering re-renders
 
