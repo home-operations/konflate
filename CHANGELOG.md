@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.20](https://github.com/home-operations/konflate/compare/0.1.19...0.1.20) (2026-06-08)
+
+
+### Features
+
+* bound render resource use (cache GC, shallow clones, diff cap, memory limit) ([#75](https://github.com/home-operations/konflate/issues/75)) ([ca4ecf1](https://github.com/home-operations/konflate/commit/ca4ecf119f3ce7f06bae32cbfca5046564df0576))
+* **chart:** optional NetworkPolicy (default/cilium/calico, off by default) ([#79](https://github.com/home-operations/konflate/issues/79)) ([89aa416](https://github.com/home-operations/konflate/commit/89aa416eaee64f09ae469f54d878d8012705eea9))
+* gate rendering of fork PRs behind KONFLATE_RENDER_FORK_PRS ([#74](https://github.com/home-operations/konflate/issues/74)) ([33f3d18](https://github.com/home-operations/konflate/commit/33f3d18ae40e29881582c6e7ed9542304b2e7c9b))
+* **github-release:** update release helm-unittest/helm-unittest (v1.0.3 → v1.1.1) ([#71](https://github.com/home-operations/konflate/issues/71)) ([89cb894](https://github.com/home-operations/konflate/commit/89cb89451bd6825285bf7846d9d16de0e2ef48ba))
+* **ui:** risk-first list triage — clean/images filters + clean flag ([#77](https://github.com/home-operations/konflate/issues/77)) ([986c1db](https://github.com/home-operations/konflate/commit/986c1dbe0c8dd9451762524c0d25b7da719ff5c4))
+
+
+### Bug Fixes
+
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.36.0 → v2.36.1) ([#70](https://github.com/home-operations/konflate/issues/70)) ([739465c](https://github.com/home-operations/konflate/commit/739465c449837565638ab5283487d5b4c679edf8))
+* render fork PR heads via the forge pull ref ([#72](https://github.com/home-operations/konflate/issues/72)) ([cafb481](https://github.com/home-operations/konflate/commit/cafb4810434f4d67ec9ba2645d23ab8633af9cc8))
+
 ## [0.1.19](https://github.com/home-operations/konflate/compare/0.1.18...0.1.19) (2026-06-07)
 
 
