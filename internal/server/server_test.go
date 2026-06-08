@@ -24,6 +24,7 @@ import (
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/gitclone"
+	"github.com/home-operations/konflate/internal/prfilter"
 )
 
 // --- fakes ---------------------------------------------------------------
@@ -105,7 +106,7 @@ func newTestServer(t *testing.T, cfg *config.Config, prov *fakeProvider, eng Eng
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, cfg.RenderForkPRs)
+	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency)
 	return s
 }
 
@@ -164,32 +165,36 @@ func TestServer_RefreshListAndDiff(t *testing.T) {
 	}
 }
 
-func TestServer_PRLabelFilter(t *testing.T) {
+func TestServer_PRFilterExpr(t *testing.T) {
 	t.Parallel()
 	cfg := ghCfg("tok")
-	cfg.PRLabels = []string{"cluster:production"} // allowlist
-	keep := api.PR{Number: 1, Title: "prod", HeadRef: "a", BaseRef: "main", HeadSHA: "s1", Open: true,
-		Labels: []api.Label{{Name: "area/storage"}, {Name: "cluster:production"}}}
-	skip := api.PR{Number: 2, Title: "staging", HeadRef: "b", BaseRef: "main", HeadSHA: "s2", Open: true,
-		Labels: []api.Label{{Name: "cluster:staging"}}}
-	prov := &fakeProvider{prs: []api.PR{keep, skip}}
+	prg, err := prfilter.Compile(`pr.baseRef == "main" && !pr.draft`)
+	if err != nil {
+		t.Fatalf("compile filter: %v", err)
+	}
+	cfg.PRFilter = prg
+
+	keep := api.PR{Number: 1, Title: "ok", HeadRef: "a", BaseRef: "main", HeadSHA: "s1", Open: true}
+	draft := api.PR{Number: 2, Title: "draft", HeadRef: "b", BaseRef: "main", HeadSHA: "s2", Open: true, Draft: true}
+	otherBase := api.PR{Number: 3, Title: "dev base", HeadRef: "c", BaseRef: "dev", HeadSHA: "s3", Open: true}
+	prov := &fakeProvider{prs: []api.PR{keep, draft, otherBase}}
 	s := newTestServer(t, cfg, prov, okEngine())
 
-	// Only the labelled PR is tracked; the other is ignored entirely.
+	// Only the PR satisfying the expression (main base, not a draft) is tracked.
 	s.refreshList(s.runCtx)
 	waitFor(t, s, 1)
 	if list := s.store.list(); len(list) != 1 || list[0].Number != 1 {
-		t.Fatalf("allowlist should track only #1; got %+v", list)
+		t.Fatalf("CEL filter should track only #1; got %+v", list)
 	}
 
-	// #1 loses its matching label (still open) → dropped on the next refresh.
-	relabeled := keep
-	relabeled.Labels = []api.Label{{Name: "area/storage"}}
-	prov.setPRs(relabeled, skip)
-	prov.setDetail(relabeled) // reconcileClosed re-fetches #1 via GetPR
+	// #1 becomes a draft (still open) → it now fails the expression and is dropped.
+	drafted := keep
+	drafted.Draft = true
+	prov.setPRs(drafted, draft, otherBase)
+	prov.setDetail(drafted) // reconcileClosed re-fetches #1 via GetPR
 	s.refreshList(s.runCtx)
 	if list := s.store.list(); len(list) != 0 {
-		t.Fatalf("a PR that lost its allowlisted label should be dropped; got %+v", list)
+		t.Fatalf("a PR that no longer satisfies the filter should be dropped; got %+v", list)
 	}
 }
 

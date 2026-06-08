@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"slices"
 	"testing"
 	"time"
 )
@@ -160,26 +159,36 @@ func TestLoad_RequiresRepo(t *testing.T) {
 	}
 }
 
-func TestLoad_PRLabels(t *testing.T) {
+func TestLoad_PRFilterExpr(t *testing.T) {
 	t.Setenv("KONFLATE_REPO", "github://owner/repo")
 
-	// Unset → empty (track every PR).
+	// Unset → the default filter is always compiled (cfg.PRFilter never nil), so
+	// forks are excluded out of the box.
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.PRLabels) != 0 {
-		t.Errorf("default PRLabels = %v, want empty", cfg.PRLabels)
+	if cfg.PRFilter == nil {
+		t.Fatal("PRFilter should always be compiled — the default applies when unset")
+	}
+	if got := cfg.PRFilter.Source(); got != DefaultPRFilter {
+		t.Errorf("default filter = %q, want %q", got, DefaultPRFilter)
 	}
 
-	// Comma-separated with stray whitespace and a trailing comma → trimmed,
-	// empties dropped.
-	t.Setenv("KONFLATE_PR_LABELS", "cluster, cluster:production ,")
+	// A custom valid expression is compiled verbatim.
+	const expr = `!pr.draft && pr.baseRef == "main"`
+	t.Setenv("KONFLATE_PR_FILTER_EXPR", expr)
 	cfg, err = Load()
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load with valid expr: %v", err)
 	}
-	if want := []string{"cluster", "cluster:production"}; !slices.Equal(cfg.PRLabels, want) {
-		t.Errorf("PRLabels = %v, want %v", cfg.PRLabels, want)
+	if cfg.PRFilter == nil || cfg.PRFilter.Source() != expr {
+		t.Fatalf("custom filter not compiled as set: %+v", cfg.PRFilter)
+	}
+
+	// A malformed expression fails fast at Load (not silently at request time).
+	t.Setenv("KONFLATE_PR_FILTER_EXPR", "pr.draft &&")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load with a malformed KONFLATE_PR_FILTER_EXPR should error")
 	}
 }

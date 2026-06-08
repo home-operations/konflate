@@ -10,6 +10,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/coder/websocket v1.8.14
 	github.com/go-git/go-git/v5 v5.19.1
+	github.com/google/cel-go v0.28.1
 	github.com/google/go-github/v88 v88.0.0
 	github.com/home-operations/flate v0.3.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -98,7 +99,6 @@ require (
 	github.com/gonvenience/text v1.0.10 // indirect
 	github.com/gonvenience/ytbx v1.5.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

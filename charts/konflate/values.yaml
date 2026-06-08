@@ -65,24 +65,21 @@ config:
 
   # -- Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).
   maxDiffConcurrency: 0
-  # KONFLATE_RENDER_FORK_PRS — render pull requests from forks (cross-repo, whose
-  # head branch lives in a contributor's repository). These are untrusted
-  # external code: rendering runs their manifests through flate, which fetches
-  # the sources they declare (SSRF, resource exhaustion). Off by default — fork
-  # PRs are listed but shown as "not rendered" until you opt in. Keep this false
-  # on any public/shared instance.
+  # KONFLATE_PR_FILTER_EXPR — CEL expression deciding which PRs konflate tracks.
+  # This is the single PR filter (no separate label allowlist or fork toggle).
+  # Evaluated against a `pr` variable (pr.number/title/author/draft/open/merged/
+  # state/fork/headRef/headSha/baseRef/url/createdAt, and pr.labels[].name/.color);
+  # it must return a bool and is compiled + type-checked at startup, so a bad
+  # expression fails fast. Empty uses the default `!pr.fork`: every open PR
+  # except forks. Rendering a fork runs untrusted external code (SSRF / resource
+  # exhaustion), so forks are excluded unless your expression admits them — and a
+  # tracked PR is rendered, so admitting a fork renders it. Examples:
+  #   one cluster only:     'pr.labels.exists(l, l.name == "cluster/production")'
+  #   non-draft, main base: '!pr.draft && pr.baseRef == "main" && !pr.fork'
+  #   include forks too:    'true'   # ⚠ renders untrusted external code
 
-  # -- Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.
-  renderForkPrs: false
-  # KONFLATE_PR_LABELS — optional allowlist of PR labels. When set, konflate only
-  # tracks (lists, renders, comments on) PRs carrying at least one of these
-  # labels; the rest are ignored, and a tracked PR that loses its last matching
-  # label is dropped. Matched case-insensitively against the full label name, so
-  # a bare "cluster" or a namespaced "cluster:production" both work. Empty (the
-  # default) tracks every open PR. Example: ["cluster:production", "cluster:staging"].
-
-  # -- Only track PRs carrying at least one of these labels (e.g. `["cluster:production"]`); empty tracks every PR. Case-insensitive.
-  prLabels: []
+  # -- CEL expression selecting which PRs to track; must return a bool. Empty uses `!pr.fork` (every open PR except forks — rendering a fork runs untrusted code). e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`. See the README.
+  prFilterExpr: ""
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------

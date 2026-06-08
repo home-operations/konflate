@@ -32,8 +32,6 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 		switch env.Status {
 		case api.JobError:
 			fmt.Fprintf(&b, "\nRender failed: %s\n", mdInline(env.Error))
-		case api.JobBlocked:
-			b.WriteString("\nNot rendered — fork-PR rendering is disabled for this instance.\n")
 		default:
 			b.WriteString("\n⏳ Still rendering — this updates once the diff is ready.\n")
 		}

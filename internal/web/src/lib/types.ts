@@ -1,7 +1,7 @@
 // Mirrors internal/api (pr.go, response.go, diff.go). The Go package doc notes
 // these types are the contract.
 
-export type JobStatus = 'pending' | 'running' | 'ready' | 'error' | 'blocked';
+export type JobStatus = 'pending' | 'running' | 'ready' | 'error';
 
 export interface Label {
   name: string;

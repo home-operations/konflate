@@ -257,9 +257,9 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 		return err
 	}
 	if !pr.Open || !s.prAllowed(pr) {
-		// Merged/closed since we last saw it, or filtered out by the label
-		// allowlist — reconcile (shelve or drop) instead of enqueueing a render
-		// whose head branch may already be gone, or that we shouldn't track.
+		// Merged/closed since we last saw it, or filtered out by the PR filter —
+		// reconcile (shelve or drop) instead of enqueueing a render whose head
+		// branch may already be gone, or that we shouldn't track.
 		s.reconcileState(pr)
 		return nil
 	}
@@ -269,21 +269,71 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	return nil
 }
 
-// prAllowed reports whether a PR passes the configured label allowlist
-// (KONFLATE_PR_LABELS): true when no labels are configured, or when the PR
-// carries at least one label matching (case-insensitively) one of them.
+// prAllowed reports whether a PR passes the configured CEL filter
+// (KONFLATE_PR_FILTER_EXPR, defaulting to config.DefaultPRFilter — the single
+// gate over which PRs konflate tracks). A nil filter tracks every PR; that only
+// happens when a Config is built without Load (i.e. in tests). A runtime eval
+// error drops the PR (and logs) — but the expression is type-checked at startup
+// against an always-populated field set, so a well-formed filter won't error.
 func (s *Server) prAllowed(pr api.PR) bool {
-	if len(s.cfg.PRLabels) == 0 {
+	if s.cfg.PRFilter == nil {
 		return true
 	}
-	for _, l := range pr.Labels {
-		for _, want := range s.cfg.PRLabels {
-			if strings.EqualFold(l.Name, want) {
-				return true
-			}
-		}
+	ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
+	if err != nil {
+		s.log.Error("PR filter evaluation failed; dropping PR",
+			"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
+		return false
 	}
-	return false
+	return ok
+}
+
+// warnIfFilterAdmitsForks logs a prominent startup warning when the configured
+// filter would track a fork PR — a heads-up that rendering forks runs untrusted
+// external code. It probes the filter with a representative fork; admission can
+// be conditional, so this catches the common footgun (a filter that just omits
+// `!pr.fork`) rather than proving the negative.
+func (s *Server) warnIfFilterAdmitsForks() {
+	if s.cfg.PRFilter == nil {
+		return
+	}
+	sample := api.PR{
+		Number: 0, Title: "sample fork PR", Author: "external-contributor",
+		State: "open", Open: true, Fork: true,
+		HeadRef: "patch", HeadSHA: "0000000", BaseRef: "main", URL: "https://example.invalid/0",
+	}
+	if ok, err := s.cfg.PRFilter.Eval(prFilterVars(sample)); err == nil && ok {
+		s.log.Warn("PR filter admits fork PRs — rendering a fork runs untrusted external code "+
+			"(SSRF / resource-exhaustion surface). Add `&& !pr.fork` to KONFLATE_PR_FILTER_EXPR to exclude them.",
+			"filter", s.cfg.PRFilter.Source())
+	}
+}
+
+// prFilterVars projects a PR into the `pr` variable the CEL filter evaluates
+// against (see config.Config.PRFilterExpr for the documented field set). Every
+// field is always present, so a valid field reference never hits a missing key;
+// labels are [{name, color}] for `pr.labels.exists(l, l.name == "…")`.
+func prFilterVars(pr api.PR) map[string]any {
+	labels := make([]any, len(pr.Labels))
+	for i, l := range pr.Labels {
+		labels[i] = map[string]any{"name": l.Name, "color": l.Color}
+	}
+	return map[string]any{
+		"number":    pr.Number,
+		"title":     pr.Title,
+		"author":    pr.Author,
+		"state":     pr.State,
+		"open":      pr.Open,
+		"merged":    pr.Merged,
+		"draft":     pr.Draft,
+		"fork":      pr.Fork,
+		"headRef":   pr.HeadRef,
+		"headSha":   pr.HeadSHA,
+		"baseRef":   pr.BaseRef,
+		"url":       pr.URL,
+		"createdAt": pr.CreatedAt,
+		"labels":    labels,
+	}
 }
 
 // handleWebhook verifies an inbound forge webhook and re-renders the affected
@@ -336,7 +386,7 @@ func (s *Server) refreshList(ctx context.Context) {
 	open := make(map[int]struct{}, len(prs))
 	for _, pr := range prs {
 		if !s.prAllowed(pr) {
-			continue // outside the label allowlist — never tracked (and if it was, it
+			continue // rejected by the PR filter — never tracked (and if it was, it
 			// falls out of `open` below, so reconcileClosed drops it).
 		}
 		open[pr.Number] = struct{}{}
@@ -385,8 +435,9 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 // "recently merged" shelf keeping its last rendered diff, and an abandoned
 // (closed-unmerged) PR is dropped and broadcast so clients remove it live.
 func (s *Server) reconcileState(pr api.PR) {
-	// Outside the label allowlist (e.g. its last matching label was removed):
-	// drop it and tell clients to remove it, whatever its open/merged state.
+	// Rejected by the PR filter (e.g. it became a draft, or lost a label the
+	// expression requires): drop it and tell clients to remove it, whatever its
+	// open/merged state.
 	// remove is a no-op for a PR we weren't tracking, so a webhook for an
 	// unrelated PR is harmless.
 	if !s.prAllowed(pr) {

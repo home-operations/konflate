@@ -58,10 +58,9 @@ Kubernetes: `>=1.25.0-0`
 | config.maxDiffConcurrency | int | `0` | Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4). |
 | config.maxDiffResources | string | `""` | Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables. |
 | config.mergeCommand | string | `""` | Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it. |
-| config.prLabels | list | `[]` | Only track PRs carrying at least one of these labels (e.g. `["cluster:production"]`); empty tracks every PR. Case-insensitive. |
+| config.prFilterExpr | string | `""` | CEL expression selecting which PRs to track; must return a bool. Empty uses `!pr.fork` (every open PR except forks — rendering a fork runs untrusted code). e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`. See the README. |
 | config.refreshInterval | string | `"30m"` | How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). |
 | config.renderConcurrency | string | `""` | Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4). |
-| config.renderForkPrs | bool | `false` | Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances. |
 | config.repo | required | `""` | Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo). |
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
 | config.stageCacheMb | string | `""` | Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); "0" disables size-based eviction. |

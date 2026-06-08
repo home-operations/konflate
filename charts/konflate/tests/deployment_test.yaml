@@ -87,43 +87,23 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
 
-  - it: gates fork PRs off by default (KONFLATE_RENDER_FORK_PRS=false)
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: KONFLATE_RENDER_FORK_PRS
-            value: "false"
-
-  - it: opts into rendering fork PRs when renderForkPrs is true
-    set:
-      config.renderForkPrs: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: KONFLATE_RENDER_FORK_PRS
-            value: "true"
-
-  - it: omits KONFLATE_PR_LABELS when prLabels is empty (track every PR)
+  - it: omits KONFLATE_PR_FILTER_EXPR when prFilterExpr is empty (default applied in-binary)
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           any: true
           content:
-            name: KONFLATE_PR_LABELS
+            name: KONFLATE_PR_FILTER_EXPR
 
-  - it: emits KONFLATE_PR_LABELS comma-joined when prLabels is set
+  - it: emits KONFLATE_PR_FILTER_EXPR verbatim when prFilterExpr is set
     set:
-      config.prLabels:
-        - cluster:production
-        - cluster:staging
+      config.prFilterExpr: '!pr.draft && pr.baseRef == "main"'
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KONFLATE_PR_LABELS
-            value: "cluster:production,cluster:staging"
+            name: KONFLATE_PR_FILTER_EXPR
+            value: '!pr.draft && pr.baseRef == "main"'
 
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
