@@ -6,6 +6,7 @@
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
+  import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import {
@@ -31,6 +32,7 @@
     mdiUnfoldMoreHorizontal,
     mdiUnfoldLessHorizontal,
     mdiArrowUp,
+    mdiConsoleLine,
   } from './icons';
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
@@ -160,10 +162,22 @@
   </div>
 {/snippet}
 
-<!-- The inline row summary: the headline facts of a PR's diff, lazy-loaded into
-     store.previews. Read-only — the row click still opens the full review. -->
-{#snippet previewBody(n: number)}
-  {@const pv = store.previews[n]}
+<!-- The inline row summary, lazy-loaded into store.previews. Read-only — the row
+     click still opens the full review. Ordered: copy, resource diffs, cautions &
+     warnings, image changes. The copy command rides on the list data, so it
+     shows immediately; the rest waits on the summary fetch. -->
+{#snippet previewBody(pr: PRStatus)}
+  {@const pv = store.previews[pr.number]}
+  {#if pr.mergeCommand}
+    <div class="pv-group">
+      <span class="pv-label">Copy</span>
+      <div class="pv-cmd-row">
+        <code class="pv-cmd">{pr.mergeCommand}</code>
+        <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
+      </div>
+    </div>
+  {/if}
+
   {#if !pv || pv.state === 'loading'}
     <div class="pv-msg"><Spinner size={13} /> Loading summary…</div>
   {:else if pv.state === 'pending'}
@@ -171,51 +185,47 @@
   {:else if pv.state === 'error'}
     <div class="pv-msg pv-error"><Icon path={mdiAlertCircleOutline} size={14} /> {pv.error}</div>
   {:else}
-    <div class="pv-impact">
-      {#if pv.summary && pv.summary.added}<span class="pv-stat add">+{pv.summary.added}</span>{/if}
-      {#if pv.summary && pv.summary.changed}<span class="pv-stat chg">~{pv.summary.changed}</span>{/if}
-      {#if pv.summary && pv.summary.removed}<span class="pv-stat del">−{pv.summary.removed}</span>{/if}
-      {#if pv.impact}
-        <span class="pv-dim"
-          >{pv.impact.resources} {pv.impact.resources === 1 ? 'resource' : 'resources'} · {pv.impact.parents}
-          {pv.impact.parents === 1 ? 'app' : 'apps'}{#if pv.impact.crds} · {pv.impact.crds} {pv.impact.crds === 1 ? 'CRD' : 'CRDs'}{/if}</span
-        >
-      {/if}
-      {#if pv.truncated}<span class="pv-trunc">{pv.truncated} not shown</span>{/if}
+    <div class="pv-group">
+      <span class="pv-label">Resource diffs</span>
+      <div class="pv-impact">
+        {#if pv.summary && pv.summary.added}<span class="pv-stat add">+{pv.summary.added}</span>{/if}
+        {#if pv.summary && pv.summary.changed}<span class="pv-stat chg">~{pv.summary.changed}</span>{/if}
+        {#if pv.summary && pv.summary.removed}<span class="pv-stat del">−{pv.summary.removed}</span>{/if}
+        {#if pv.impact}
+          <span class="pv-dim"
+            >{pv.impact.resources} {pv.impact.resources === 1 ? 'resource' : 'resources'} · {pv.impact.parents}
+            {pv.impact.parents === 1 ? 'app' : 'apps'}{#if pv.impact.crds} · {pv.impact.crds} {pv.impact.crds === 1 ? 'CRD' : 'CRDs'}{/if}</span
+          >
+        {/if}
+        {#if pv.truncated}<span class="pv-trunc">{pv.truncated} not shown</span>{/if}
+      </div>
     </div>
 
-    {#if pv.warnings?.length}
-      <ul class="pv-list pv-cautions">
-        {#each pv.warnings.slice(0, 8) as w}
-          <li class="pv-caution">
-            <Icon path={mdiAlert} size={13} />
-            <span class="pv-res">{w.resource}</span>
-            <span class="pv-detail">{w.detail}</span>
-          </li>
-        {/each}
-        {#if pv.warnings.length > 8}<li class="pv-more">+{pv.warnings.length - 8} more cautions</li>{/if}
-      </ul>
+    {#if pv.warnings?.length || pv.failures?.length}
+      <div class="pv-group">
+        <span class="pv-label">Cautions &amp; warnings</span>
+        <ul class="pv-list">
+          {#each (pv.warnings ?? []).slice(0, 8) as w}
+            <li class="pv-caution"><Icon path={mdiAlert} size={13} /> <span class="pv-res">{w.resource}</span> <span class="pv-detail">{w.detail}</span></li>
+          {/each}
+          {#if (pv.warnings?.length ?? 0) > 8}<li class="pv-more">+{(pv.warnings?.length ?? 0) - 8} more cautions</li>{/if}
+          {#each pv.failures ?? [] as f}
+            <li class="pv-failure"><Icon path={mdiAlertCircleOutline} size={13} /> <span class="pv-res">{f.parent}</span> <span class="pv-detail">{f.message}</span></li>
+          {/each}
+        </ul>
+      </div>
     {/if}
 
     {#if pv.images?.length}
-      <ul class="pv-list pv-images">
-        {#each pv.images.slice(0, 6) as img}
-          <li class="pv-image">
-            <Icon path={mdiPackageVariantClosed} size={13} />
-            <span class="pv-res">{img.name}</span>
-            <span class="pv-delta">{shortVer(img.from)} → {shortVer(img.to)}</span>
-          </li>
-        {/each}
-        {#if pv.images.length > 6}<li class="pv-more">+{pv.images.length - 6} more images</li>{/if}
-      </ul>
-    {/if}
-
-    {#if pv.failures?.length}
-      <ul class="pv-list pv-failures">
-        {#each pv.failures as f}
-          <li class="pv-failure"><Icon path={mdiAlertCircleOutline} size={13} /> <span class="pv-res">{f.parent}</span> <span class="pv-detail">{f.message}</span></li>
-        {/each}
-      </ul>
+      <div class="pv-group">
+        <span class="pv-label">Image changes</span>
+        <ul class="pv-list">
+          {#each pv.images.slice(0, 6) as img}
+            <li class="pv-image"><Icon path={mdiPackageVariantClosed} size={13} /> <span class="pv-res">{img.name}</span> <span class="pv-delta">{shortVer(img.from)} → {shortVer(img.to)}</span></li>
+          {/each}
+          {#if pv.images.length > 6}<li class="pv-more">+{pv.images.length - 6} more images</li>{/if}
+        </ul>
+      </div>
     {/if}
 
     {#if !pv.warnings?.length && !pv.images?.length && !pv.failures?.length}
@@ -300,7 +310,7 @@
     </div>
     {#if isExpanded(pr.number)}
       <div class="card-preview" transition:slide={{ duration: 120 }}>
-        {@render previewBody(pr.number)}
+        {@render previewBody(pr)}
       </div>
     {/if}
   </li>

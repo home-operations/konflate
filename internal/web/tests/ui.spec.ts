@@ -16,6 +16,9 @@ async function stubApi(page: Page, meta: Meta = defaultMeta) {
   await page.route('**/api/meta', (route) => route.fulfill({ json: meta }));
   await page.route('**/api/prs', (route) => route.fulfill({ json: samplePRs }));
   await page.route('**/api/prs/142/diff', (route) => route.fulfill({ json: diffEnvelope }));
+  // The row expander hits the lean summary endpoint; the fixture envelope serves
+  // both (the UI reads the same headline fields).
+  await page.route('**/api/prs/142/summary', (route) => route.fulfill({ json: diffEnvelope }));
   await page.routeWebSocket('**/ws', () => {
     /* accept; no live events needed */
   });
@@ -627,12 +630,18 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   const card = page.locator('.card-li', { hasText: '#142' });
   await expect(card.locator('.card-preview')).toHaveCount(0); // collapsed by default
 
-  // The chevron expands the row and lazy-loads the summary — the cautions, an
-  // image bump, and the render failure, at a glance — without navigating.
+  // The chevron expands the row and lazy-loads the summary — without navigating.
   await card.locator('.card-expand').click();
   await expect(page).not.toHaveURL(/#\/pr\//);
   const preview = card.locator('.card-preview');
   await expect(preview).toBeVisible();
+
+  // Ordered sections: copy (the merge command, from the list data), resource
+  // diffs, cautions & warnings, image changes.
+  await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  await expect(preview).toContainText('Resource diffs');
+  await expect(preview).toContainText('Cautions & warnings');
+  await expect(preview).toContainText('Image changes');
   await expect(preview.locator('.pv-caution')).toHaveCount(2);
   await expect(preview.locator('.pv-caution').first()).toContainText('StatefulSet default/postgres');
   await expect(preview.locator('.pv-image').first()).toContainText('ghcr.io/rook/ceph');

@@ -333,7 +333,9 @@ export function ensurePreview(n: number, headSha: string): void {
 
 async function loadPreview(n: number, headSha: string): Promise<void> {
   try {
-    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/diff`);
+    // The lean summary endpoint: the headline facts without the per-resource
+    // render, so a row preview doesn't pull the whole diff payload.
+    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/summary`);
     if (store.previews[n]?.headSha !== headSha) return; // a newer expand superseded this
     if (env.status === 'ready' && env.diff) {
       const d = env.diff;

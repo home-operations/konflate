@@ -173,6 +173,7 @@ func (s *Server) mainHandler() http.Handler {
 	mux.HandleFunc("GET /api/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/prs", s.handleListPRs)
 	mux.HandleFunc("GET /api/prs/{number}/diff", s.handleDiff)
+	mux.HandleFunc("GET /api/prs/{number}/summary", s.handleSummary)
 	mux.HandleFunc("GET /api/avatar", s.handleAvatar)
 	mux.HandleFunc("GET /ws", s.hub.serveWS)
 

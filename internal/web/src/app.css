@@ -592,7 +592,38 @@ a.repo:focus-visible .repo-ext {
   line-height: 1.5;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+/* One labelled section of the row summary (Copy / Resource diffs / …). */
+.pv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+/* The copy-merge row: the command in a mono chip plus the copy button. */
+.pv-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pv-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
 }
 .pv-msg {
   display: flex;
