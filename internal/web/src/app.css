@@ -1277,6 +1277,13 @@ button.sum-pill:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* A wide diff line's min-content width must NOT size the column. Diff cells
+     wrap (white-space: pre-wrap), but word-break: break-word doesn't shrink
+     their *min-content*, so without this a long token floors this grid item at
+     the line's full width — blowing the whole pane (and the sticky .res-header /
+     mobile switcher, badges and all) out past the viewport. min-width: 0 lets
+     the item shrink to its column so the line wraps instead. See .diffs. */
+  min-width: 0;
   overflow: hidden;
   background: var(--panel);
 }
@@ -1284,6 +1291,7 @@ button.sum-pill:hover {
   flex: 1 1 auto;
   overflow: auto;
   min-height: 0;
+  min-width: 0; /* same min-content blowout as .diff-main: shrink to the column, don't size to the diff */
 }
 /* All sections (Summary + every resource diff) stack in one scrolling pane —
    review by scrolling, not by clicking each resource. The sticky .res-header
@@ -1889,7 +1897,12 @@ kbd {
 /* ---- mobile ---------------------------------------------------------- */
 @media (max-width: 900px) {
   .diffs {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: a bare 1fr track floors at its content's
+       min-content width, so a wide diff line would stretch the single column
+       past the viewport (clipping the diff header's filename + badges). Capping
+       the track minimum at 0 keeps it at the viewport width so the line wraps to
+       fit instead. Pairs with min-width: 0 on .diff-main / .diff-pane. */
+    grid-template-columns: minmax(0, 1fr);
     height: auto; /* page-scroll: size to content; .review owns the scroll */
   }
   .rail {

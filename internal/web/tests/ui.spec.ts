@@ -491,6 +491,42 @@ test('mobile: diff header title is not crushed to one char per line (regression)
   expect(box?.width ?? 0).toBeGreaterThan(150);
 });
 
+test('mobile: a wide diff line keeps the diff header within the viewport (regression)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  // A long, unbreakable line: diff cells wrap (white-space: pre-wrap), but
+  // word-break: break-word doesn't shrink their *min-content*, so without
+  // min-width: 0 up the flex/grid chain this floored the whole column at the
+  // line's full width — pushing the diff header (filename + caution badge) and
+  // the mobile switcher off the right edge.
+  const wide = structuredClone(diffEnvelope);
+  wide.diff.resources[0].unified.push({
+    kind: 'add',
+    newNo: 99,
+    html: 'image: ghcr.io/org/some/really/long/registry/path/that/keeps/going:v1.2.3-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  });
+  await page.route('**/api/prs/142/diff', (route) => route.fulfill({ json: wide }));
+  // r2 = StatefulSet default/postgres — the removed resource whose caution badge
+  // sat on the header's right edge (the part that got clipped).
+  await page.goto('/#/pr/142/r2');
+  const header = page.locator('[data-sel="r2"] .res-header');
+  await header.waitFor();
+
+  // The header fills the viewport but never exceeds it (was ~448 on a 390 screen).
+  const box = await header.boundingBox();
+  expect(box?.width ?? 999).toBeLessThanOrEqual(391);
+  // The caution badge stays fully inside the viewport — its right edge no longer
+  // pushed off-screen.
+  const badge = await page.locator('[data-sel="r2"] .res-header .badge.caution').boundingBox();
+  expect((badge?.x ?? 0) + (badge?.width ?? 0)).toBeLessThanOrEqual(390);
+  // And the page never scrolls sideways.
+  const review = await page.evaluate(() => {
+    const el = document.querySelector('.review') as HTMLElement;
+    return { client: el.clientWidth, scroll: el.scrollWidth };
+  });
+  expect(review.scroll).toBeLessThanOrEqual(review.client + 1);
+});
+
 test('mobile: a long PR title wraps to two lines instead of truncating', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
