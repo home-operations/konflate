@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.25](https://github.com/home-operations/konflate/compare/0.1.24...0.1.25) (2026-06-08)
+
+
+### Bug Fixes
+
+* **ui:** review header on one row + merge command on the Summary bar ([#91](https://github.com/home-operations/konflate/issues/91)) ([e9a6fa8](https://github.com/home-operations/konflate/commit/e9a6fa8fa285da6781f470d7facdad0a4cab891a))
+
 ## [0.1.24](https://github.com/home-operations/konflate/compare/0.1.23...0.1.24) (2026-06-08)
 
 
