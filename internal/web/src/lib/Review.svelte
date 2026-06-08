@@ -16,7 +16,6 @@
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
-    mdiConsoleLine,
   } from './icons';
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
@@ -44,9 +43,7 @@
         </button>
       </div>
       <div class="review-title">
-        <div class="rt-line">
-          <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        </div>
+        <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
         <div class="rt-meta">
           <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
@@ -80,14 +77,6 @@
     {#if store.diffRefreshError}
       <div class="refresh-strip" title={store.diffRefreshError}>
         <Icon path={mdiRefresh} size={15} /> Couldn't refresh — showing the last successful render
-      </div>
-    {/if}
-
-    {#if store.diffMergeCommand}
-      <div class="merge-cmd">
-        <Icon path={mdiConsoleLine} size={14} />
-        <code>{store.diffMergeCommand}</code>
-        <Copy text={store.diffMergeCommand} label="Copy merge command" />
       </div>
     {/if}
 

@@ -923,16 +923,19 @@ button.sum-pill:hover {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
+/* One row: the title grows to fill the bar and the meta chips sit at the far
+   right, so the header uses its full width and the nav buttons line up with a
+   single-height content row (no taller two-line block to float against). */
 .review-title {
   flex: 1 1 auto;
   min-width: 0;
-}
-.rt-line {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 .rt-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
   font-size: 14px;
   overflow: hidden;
@@ -942,11 +945,11 @@ button.sum-pill:hover {
 .rt-meta {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
-  margin-top: 4px;
 }
 /* Each meta item (#id, author, sha, opened, refreshed, open link) reads as a
    small tag, matching the chip language of the status pills. Explicit class —
@@ -1044,15 +1047,14 @@ button.sum-pill:hover {
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
-/* The optional "copy to merge" command: a quiet bar below the status strips
-   (it's a convenience, not a status), with the command in a monospace chip. */
+/* The optional "copy to merge" command rides on the right of the Summary
+   header (not its own strip) — a convenience, in a monospace chip. */
 .merge-cmd {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
   color: var(--muted);
 }
 .merge-cmd code {
@@ -1960,6 +1962,11 @@ kbd {
   .review-title {
     order: 1;
     flex-basis: 100%;
+    /* Stack title over the (wrapping) meta chips on a phone — there's no room
+       for them side by side. */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
   /* 16px so iOS doesn't force-zoom the page when the filter gains focus. */
   .pr-search {
