@@ -65,6 +65,10 @@ spec:
             # explicit in the rendered manifest, not implied by a default.
             - name: KONFLATE_RENDER_FORK_PRS
               value: {{ .Values.config.renderForkPrs | quote }}
+            {{- with .Values.config.prLabels }}
+            - name: KONFLATE_PR_LABELS
+              value: {{ join "," . | quote }}
+            {{- end }}
             {{- if ne (toString .Values.config.maxDiffResources) "" }}
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}

@@ -164,6 +164,35 @@ func TestServer_RefreshListAndDiff(t *testing.T) {
 	}
 }
 
+func TestServer_PRLabelFilter(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	cfg.PRLabels = []string{"cluster:production"} // allowlist
+	keep := api.PR{Number: 1, Title: "prod", HeadRef: "a", BaseRef: "main", HeadSHA: "s1", Open: true,
+		Labels: []api.Label{{Name: "area/storage"}, {Name: "cluster:production"}}}
+	skip := api.PR{Number: 2, Title: "staging", HeadRef: "b", BaseRef: "main", HeadSHA: "s2", Open: true,
+		Labels: []api.Label{{Name: "cluster:staging"}}}
+	prov := &fakeProvider{prs: []api.PR{keep, skip}}
+	s := newTestServer(t, cfg, prov, okEngine())
+
+	// Only the labelled PR is tracked; the other is ignored entirely.
+	s.refreshList(s.runCtx)
+	waitFor(t, s, 1)
+	if list := s.store.list(); len(list) != 1 || list[0].Number != 1 {
+		t.Fatalf("allowlist should track only #1; got %+v", list)
+	}
+
+	// #1 loses its matching label (still open) → dropped on the next refresh.
+	relabeled := keep
+	relabeled.Labels = []api.Label{{Name: "area/storage"}}
+	prov.setPRs(relabeled, skip)
+	prov.setDetail(relabeled) // reconcileClosed re-fetches #1 via GetPR
+	s.refreshList(s.runCtx)
+	if list := s.store.list(); len(list) != 0 {
+		t.Fatalf("a PR that lost its allowlisted label should be dropped; got %+v", list)
+	}
+}
+
 func TestServer_Summary(t *testing.T) {
 	t.Parallel()
 	pr := api.PR{Number: 7, Title: "feat: widget", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123"}

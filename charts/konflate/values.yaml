@@ -74,6 +74,15 @@ config:
 
   # -- Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.
   renderForkPrs: false
+  # KONFLATE_PR_LABELS — optional allowlist of PR labels. When set, konflate only
+  # tracks (lists, renders, comments on) PRs carrying at least one of these
+  # labels; the rest are ignored, and a tracked PR that loses its last matching
+  # label is dropped. Matched case-insensitively against the full label name, so
+  # a bare "cluster" or a namespaced "cluster:production" both work. Empty (the
+  # default) tracks every open PR. Example: ["cluster:production", "cluster:staging"].
+
+  # -- Only track PRs carrying at least one of these labels (e.g. `["cluster:production"]`); empty tracks every PR. Case-insensitive.
+  prLabels: []
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------

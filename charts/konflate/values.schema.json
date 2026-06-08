@@ -90,6 +90,14 @@
           "title": "mergeCommand",
           "type": "string"
         },
+        "prLabels": {
+          "description": "Only track PRs carrying at least one of these labels (e.g. `[\"cluster:production\"]`); empty tracks every PR. Case-insensitive.",
+          "items": {
+            "required": []
+          },
+          "title": "prLabels",
+          "type": "array"
+        },
         "refreshInterval": {
           "default": "30m",
           "description": "How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).",
