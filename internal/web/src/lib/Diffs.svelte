@@ -6,6 +6,7 @@
   import Overview from './Overview.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
+  import MergeCommand from './MergeCommand.svelte';
   import { mdiChevronLeft, mdiChevronRight, mdiConsoleLine } from './icons';
 
   // The selection: 'summary' or a resource id. A bare #/pr/N (null) lands on
@@ -237,7 +238,7 @@
           {#if store.diffMergeCommand}
             <div class="merge-cmd">
               <Icon path={mdiConsoleLine} size={14} />
-              <code>{store.diffMergeCommand}</code>
+              <code><MergeCommand command={store.diffMergeCommand} /></code>
               <Copy text={store.diffMergeCommand} label="Copy merge command" />
             </div>
           {/if}

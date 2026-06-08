@@ -650,6 +650,9 @@ test('merge command is copyable in the review header (not on list cards)', async
   await page.goto('/#/pr/142');
   const bar = page.locator('.merge-cmd');
   await expect(bar.locator('code')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Flag tokens render dimmed/distinct, but the command text — and what copies —
+  // is the verbatim command (the flag span only colours, never alters it).
+  await expect(bar.locator('code .cmd-flag')).toHaveText('--repo');
   await bar.locator('.copy-btn').click();
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 
@@ -675,6 +678,8 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   // Ordered sections: copy (the merge command, from the list data), resource
   // diffs, cautions & warnings, image changes.
   await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Flags render as distinct (dimmed) tokens so `142 --repo` doesn't read joined.
+  await expect(preview.locator('.pv-cmd .cmd-flag')).toHaveText('--repo');
   await expect(preview).toContainText('Resource diffs');
   await expect(preview).toContainText('Cautions');
   await expect(preview).toContainText('Render failures');

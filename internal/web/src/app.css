@@ -1070,6 +1070,12 @@ button.sum-pill:hover {
   border-radius: 6px;
   padding: 3px 9px;
 }
+/* Flag tokens (`--repo`, …) in a rendered merge command — dimmed so they read as
+   a separate token from the value before them (see MergeCommand.svelte). Shared
+   by the diff-overview chip and the list-row preview chip (.pv-cmd). */
+.cmd-flag {
+  color: var(--muted);
+}
 .review-body {
   flex: 1 1 auto;
   min-height: 0;

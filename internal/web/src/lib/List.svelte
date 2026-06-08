@@ -9,6 +9,7 @@
   import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
+  import MergeCommand from './MergeCommand.svelte';
   import {
     mdiAlert,
     mdiPackageVariantClosed,
@@ -172,7 +173,7 @@
     <div class="pv-group">
       <span class="pv-label">Copy</span>
       <div class="pv-cmd-row">
-        <code class="pv-cmd">{pr.mergeCommand}</code>
+        <code class="pv-cmd"><MergeCommand command={pr.mergeCommand} /></code>
         <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
       </div>
     </div>
