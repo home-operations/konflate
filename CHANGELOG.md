@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.27](https://github.com/home-operations/konflate/compare/0.1.26...0.1.27) (2026-06-08)
+
+
+### Features
+
+* **config:** KONFLATE_PR_FILTER_EXPR — CEL PR filter (replaces label allowlist + fork toggle) ([#96](https://github.com/home-operations/konflate/issues/96)) ([cf287c6](https://github.com/home-operations/konflate/commit/cf287c64677235ea4eca8048a11fe96c1e5085f8))
+* **server:** persist rendered diffs across restarts ([#98](https://github.com/home-operations/konflate/issues/98)) ([60d3523](https://github.com/home-operations/konflate/commit/60d352393262c400e9334ad409a2cf53deba2f6a))
+
 ## [0.1.26](https://github.com/home-operations/konflate/compare/0.1.25...0.1.26) (2026-06-08)
 
 
