@@ -46,8 +46,8 @@ Kubernetes: `>=1.25.0-0`
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules for pod scheduling. |
 | config.cacheTtl | string | `""` | Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); "0" disables the sweep. |
-| config.closedPrMax | int | `25` | Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap. |
-| config.closedPrTtl | string | `"336h"` | How long a merged PR is kept (Go duration); 0 disables the age cap. In-memory — a restart clears the shelf. |
+| config.closedPrMax | int | `25` | Cap on retained merged PRs (most-recent win); bounds disk + memory. 0 disables the cap (with `closedPrTtl: "0"`, merged diffs are kept forever). |
+| config.closedPrTtl | string | `"336h"` | How long a merged PR is kept (Go duration); 0 disables the age cap. |
 | config.clusterPath | string | `""` | Directory flate renders from; empty = repo root (correct for the standard root-relative layout). |
 | config.diffTimeout | string | `""` | Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances. |
 | config.extraEnv | list | `[]` | Extra raw env vars merged into the container (advanced). |
@@ -103,7 +103,7 @@ Kubernetes: `>=1.25.0-0`
 | nodeSelector | object | `{}` | Node selector for pod scheduling. |
 | persistence.accessModes | list | `["ReadWriteOnce"]` | PVC access modes. |
 | persistence.annotations | object | `{}` | PVC annotations. |
-| persistence.enabled | bool | `false` | Persist caches + the git mirror across restarts (recommended for any non-trivial repo). |
+| persistence.enabled | bool | `false` | Persist caches, the git mirror, and rendered diffs across restarts: open PRs reload instantly and the merged shelf survives. Recommended for any non-trivial repo. |
 | persistence.existingClaim | string | `""` | Use an existing PVC instead of creating one. |
 | persistence.size | string | `"5Gi"` | PVC size. |
 | persistence.storageClass | string | `""` | StorageClass for the created PVC. |

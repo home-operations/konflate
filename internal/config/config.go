@@ -118,6 +118,13 @@ type Config struct {
 	// layers, git objects). Shared across diff jobs; persisted across restarts.
 	CacheDir string `env:"KONFLATE_CACHE_DIR"`
 
+	// StateDir is where konflate persists its rendered diffs (one zstd-compressed
+	// JSON per PR) so the store survives restarts. Derived as <CacheDir>/state in
+	// [Load] — it rides on the same volume as the source cache, so persistence is
+	// automatic once that volume is durable, and there is no separate knob. It
+	// sits beside flate's cache entries, which the cache GC leaves untouched.
+	StateDir string `env:"-"`
+
 	// CacheTTL bounds how long an unused entry stays in the on-disk source cache
 	// (Helm charts, OCI layers, git sources) before a periodic sweep prunes it.
 	// Without it the cache only grows — every distinct source a PR ever rendered
@@ -195,14 +202,16 @@ type Config struct {
 
 	// ClosedRetention bounds how long a merged PR stays on the "recently merged"
 	// shelf below the open list before it is pruned. Abandoned (closed-unmerged)
-	// PRs are dropped immediately regardless. The store is in-memory, so this is a
-	// best-effort window within a single process lifetime — a restart clears it.
+	// PRs are dropped immediately regardless. The shelf is persisted (see
+	// StateDir) and reloaded on restart when the cache volume is durable, so this
+	// window — and the file behind it — outlives a single process. <=0 disables
+	// the age cap (merged PRs kept indefinitely).
 	ClosedRetention time.Duration `env:"KONFLATE_CLOSED_PR_TTL" envDefault:"336h"` // 14d
 
 	// ClosedRetentionMax caps how many merged PRs are retained at once (the
-	// most-recent win). Because each retained PR holds its fully rendered diff,
-	// this count — not the time window — is what actually bounds memory. <=0
-	// disables the count cap (time-only).
+	// most-recent win). Each retained PR holds its fully rendered diff — in
+	// memory and, when persisted, on disk — so this count is what bounds both.
+	// <=0 disables the count cap (age-only; with both disabled, kept forever).
 	ClosedRetentionMax int `env:"KONFLATE_CLOSED_PR_MAX" envDefault:"25"`
 
 	// Forge is the parsed forge URI. Populated by Load; not settable via env.
@@ -264,6 +273,7 @@ func Load() (*Config, error) {
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = filepath.Join(xdgCacheHome(), "konflate")
 	}
+	cfg.StateDir = filepath.Join(cfg.CacheDir, "state")
 	if cfg.CloneDir == "" {
 		cfg.CloneDir = filepath.Join(os.TempDir(), "konflate")
 	}
