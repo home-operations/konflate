@@ -96,6 +96,10 @@ Kubernetes: `>=1.25.0-0`
 | monitoring.serviceMonitor.relabelings | list | `[]` | Prometheus relabelings. |
 | monitoring.serviceMonitor.scrapeTimeout | string | `"10s"` | Scrape timeout. |
 | nameOverride | string | `""` | Override the chart name used in resource names. |
+| networkPolicy.allowDNS | bool | `true` | Allow DNS egress (UDP/TCP 53). konflate must resolve forge/registry/git hosts to render, so leave this on unless DNS is handled out-of-band. |
+| networkPolicy.egressPorts | list | `[443]` | TCP ports konflate may egress to fetch sources during a render (forge API + git/OCI/Helm over HTTPS). Add 80 / 22 for plain-HTTP or SSH git sources. |
+| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy for konflate. |
+| networkPolicy.type | string | `"default"` | Policy flavor for your CNI: "default" (networking.k8s.io/v1 NetworkPolicy), "cilium" (CiliumNetworkPolicy), or "calico" (projectcalico.org/v3 NetworkPolicy). |
 | nodeSelector | object | `{}` | Node selector for pod scheduling. |
 | persistence.accessModes | list | `["ReadWriteOnce"]` | PVC access modes. |
 | persistence.annotations | object | `{}` | PVC annotations. |

@@ -1,0 +1,101 @@
+suite: networkPolicy
+templates:
+  - networkpolicy.tpl
+set:
+  config.repo: github://owner/repo
+tests:
+  - it: is not rendered by default (disabled)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a networking.k8s.io NetworkPolicy for type=default
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      # Ingress is limited to konflate's HTTP + metrics ports.
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            port: 8080
+            protocol: TCP
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            port: 9090
+            protocol: TCP
+      # Egress: DNS first, then the TCP egress ports (443 by default).
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            port: 53
+            protocol: UDP
+      - contains:
+          path: spec.egress[1].ports
+          content:
+            port: 443
+            protocol: TCP
+
+  - it: drops the DNS egress rule when allowDNS is false
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.allowDNS: false
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 1
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            port: 443
+            protocol: TCP
+
+  - it: renders a CiliumNetworkPolicy for type=cilium
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.type: cilium
+    asserts:
+      - isAPIVersion:
+          of: cilium.io/v2
+      - isKind:
+          of: CiliumNetworkPolicy
+      - contains:
+          path: spec.ingress[0].fromEntities
+          content: all
+      # Egress to the world + cluster on the configured TCP ports.
+      - contains:
+          path: spec.egress[1].toEntities
+          content: world
+
+  - it: renders a Calico NetworkPolicy for type=calico
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.type: calico
+    asserts:
+      - isAPIVersion:
+          of: projectcalico.org/v3
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.egress[2].action
+          value: Allow
+      - contains:
+          path: spec.egress[2].destination.ports
+          content: 443
+
+  - it: fails fast on an unknown type
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.type: bogus
+    asserts:
+      - failedTemplate:
+          errorMessage: 'networkPolicy.type must be one of: default, cilium, calico (got "bogus")'
