@@ -1067,10 +1067,14 @@ button.sum-pill:hover {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* Flag tokens (`--repo`, …) in a rendered merge command — dimmed so they read as
-   a separate token from the value before them (see MergeCommand.svelte). */
+/* Flag tokens (`--repo`, …) in a rendered merge command. Two cues so the flag
+   reads as its own token (a short mid-height `--` otherwise optically attaches to
+   the value before it — `142 --repo` looks like `142--repo`): dim it, and nudge
+   it right by half a character. The margin only widens the gap *before a flag*,
+   leaving the rest of the command on the pure mono grid. See MergeCommand.svelte. */
 .cmd-flag {
   color: var(--muted);
+  margin-left: 0.5ch;
 }
 .review-body {
   flex: 1 1 auto;
