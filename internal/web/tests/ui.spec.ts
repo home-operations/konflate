@@ -48,8 +48,9 @@ test('list → review → single-page flow', async ({ page }) => {
   // Author avatar renders when present; a PR without one falls back to the icon.
   await expect(card142.locator('img.avatar')).toBeVisible();
   await expect(page.locator('.card', { hasText: '#138' }).locator('img.avatar')).toHaveCount(0);
-  // PR age ("opened …") and a colored label dot.
-  await expect(card142.locator('.ago', { hasText: 'opened' })).toBeVisible();
+  // PR age: a clock icon + relative time (the full "Opened …" date is in the
+  // title, so the word itself is dropped), plus a colored label dot.
+  await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
   await expect(card142.locator('.label-dot')).toBeVisible();
 
   // Open a PR → the single-page review lands on the Summary (impact, warnings,

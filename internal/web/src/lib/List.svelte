@@ -142,13 +142,12 @@
         {/if}
         {#if !pr.open && pr.closedAt}
           <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
-        {:else}
-          {#if pr.createdAt}
-            <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={12} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
-          {/if}
-          {#if pr.updatedAt}
-            <span class="ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={12} /> {timeAgo(pr.updatedAt, clock.now)}</span>
-          {/if}
+        {:else if pr.createdAt}
+          <!-- Created date only — render freshness lives on the review screen, and
+               a failed refresh is flagged by the badge below. The clock icon labels
+               it (full "Opened …" date in the title), so the word would just crowd
+               the row (worst on mobile). -->
+          <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={12} /> {timeAgo(pr.createdAt, clock.now)}</span>
         {/if}
         {#if pr.labels?.length}
           <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{#if labelColor(l)}<span class="label-dot" style:background-color={labelColor(l)}></span>{/if}{l.name}</span>{/each}</span>
