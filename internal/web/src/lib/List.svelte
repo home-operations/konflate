@@ -6,9 +6,9 @@
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
-  import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
+  import MergeCommand from './MergeCommand.svelte';
   import {
     mdiAlert,
     mdiPackageVariantClosed,
@@ -32,7 +32,6 @@
     mdiUnfoldMoreHorizontal,
     mdiUnfoldLessHorizontal,
     mdiArrowUp,
-    mdiConsoleLine,
   } from './icons';
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
@@ -99,6 +98,15 @@
     expanded[n] = !expanded[n];
     if (expanded[n]) ensurePreview(n, headSha);
   }
+  // The summary loads async, so on the FIRST open the panel would slide to its
+  // loading height and then jump as the fetched sections arrive. Hold the slide
+  // until the summary has resolved (a reopen is smooth precisely because the data
+  // is already cached), so it animates once, straight to the final height; the
+  // chevron spins meanwhile.
+  const previewReady = (n: number): boolean => {
+    const p = store.previews[n];
+    return !!p && p.state !== 'loading';
+  };
 
   // The visible rows that have a summary to toggle — open cards plus the merged
   // shelf when it's showing. Drives the expand/collapse-all control.
@@ -169,22 +177,17 @@
 {#snippet previewBody(pr: PRStatus)}
   {@const pv = store.previews[pr.number]}
   {#if pr.mergeCommand}
-    <div class="pv-group">
-      <span class="pv-label">Copy</span>
-      <div class="pv-cmd-row">
-        <code class="pv-cmd">{pr.mergeCommand}</code>
-        <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
-      </div>
-    </div>
+    <MergeCommand command={pr.mergeCommand} />
   {/if}
 
-  {#if !pv || pv.state === 'loading'}
-    <div class="pv-msg"><Spinner size={13} /> Loading summary…</div>
-  {:else if pv.state === 'pending'}
+  <!-- The sliding panel only mounts once the summary has loaded (see
+       previewReady), so there's no in-panel "loading…" height for the slide to
+       animate through and then jump past — the chevron carries the spinner. -->
+  {#if pv && pv.state === 'pending'}
     <div class="pv-msg"><Icon path={mdiTrayFull} size={14} /> Still rendering — open the PR to watch.</div>
-  {:else if pv.state === 'error'}
+  {:else if pv && pv.state === 'error'}
     <div class="pv-msg pv-error"><Icon path={mdiAlertCircleOutline} size={14} /> {pv.error}</div>
-  {:else}
+  {:else if pv}
     <div class="pv-group">
       <span class="pv-label">Resource diffs</span>
       <div class="pv-impact">
@@ -243,7 +246,10 @@
 {/snippet}
 
 {#snippet prCard(pr: PRStatus)}
-  <li class="card-li" class:expanded={isExpanded(pr.number)}>
+  <!-- The squared-bottom "expanded" look is tied to the panel actually being
+       shown (not just the toggle), so a card never flattens its corners while the
+       summary is still loading and no panel hangs below it yet. -->
+  <li class="card-li" class:expanded={isExpanded(pr.number) && previewReady(pr.number)}>
     <div
       class="card-shell"
       class:merged={!pr.open}
@@ -312,11 +318,15 @@
           aria-label={isExpanded(pr.number) ? `Hide summary for #${pr.number}` : `Show summary for #${pr.number}`}
           onclick={() => toggleExpand(pr.number, pr.headSha)}
         >
-          <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
+          {#if isExpanded(pr.number) && !previewReady(pr.number)}
+            <Spinner size={16} />
+          {:else}
+            <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
+          {/if}
         </button>
       {/if}
     </div>
-    {#if isExpanded(pr.number)}
+    {#if isExpanded(pr.number) && previewReady(pr.number)}
       <div class="card-preview" transition:slide={{ duration: 120 }}>
         {@render previewBody(pr)}
       </div>

@@ -491,6 +491,42 @@ test('mobile: diff header title is not crushed to one char per line (regression)
   expect(box?.width ?? 0).toBeGreaterThan(150);
 });
 
+test('mobile: a wide diff line keeps the diff header within the viewport (regression)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubApi(page);
+  // A long, unbreakable line: diff cells wrap (white-space: pre-wrap), but
+  // word-break: break-word doesn't shrink their *min-content*, so without
+  // min-width: 0 up the flex/grid chain this floored the whole column at the
+  // line's full width — pushing the diff header (filename + caution badge) and
+  // the mobile switcher off the right edge.
+  const wide = structuredClone(diffEnvelope);
+  wide.diff.resources[0].unified.push({
+    kind: 'add',
+    newNo: 99,
+    html: 'image: ghcr.io/org/some/really/long/registry/path/that/keeps/going:v1.2.3-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  });
+  await page.route('**/api/prs/142/diff', (route) => route.fulfill({ json: wide }));
+  // r2 = StatefulSet default/postgres — the removed resource whose caution badge
+  // sat on the header's right edge (the part that got clipped).
+  await page.goto('/#/pr/142/r2');
+  const header = page.locator('[data-sel="r2"] .res-header');
+  await header.waitFor();
+
+  // The header fills the viewport but never exceeds it (was ~448 on a 390 screen).
+  const box = await header.boundingBox();
+  expect(box?.width ?? 999).toBeLessThanOrEqual(391);
+  // The caution badge stays fully inside the viewport — its right edge no longer
+  // pushed off-screen.
+  const badge = await page.locator('[data-sel="r2"] .res-header .badge.caution').boundingBox();
+  expect((badge?.x ?? 0) + (badge?.width ?? 0)).toBeLessThanOrEqual(390);
+  // And the page never scrolls sideways.
+  const review = await page.evaluate(() => {
+    const el = document.querySelector('.review') as HTMLElement;
+    return { client: el.clientWidth, scroll: el.scrollWidth };
+  });
+  expect(review.scroll).toBeLessThanOrEqual(review.client + 1);
+});
+
 test('mobile: a long PR title wraps to two lines instead of truncating', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
@@ -613,8 +649,14 @@ test('merge command is copyable in the review header (not on list cards)', async
   // recorder before navigating away — a full document load resets it.)
   await page.goto('/#/pr/142');
   const bar = page.locator('.merge-cmd');
-  await expect(bar.locator('code')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  await expect(bar.locator('.merge-cmd-text')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Flag tokens render dimmed/distinct, but the command text — and what copies —
+  // is the verbatim command (the flag span only colours, never alters it).
+  await expect(bar.locator('.merge-cmd-text .cmd-flag')).toHaveText('--repo');
+  // Both the copy button and the chip itself copy the verbatim command.
   await bar.locator('.copy-btn').click();
+  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+  await bar.locator('.merge-cmd-text').click();
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 
   // The PR list no longer carries a copy-merge affordance — it lives only in
@@ -636,9 +678,12 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   const preview = card.locator('.card-preview');
   await expect(preview).toBeVisible();
 
-  // Ordered sections: copy (the merge command, from the list data), resource
-  // diffs, cautions & warnings, image changes.
-  await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Ordered sections: copy (the merge command, from the list data — same
+  // MergeCommand chip as the diff overview), resource diffs, cautions & warnings,
+  // image changes.
+  await expect(preview.locator('.merge-cmd-text')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Flags render as distinct (dimmed) tokens so `142 --repo` doesn't read joined.
+  await expect(preview.locator('.merge-cmd-text .cmd-flag')).toHaveText('--repo');
   await expect(preview).toContainText('Resource diffs');
   await expect(preview).toContainText('Cautions');
   await expect(preview).toContainText('Render failures');
@@ -655,6 +700,33 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   // Clicking the row itself still opens the full review.
   await card.locator('.card').click();
   await expect(page).toHaveURL(/#\/pr\/142$/);
+});
+
+test('the row summary waits for its fetch before sliding open (no first-open jump)', async ({ page }) => {
+  await stubApi(page);
+  // Hold the summary response so we can observe the pre-load state. (Registered
+  // after stubApi, so this handler wins for the summary route.)
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route('**/api/prs/142/summary', async (route) => {
+    await gate;
+    await route.fulfill({ json: diffEnvelope });
+  });
+  await page.goto('/');
+  const card = page.locator('.card-li', { hasText: '#142' });
+
+  await card.locator('.card-expand').click();
+  // Toggled open, but the panel is deferred until the summary lands: the chevron
+  // shows a spinner and no panel (which would otherwise slide to a loading height
+  // and then jump) has mounted yet.
+  await expect(card.locator('.card-expand')).toHaveAttribute('aria-expanded', 'true');
+  await expect(card.locator('.card-expand .kspin')).toBeVisible();
+  await expect(card.locator('.card-preview')).toHaveCount(0);
+
+  // Summary lands → the panel mounts once, with its full content.
+  release();
+  await expect(card.locator('.card-preview')).toBeVisible();
+  await expect(card.locator('.card-preview')).toContainText('StatefulSet default/postgres');
 });
 
 test('the expand-all control toggles every row summary at once', async ({ page }) => {

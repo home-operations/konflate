@@ -611,24 +611,6 @@ a.repo:focus-visible .repo-ext {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-/* The copy-merge row: the command in a mono chip plus the copy button. */
-.pv-cmd-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pv-cmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 8px;
-}
 .pv-msg {
   display: flex;
   align-items: center;
@@ -1047,28 +1029,52 @@ button.sum-pill:hover {
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
-/* The optional "copy to merge" command rides on the right of the Summary
-   header (not its own strip) — a convenience, in a monospace chip. */
+/* The "copy to merge" command (MergeCommand.svelte): a terminal icon, the
+   command in a mono chip, and a copy button — shown identically on the right of
+   the Summary header and in the PR-list folded preview. A flex row, so it sizes
+   to content in the header (pushed right by .res-title's flex) and stretches to
+   fill in the preview's flex column; no margin needed. */
 .merge-cmd {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  margin-left: auto;
-  color: var(--muted);
+  color: var(--muted); /* the terminal icon */
 }
-.merge-cmd code {
-  flex: 0 1 auto;
+/* The chip is a button — clicking the command copies it (so does the adjacent
+   copy button). Recessed (--bg) so it reads the same on the panel header and the
+   panel-alt preview. */
+.merge-cmd-text {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text);
-  background: var(--panel-alt);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 3px 9px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+.merge-cmd-text:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.merge-cmd-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Flag tokens (`--repo`, …) in a rendered merge command. Two cues so the flag
+   reads as its own token (a short mid-height `--` otherwise optically attaches to
+   the value before it — `142 --repo` looks like `142--repo`): dim it, and nudge
+   it right by half a character. The margin only widens the gap *before a flag*,
+   leaving the rest of the command on the pure mono grid. See MergeCommand.svelte. */
+.cmd-flag {
+  color: var(--muted);
+  margin-left: 0.5ch;
 }
 .review-body {
   flex: 1 1 auto;
@@ -1277,6 +1283,13 @@ button.sum-pill:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* A wide diff line's min-content width must NOT size the column. Diff cells
+     wrap (white-space: pre-wrap), but word-break: break-word doesn't shrink
+     their *min-content*, so without this a long token floors this grid item at
+     the line's full width — blowing the whole pane (and the sticky .res-header /
+     mobile switcher, badges and all) out past the viewport. min-width: 0 lets
+     the item shrink to its column so the line wraps instead. See .diffs. */
+  min-width: 0;
   overflow: hidden;
   background: var(--panel);
 }
@@ -1284,6 +1297,7 @@ button.sum-pill:hover {
   flex: 1 1 auto;
   overflow: auto;
   min-height: 0;
+  min-width: 0; /* same min-content blowout as .diff-main: shrink to the column, don't size to the diff */
 }
 /* All sections (Summary + every resource diff) stack in one scrolling pane —
    review by scrolling, not by clicking each resource. The sticky .res-header
@@ -1889,7 +1903,12 @@ kbd {
 /* ---- mobile ---------------------------------------------------------- */
 @media (max-width: 900px) {
   .diffs {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: a bare 1fr track floors at its content's
+       min-content width, so a wide diff line would stretch the single column
+       past the viewport (clipping the diff header's filename + badges). Capping
+       the track minimum at 0 keeps it at the viewport width so the line wraps to
+       fit instead. Pairs with min-width: 0 on .diff-main / .diff-pane. */
+    grid-template-columns: minmax(0, 1fr);
     height: auto; /* page-scroll: size to content; .review owns the scroll */
   }
   .rail {

@@ -5,8 +5,8 @@
   import Diff from './Diff.svelte';
   import Overview from './Overview.svelte';
   import Icon from './Icon.svelte';
-  import Copy from './Copy.svelte';
-  import { mdiChevronLeft, mdiChevronRight, mdiConsoleLine } from './icons';
+  import MergeCommand from './MergeCommand.svelte';
+  import { mdiChevronLeft, mdiChevronRight } from './icons';
 
   // The selection: 'summary' or a resource id. A bare #/pr/N (null) lands on
   // the Summary. Every section renders stacked in one scrolling pane — the
@@ -235,11 +235,7 @@
                header instead of its own full-width strip — one fewer bar, and it
                fills the otherwise-empty right side. Open PRs with the feature on. -->
           {#if store.diffMergeCommand}
-            <div class="merge-cmd">
-              <Icon path={mdiConsoleLine} size={14} />
-              <code>{store.diffMergeCommand}</code>
-              <Copy text={store.diffMergeCommand} label="Copy merge command" />
-            </div>
+            <MergeCommand command={store.diffMergeCommand} />
           {/if}
         </div>
         <Overview />
