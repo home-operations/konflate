@@ -110,17 +110,15 @@ type RenderFailure struct {
 	Message string `json:"message"` // the render/reconcile error
 }
 
-// Warning severity levels — the values of [Warning.Level], shared by the diff
-// renderer that emits them and the server that tallies them.
-const (
-	LevelDanger  = "danger"  // likely destructive/unsafe
-	LevelCaution = "caution" // worth a second look
-)
+// LevelCaution is the sole warning severity — every heuristic flag over the
+// rendered diff is a caution (rendered red in the UI). Kept as a named value of
+// [Warning.Level] so the contract is explicit and a future severity tier is a
+// small change.
+const LevelCaution = "caution"
 
-// Warning is one heuristic danger flag over the rendered diff. Level is
-// [LevelDanger] or [LevelCaution]; Rule is a stable machine id (e.g.
-// "removed-statefulset", "privileged", "rbac-widened", "replicas-zero",
-// "removed-crd").
+// Warning is one heuristic flag over the rendered diff. Level is always
+// [LevelCaution]; Rule is a stable machine id (e.g. "removed-statefulset",
+// "privileged", "rbac-widened", "replicas-zero", "removed-crd").
 type Warning struct {
 	Level    string `json:"level"`
 	Rule     string `json:"rule"`

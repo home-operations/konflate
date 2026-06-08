@@ -3,9 +3,9 @@ import type { Meta, PRStatus } from '../src/lib/types';
 
 const meta: Meta = { forge: 'github', repo: 'acme/home-ops', refreshIntervalSeconds: 1800 };
 
-// A self-contained PR set covering the triage axes: a clean rendered bump, a
-// PR with danger warnings, and one still rendering. Kept separate from the
-// shared fixture so the existing card-count assertions there stay valid.
+// A self-contained PR set covering the triage axes: a caution-free bump, a PR
+// carrying cautions, and one still rendering. Kept separate from the shared
+// fixture so the existing card-count assertions there stay valid.
 function pr(over: Partial<PRStatus> & { number: number; title: string }): PRStatus {
   return {
     author: 'renovate[bot]',
@@ -28,12 +28,12 @@ const prs: PRStatus[] = [
   pr({
     number: 1,
     title: 'clean image bump',
-    signals: { resources: 2, danger: 0, caution: 0, images: 1, failures: 0 },
+    signals: { resources: 2, caution: 0, images: 1, failures: 0 },
   }),
   pr({
     number: 2,
     title: 'risky rbac change',
-    signals: { resources: 5, danger: 2, caution: 0, images: 0, failures: 0 },
+    signals: { resources: 5, caution: 2, images: 0, failures: 0 },
   }),
   pr({ number: 3, title: 'still rendering', status: 'running' }),
 ];
@@ -48,41 +48,26 @@ async function stubApi(page: Page) {
 
 const cards = (page: Page) => page.locator('.cards .card');
 
-test('clean filter narrows to warning-free rendered PRs', async ({ page }) => {
+test('the caution pill narrows to PRs carrying cautions', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
 
   // All three open PRs are listed to start.
   await expect(cards(page)).toHaveCount(3);
 
-  // The clean pill (count 1) filters the list down to just the warning-free PR.
-  // (Clean is signalled by the absence of warning badges, not a per-card badge.)
-  const cleanPill = page.locator('button.sum-pill', { hasText: 'clean' });
-  await expect(cleanPill).toContainText('1');
-  await cleanPill.click();
-  await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toContainText('clean image bump');
-});
-
-test('images and danger filters select their PRs', async ({ page }) => {
-  await stubApi(page);
-  await page.goto('/');
-
-  await page.locator('button.sum-pill', { hasText: 'images' }).click();
-  await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toContainText('clean image bump');
-
-  // Switch to danger: the risky PR, not the clean one.
-  await page.locator('button.sum-pill', { hasText: 'danger' }).click();
+  // The caution pill (count 1) filters the list down to just the PR with cautions.
+  const cautionPill = page.locator('button.sum-pill', { hasText: 'caution' });
+  await expect(cautionPill).toContainText('1');
+  await cautionPill.click();
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page).first()).toContainText('risky rbac change');
 });
 
-test('status:clean query facet matches the pill filter', async ({ page }) => {
+test('status:caution query facet matches the pill filter', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
 
-  await page.locator('input.pr-search').fill('status:clean');
+  await page.locator('input.pr-search').fill('status:caution');
   await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toContainText('clean image bump');
+  await expect(cards(page).first()).toContainText('risky rbac change');
 });

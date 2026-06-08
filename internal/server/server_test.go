@@ -595,7 +595,7 @@ func TestServer_SignalsInList(t *testing.T) {
 		t.Fatalf("expected signals on the ready PR: %+v", list)
 	}
 	got := *list[0].Signals
-	want := api.Signals{Resources: 2, Danger: 1, Caution: 2, Images: 1, Failures: 1}
+	want := api.Signals{Resources: 2, Caution: 3, Images: 1, Failures: 1}
 	if got != want {
 		t.Errorf("signals = %+v, want %+v", got, want)
 	}

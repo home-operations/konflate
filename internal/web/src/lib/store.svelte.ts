@@ -6,7 +6,7 @@ import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from 
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = all).
-export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged' | 'clean' | 'images';
+export type StatusFilter = '' | 'caution' | 'merged';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -55,22 +55,20 @@ export const store: Store = $state({
 // exporting a derived directly, so callers read it through diffIndex().
 const diffIndexState = $derived.by(() => {
   const warningsByResource = new Map<string, Warning[]>();
-  const dangerResources = new Set<string>(); // resource titles carrying a danger
-  let dangerCount = 0; // total danger warnings (a resource may have several)
+  const cautionResources = new Set<string>(); // resource titles carrying a caution
+  let cautionCount = 0; // total cautions (a resource may have several)
   for (const w of store.diff?.warnings ?? []) {
     let list = warningsByResource.get(w.resource);
     if (!list) warningsByResource.set(w.resource, (list = []));
     list.push(w);
-    if (w.level === 'danger') {
-      dangerResources.add(w.resource);
-      dangerCount++;
-    }
+    cautionResources.add(w.resource);
+    cautionCount++;
   }
   // Resource id keyed by its "Kind ns/name" title, so a warning can deep-link to
   // the diff it flags without a linear find.
   const idByTitle = new Map<string, string>();
   for (const r of store.diff?.resources ?? []) idByTitle.set(r.title, r.id);
-  return { warningsByResource, dangerResources, dangerCount, idByTitle };
+  return { warningsByResource, cautionResources, cautionCount, idByTitle };
 });
 
 // diffIndex exposes the shared diff lookups (see diffIndexState). Read it inside
@@ -81,7 +79,7 @@ export function diffIndex() {
 
 // ---- query grammar ----------------------------------------------------
 // A query is free text plus optional facet tokens, AND-ed together:
-//   "plex status:danger author:renovate base:main label:storage"
+//   "plex status:caution author:renovate base:main label:storage"
 // The same grammar drives the inline filter and the command palette.
 
 export interface ParsedQuery {
@@ -90,7 +88,7 @@ export interface ParsedQuery {
 }
 
 const FACETS = ['status', 'author', 'base', 'label'];
-const STATUS_VALUES = ['danger', 'failed', 'rendering', 'merged', 'open', 'clean', 'images'];
+const STATUS_VALUES = ['caution', 'merged', 'open'];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -149,35 +147,13 @@ export function filteredPRs(): PRStatus[] {
   return store.prs.filter((p) => matchesQuery(p, q));
 }
 
-// isClean reports a successfully-rendered open PR with no flagged risk — the
-// "nothing scary here" set a reviewer can scan (and often merge) fastest. It is
-// not a merge guarantee: a clean render can still carry config changes worth a
-// look, so it flags the absence of warnings, not safety.
-export function isClean(p: PRStatus): boolean {
-  return (
-    p.open &&
-    p.status === 'ready' &&
-    (p.signals?.danger ?? 0) === 0 &&
-    (p.signals?.caution ?? 0) === 0 &&
-    (p.signals?.failures ?? 0) === 0
-  );
-}
-
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
-    case 'danger':
-      return (p.signals?.danger ?? 0) > 0;
-    case 'failed':
-      return p.status === 'error';
-    case 'rendering':
-      return p.status === 'pending' || p.status === 'running';
+    case 'caution':
+      return (p.signals?.caution ?? 0) > 0;
     case 'merged':
       return !p.open;
-    case 'clean':
-      return isClean(p);
-    case 'images':
-      return (p.signals?.images ?? 0) > 0;
     default:
       return true;
   }

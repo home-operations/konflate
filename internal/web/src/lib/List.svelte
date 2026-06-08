@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PRStatus } from './types';
-  import { store, filteredPRs, matchesStatus, sortPRs, openPR, isClean, type StatusFilter } from './store.svelte';
+  import { store, filteredPRs, matchesStatus, sortPRs, openPR, type StatusFilter } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
@@ -9,7 +9,6 @@
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import {
-    mdiAlertOctagon,
     mdiAlert,
     mdiPackageVariantClosed,
     mdiAlertCircleOutline,
@@ -45,11 +44,7 @@
   // also a toggle that filters the list down to that status.
   const summary = $derived.by(() => ({
     open: openAll.length,
-    clean: openAll.filter(isClean).length,
-    danger: openAll.filter((p) => (p.signals?.danger ?? 0) > 0).length,
-    failed: openAll.filter((p) => p.status === 'error').length,
-    images: openAll.filter((p) => (p.signals?.images ?? 0) > 0).length,
-    rendering: openAll.filter((p) => p.status === 'pending' || p.status === 'running').length,
+    caution: openAll.filter((p) => (p.signals?.caution ?? 0) > 0).length,
     merged: prs.length - openAll.length,
   }));
 
@@ -124,7 +119,7 @@
     <button
       class="card"
       class:merged={!pr.open}
-      class:danger={pr.open && (pr.signals?.danger ?? 0) > 0}
+      class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
       onclick={() => openPR(pr.number)}
     >
       <div class="card-top">
@@ -156,10 +151,7 @@
         {#if pr.signals}
           <span class="badges">
             {#if pr.refreshError}
-              <span class="badge caution" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
-            {/if}
-            {#if pr.signals.danger}
-              <span class="badge danger" title="danger warnings"><Icon path={mdiAlertOctagon} size={13} /> {pr.signals.danger}</span>
+              <span class="badge warn" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
             {/if}
             {#if pr.signals.caution}
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
@@ -199,7 +191,7 @@
       <Icon path={mdiFilterOutline} size={15} />
       <input
         class="pr-search"
-        placeholder="Filter pull requests… (try status:danger or author:renovate)"
+        placeholder="Filter pull requests… (try status:caution or author:renovate)"
         bind:value={store.query}
         aria-label="Filter pull requests"
       />
@@ -228,20 +220,8 @@
   {#if store.loaded && openAll.length}
     <div class="list-summary">
       <span class="sum-pill"><strong>{summary.open}</strong> open</span>
-      {#if showPill(summary.clean, 'clean')}
-        {@render pill('clean', summary.clean, 'ok', 'Only PRs rendered with no warnings')}
-      {/if}
-      {#if showPill(summary.danger, 'danger')}
-        {@render pill('danger', summary.danger, 'danger', 'Only PRs with danger warnings')}
-      {/if}
-      {#if showPill(summary.failed, 'failed')}
-        {@render pill('failed', summary.failed, 'danger', 'Only PRs whose render failed')}
-      {/if}
-      {#if showPill(summary.images, 'images')}
-        {@render pill('images', summary.images, '', 'Only PRs with image changes')}
-      {/if}
-      {#if showPill(summary.rendering, 'rendering')}
-        {@render pill('rendering', summary.rendering, '', 'Only PRs still rendering')}
+      {#if showPill(summary.caution, 'caution')}
+        {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
       {/if}
       {#if showPill(summary.merged, 'merged')}
         {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}

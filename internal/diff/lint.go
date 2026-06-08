@@ -34,59 +34,53 @@ type Change struct {
 // before all cautions). Advisory only — konflate never blocks on these; they
 // are a reviewer aid.
 func Lint(changes []Change, images []api.ImageChange) []api.Warning {
-	var danger, caution []api.Warning
-	add := func(level, rule, detail string, c Change) {
-		w := api.Warning{Level: level, Rule: rule, Resource: resourceLabel(c), Detail: detail}
-		if level == api.LevelDanger {
-			danger = append(danger, w)
-		} else {
-			caution = append(caution, w)
-		}
+	var warnings []api.Warning
+	add := func(rule, detail string, c Change) {
+		warnings = append(warnings, api.Warning{Level: api.LevelCaution, Rule: rule, Resource: resourceLabel(c), Detail: detail})
 	}
 
 	for _, c := range changes {
 		if c.Status == "removed" {
 			switch c.Kind {
 			case "StatefulSet":
-				add(api.LevelDanger, "removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted", c)
+				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted", c)
 			case "PersistentVolumeClaim":
-				add(api.LevelDanger, "removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed", c)
+				add("removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed", c)
 			case "Namespace":
-				add(api.LevelDanger, "removed-namespace", "removed Namespace — deletes every resource inside it", c)
+				add("removed-namespace", "removed Namespace — deletes every resource inside it", c)
 			case "CustomResourceDefinition":
-				add(api.LevelDanger, "removed-crd", "removed CustomResourceDefinition — deletes all of its custom resources", c)
+				add("removed-crd", "removed CustomResourceDefinition — deletes all of its custom resources", c)
 			case "NetworkPolicy":
-				add(api.LevelCaution, "removed-networkpolicy", "removed NetworkPolicy — traffic it previously denied may now be allowed", c)
+				add("removed-networkpolicy", "removed NetworkPolicy — traffic it previously denied may now be allowed", c)
 			}
 		}
 
 		// Post-image rules (added or changed): inspect the New manifest.
 		if c.New != nil {
 			if hasPrivilegedContainer(c.New) {
-				add(api.LevelDanger, "privileged", "a container runs with securityContext.privileged: true", c)
+				add("privileged", "a container runs with securityContext.privileged: true", c)
 			}
 			if isWorkload(c.Kind) {
 				if r, ok := intField(c.New, "spec", "replicas"); ok && r == 0 {
-					add(api.LevelCaution, "replicas-zero", "spec.replicas is 0 — the workload will be scaled to no pods", c)
+					add("replicas-zero", "spec.replicas is 0 — the workload will be scaled to no pods", c)
 				}
 			}
 		}
 
 		if c.Status == "added" && c.Kind == "ClusterRoleBinding" {
-			add(api.LevelCaution, "rbac-widened", "new ClusterRoleBinding — grants cluster-wide permissions", c)
+			add("rbac-widened", "new ClusterRoleBinding — grants cluster-wide permissions", c)
 		}
 	}
 
-	// Blast-radius / version signals (all caution): an unusually large change
-	// set, and major (semver) chart or container-image bumps — each "review with
-	// extra care", not "destructive".
+	// Blast-radius / version signals: an unusually large change set, and major
+	// (semver) chart or container-image bumps.
 	if w, ok := largeChangeSet(changes); ok {
-		caution = append(caution, w)
+		warnings = append(warnings, w)
 	}
-	caution = append(caution, chartBumpWarnings(changes)...)
-	caution = append(caution, imageBumpWarnings(images)...)
+	warnings = append(warnings, chartBumpWarnings(changes)...)
+	warnings = append(warnings, imageBumpWarnings(images)...)
 
-	return append(danger, caution...)
+	return warnings
 }
 
 // A change set this wide warrants a careful pass — a Renovate-style "update

@@ -59,22 +59,22 @@ func TestLint(t *testing.T) {
 		{
 			name:    "removed StatefulSet is a data-loss danger",
 			changes: []Change{{Status: "removed", Kind: "StatefulSet", Namespace: "db", Name: "postgres", Old: map[string]any{}}},
-			want:    []api.Warning{{Level: api.LevelDanger, Rule: "removed-statefulset", Resource: "StatefulSet db/postgres"}},
+			want:    []api.Warning{{Level: api.LevelCaution, Rule: "removed-statefulset", Resource: "StatefulSet db/postgres"}},
 		},
 		{
 			name:    "removed PVC is a data-loss danger",
 			changes: []Change{{Status: "removed", Kind: "PersistentVolumeClaim", Namespace: "db", Name: "data", Old: map[string]any{}}},
-			want:    []api.Warning{{Level: api.LevelDanger, Rule: "removed-pvc", Resource: "PersistentVolumeClaim db/data"}},
+			want:    []api.Warning{{Level: api.LevelCaution, Rule: "removed-pvc", Resource: "PersistentVolumeClaim db/data"}},
 		},
 		{
 			name:    "removed Namespace is a danger; cluster-scoped so no ns in the label",
 			changes: []Change{{Status: "removed", Kind: "Namespace", Name: "prod", Old: map[string]any{}}},
-			want:    []api.Warning{{Level: api.LevelDanger, Rule: "removed-namespace", Resource: "Namespace prod"}},
+			want:    []api.Warning{{Level: api.LevelCaution, Rule: "removed-namespace", Resource: "Namespace prod"}},
 		},
 		{
 			name:    "removed CRD is a danger",
 			changes: []Change{{Status: "removed", Kind: "CustomResourceDefinition", Name: "certificates.cert-manager.io", Old: map[string]any{}}},
-			want:    []api.Warning{{Level: api.LevelDanger, Rule: "removed-crd", Resource: "CustomResourceDefinition certificates.cert-manager.io"}},
+			want:    []api.Warning{{Level: api.LevelCaution, Rule: "removed-crd", Resource: "CustomResourceDefinition certificates.cert-manager.io"}},
 		},
 		{
 			name:    "removed NetworkPolicy is a caution (traffic may now be allowed)",
@@ -96,7 +96,7 @@ func TestLint(t *testing.T) {
 				Status: "changed", Kind: "Deployment", Namespace: "web", Name: "api",
 				New: privilegedDeploymentManifest(),
 			}},
-			want: []api.Warning{{Level: api.LevelDanger, Rule: "privileged", Resource: "Deployment web/api"}},
+			want: []api.Warning{{Level: api.LevelCaution, Rule: "privileged", Resource: "Deployment web/api"}},
 		},
 		{
 			name:    "added ClusterRoleBinding widens RBAC (caution)",
@@ -121,15 +121,15 @@ func TestLint(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "dangers are ordered before cautions regardless of input order",
+			name: "every flag is a single caution severity, emitted in change order",
 			changes: []Change{
 				{Status: "changed", Kind: "Deployment", Namespace: "web", Name: "api",
-					New: map[string]any{"spec": map[string]any{"replicas": 0}}}, // caution
-				{Status: "removed", Kind: "StatefulSet", Namespace: "db", Name: "postgres", Old: map[string]any{}}, // danger
+					New: map[string]any{"spec": map[string]any{"replicas": 0}}},
+				{Status: "removed", Kind: "StatefulSet", Namespace: "db", Name: "postgres", Old: map[string]any{}},
 			},
 			want: []api.Warning{
-				{Level: api.LevelDanger, Rule: "removed-statefulset", Resource: "StatefulSet db/postgres"},
 				{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api"},
+				{Level: api.LevelCaution, Rule: "removed-statefulset", Resource: "StatefulSet db/postgres"},
 			},
 		},
 	}

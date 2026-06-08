@@ -11,7 +11,7 @@ const prs: PRStatus[] = [
     number: 1, title, author: 'bot-ross[bot]', state: 'open', open: true, draft: false,
     headRef: 'h', headSha: 'h', baseRef: 'main', createdAt: '2026-06-01T09:00:00Z',
     updatedAt: '2026-06-04T12:00:00Z', labels: [], url: '#', status: 'ready',
-    signals: { resources: 4, danger: 0, caution: 0, images: 1, failures: 0 },
+    signals: { resources: 4, caution: 0, images: 1, failures: 0 },
   },
 ];
 

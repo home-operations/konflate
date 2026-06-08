@@ -5,7 +5,6 @@ export {
   mdiThemeLightDark,
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
-  mdiAlertOctagon,
   mdiAlert,
   mdiPackageVariantClosed,
   mdiAlertCircleOutline,
