@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/persist"
+	"github.com/home-operations/konflate/internal/prfilter"
 )
 
 // TestStore_PersistsAcrossRestart simulates a pod restart: a store that wrote
@@ -96,6 +98,49 @@ func TestStore_SkipsUnchangedWrites(t *testing.T) {
 	s.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a", Warnings: []api.Warning{{}}})
 	if _, err := os.Stat(file); err != nil {
 		t.Fatalf("a changed diff should rewrite the file: %v", err)
+	}
+}
+
+// TestServer_DropsFilteredOnLoad verifies the persistence ⨯ PR-filter
+// interaction: a merged-shelf entry restored from disk that the *current* filter
+// excludes (a fork, after the operator tightens to !pr.fork) is dropped on load
+// — and its file deleted — even though the merged shelf is never re-listed.
+func TestServer_DropsFilteredOnLoad(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p, err := persist.New(dir, discardLog())
+	if err != nil {
+		t.Fatalf("persist.New: %v", err)
+	}
+	now := time.Now()
+	save := func(rec persist.Record) {
+		if err := p.Save(rec); err != nil {
+			t.Fatalf("Save #%d: %v", rec.PR.Number, err)
+		}
+	}
+	// As if a previous run (forks allowed) persisted a merged non-fork and a
+	// merged fork PR.
+	save(persist.Record{PR: api.PR{Number: 1, Merged: true}, Status: api.JobReady, Result: &api.DiffResult{PRNumber: 1}, ClosedAt: now})
+	save(persist.Record{PR: api.PR{Number: 2, Merged: true, Fork: true}, Status: api.JobReady, Result: &api.DiffResult{PRNumber: 2}, ClosedAt: now})
+
+	cfg := ghCfg("tok")
+	cfg.StateDir = dir
+	prg, err := prfilter.Compile("!pr.fork") // forks now excluded
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	cfg.PRFilter = prg
+
+	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+
+	if _, ok := s.store.get(1); !ok {
+		t.Error("non-fork merged PR #1 should be restored")
+	}
+	if _, ok := s.store.get(2); ok {
+		t.Error("fork merged PR #2 should be dropped on load (filter excludes forks)")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "2.json.zst")); !os.IsNotExist(err) {
+		t.Error("the dropped PR's file should be deleted from disk")
 	}
 }
 

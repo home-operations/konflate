@@ -62,22 +62,42 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	avatarKey := make([]byte, 32)
 	_, _ = rand.Read(avatarKey) // crypto/rand; signs the same-origin avatar-proxy URLs
 
+	s := &Server{
+		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
+		store: newStore(), hub: newHub(log), metrics: newMetrics(),
+		avatarKey: avatarKey,
+		mergeTmpl: newMergeTemplate(cfg, log),
+	}
+
 	// Durability: persist rendered diffs under the (operator-persisted) cache
 	// volume so the store — open PRs and the recently-merged shelf alike —
 	// survives a restart, and reload them now. Best-effort: if the state dir
 	// can't be created, log and run in-memory only (the prior behaviour).
-	st := newStore()
 	if p, err := persist.New(cfg.StateDir, log); err != nil {
 		log.Warn("diff persistence disabled", "dir", cfg.StateDir, "error", err)
 	} else {
-		st.loadFrom(p, log)
+		s.store.loadFrom(p, log)
+		s.dropFilteredOnLoad()
 	}
 
-	return &Server{
-		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
-		store: st, hub: newHub(log), metrics: newMetrics(),
-		avatarKey: avatarKey,
-		mergeTmpl: newMergeTemplate(cfg, log),
+	return s
+}
+
+// dropFilteredOnLoad re-applies the PR filter to everything restored from disk.
+// The refresh loop re-checks open PRs against the filter, but the recently-merged
+// shelf is never re-listed — so without this, a merged entry the current filter
+// now excludes (e.g. a fork after tightening to !pr.fork) would linger across a
+// restart, reclaimed only by retention. Drop those, which deletes their files.
+func (s *Server) dropFilteredOnLoad() {
+	dropped := 0
+	for _, pr := range s.store.list() {
+		if !s.prAllowed(pr.PR) {
+			s.store.remove(pr.Number)
+			dropped++
+		}
+	}
+	if dropped > 0 {
+		s.log.Info("dropped restored PRs no longer matching the filter", "count", dropped)
 	}
 }
 
