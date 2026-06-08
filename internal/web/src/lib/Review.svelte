@@ -44,9 +44,7 @@
         </button>
       </div>
       <div class="review-title">
-        <div class="rt-line">
-          <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        </div>
+        <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
         <div class="rt-meta">
           <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
