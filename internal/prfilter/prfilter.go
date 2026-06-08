@@ -26,20 +26,15 @@ type Program struct {
 	src string
 }
 
-// newEnv builds the CEL environment: a single pr variable, a string-keyed map of
-// dynamic values. Kept in one place so Compile and any future tooling agree on
-// the exposed shape.
-func newEnv() (*cel.Env, error) {
-	return cel.NewEnv(
-		cel.Variable("pr", cel.MapType(cel.StringType, cel.DynType)),
-	)
-}
-
 // Compile parses and type-checks expr and returns a runnable Program. It fails
 // when the expression is syntactically invalid, references unknown
 // variables/functions, or cannot produce a boolean.
 func Compile(expr string) (*Program, error) {
-	env, err := newEnv()
+	// pr is a string-keyed map of dynamic values (the caller fills it from the
+	// PR); field access is therefore statically dyn — see the bool/dyn check.
+	env, err := cel.NewEnv(
+		cel.Variable("pr", cel.MapType(cel.StringType, cel.DynType)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("prfilter: build env: %w", err)
 	}
