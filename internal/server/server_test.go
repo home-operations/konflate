@@ -265,6 +265,34 @@ func TestServer_SummaryMarkdown(t *testing.T) {
 	}
 }
 
+func TestServer_SummaryMarkdownRetryAfter(t *testing.T) {
+	t.Parallel()
+	pr := api.PR{Number: 9, Title: "wip", HeadRef: "wip", BaseRef: "main", HeadSHA: "deadbeef"}
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, okEngine())
+	h := s.mainHandler()
+	// Record the PR without rendering it → status pending (upsertPR doesn't enqueue).
+	s.store.upsertPR(pr)
+
+	// Markdown while still rendering → 503 + Retry-After, so `curl --retry` retries
+	// (a 202 is a success curl wouldn't retry).
+	rec := do(h, "GET", "/api/prs/9/summary", nil, map[string]string{"Accept": "text/markdown"})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("markdown while rendering: got %d, want 503", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("a still-rendering 503 must carry a Retry-After header")
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/markdown") {
+		t.Errorf("content-type = %q, want text/markdown", ct)
+	}
+
+	// JSON while rendering stays 202 — the SPA reads it as "still loading", not an error.
+	rec = do(h, "GET", "/api/prs/9/summary", nil, nil)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("json while rendering: got %d, want 202", rec.Code)
+	}
+}
+
 func TestServer_AvatarProxy(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
