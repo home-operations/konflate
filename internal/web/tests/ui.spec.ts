@@ -647,6 +647,64 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   await expect(page).toHaveURL(/#\/pr\/142$/);
 });
 
+test('the expand-all control toggles every row summary at once', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  await expect(page.locator('.card-preview')).toHaveCount(0);
+  const toggle = page.locator('.expand-all');
+  await expect(toggle).toContainText('Expand all');
+
+  // Expand all → every rendered row's summary opens (only #142 here has one).
+  await toggle.click();
+  await expect(toggle).toContainText('Collapse all');
+  await expect(page.locator('.card-preview')).toHaveCount(1);
+  await expect(page.locator('.card-preview')).toContainText('StatefulSet default/postgres');
+
+  // Collapse all → back to none.
+  await toggle.click();
+  await expect(toggle).toContainText('Expand all');
+  await expect(page.locator('.card-preview')).toHaveCount(0);
+});
+
+test('a scroll-to-top button appears after scrolling and returns to the top', async ({ page }) => {
+  // A tall list so .list-screen actually overflows in the test viewport.
+  const many = Array.from({ length: 24 }, (_, i) => ({
+    number: 200 + i,
+    title: `chore: bump dependency number ${200 + i}`,
+    author: 'renovate[bot]',
+    state: 'open',
+    open: true,
+    draft: false,
+    headRef: `pr/${200 + i}`,
+    headSha: 'abc',
+    baseRef: 'main',
+    createdAt: '2026-06-01T09:00:00Z',
+    updatedAt: '2026-06-04T12:00:00Z',
+    labels: [],
+    url: '#',
+    status: 'ready',
+    signals: { resources: 1, caution: 0, images: 1, failures: 0 },
+  }));
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: many }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(24);
+
+  const fab = page.locator('.scroll-top');
+  await expect(fab).toBeHidden();
+
+  // Scroll the list down → the button appears.
+  await page.locator('.list-screen').evaluate((el) => el.scrollTo({ top: 1500 }));
+  await expect(fab).toBeVisible();
+
+  // Clicking it smooth-scrolls back to the top, and the button hides again.
+  await fab.click();
+  await expect.poll(() => page.locator('.list-screen').evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(fab).toBeHidden();
+});
+
 test('the review is one scrollable document; scrolling drives the selection', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142');

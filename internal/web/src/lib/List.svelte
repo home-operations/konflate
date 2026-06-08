@@ -28,6 +28,9 @@
     mdiChevronUp,
     mdiCheckCircleOutline,
     mdiTrayFull,
+    mdiUnfoldMoreHorizontal,
+    mdiUnfoldLessHorizontal,
+    mdiArrowUp,
   } from './icons';
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
@@ -93,6 +96,29 @@
   function toggleExpand(n: number, headSha: string): void {
     expanded[n] = !expanded[n];
     if (expanded[n]) ensurePreview(n, headSha);
+  }
+
+  // The visible rows that have a summary to toggle — open cards plus the merged
+  // shelf when it's showing. Drives the expand/collapse-all control.
+  const expandableRows = $derived([...openPrs, ...(showMerged ? mergedPrs : [])].filter((p) => p.signals));
+  const allExpanded = $derived(expandableRows.length > 0 && expandableRows.every((p) => expanded[p.number]));
+  function toggleExpandAll(): void {
+    const next = !allExpanded;
+    for (const p of expandableRows) {
+      expanded[p.number] = next;
+      if (next) ensurePreview(p.number, p.headSha);
+    }
+  }
+
+  // Scroll-to-top: the list owns its scroll (.list-screen), so watch it and
+  // surface a float button once the user is well past the top.
+  let screenEl = $state<HTMLElement>();
+  let scrolled = $state(false);
+  function onScroll(): void {
+    if (screenEl) scrolled = screenEl.scrollTop > 400;
+  }
+  function scrollToTop(): void {
+    screenEl?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // Shorten an "algo:hexdigest" image ref so a digest-pinned bump doesn't blow
@@ -280,7 +306,7 @@
   </li>
 {/snippet}
 
-<div class="list-screen">
+<div class="list-screen" bind:this={screenEl} onscroll={onScroll}>
   <!-- The toolbar lives in the body, sharing the cards' 960px column and left
        edge — it's the list's filter, not app chrome. -->
   <div class="list-toolbar">
@@ -323,6 +349,17 @@
       {#if showPill(summary.merged, 'merged')}
         {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}
       {/if}
+      {#if expandableRows.length}
+        <button
+          class="expand-all"
+          aria-expanded={allExpanded}
+          title={allExpanded ? 'Collapse every row summary' : 'Expand every row summary'}
+          onclick={toggleExpandAll}
+        >
+          <Icon path={allExpanded ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
+          {allExpanded ? 'Collapse all' : 'Expand all'}
+        </button>
+      {/if}
     </div>
   {/if}
 
@@ -357,4 +394,10 @@
   {/if}
 
   <Footer />
+
+  <!-- Fixed to the viewport (the list scrolls inside .list-screen), revealed
+       once the user is well past the top. -->
+  <button class="scroll-top" class:show={scrolled} onclick={scrollToTop} aria-label="Scroll to top" title="Scroll to top">
+    <Icon path={mdiArrowUp} size={20} />
+  </button>
 </div>

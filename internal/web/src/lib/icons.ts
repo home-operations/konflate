@@ -14,6 +14,7 @@ export {
   mdiChevronRight,
   mdiChevronDown,
   mdiChevronUp,
+  mdiArrowUp,
   mdiSourceMerge,
   mdiCheck,
   mdiContentCopy,
