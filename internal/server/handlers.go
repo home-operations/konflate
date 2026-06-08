@@ -135,10 +135,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		lite.ChromaCSS = ""
 		env.Diff = &lite
 	}
-	code := http.StatusOK
-	if env.Status == api.JobPending || env.Status == api.JobRunning {
-		code = http.StatusAccepted
-	}
+	rendering := env.Status == api.JobPending || env.Status == api.JobRunning
 	// Content negotiation: a caller asking for Markdown gets a paste-ready block
 	// (forge flavour from ?forge=, defaulting to this instance's forge — so a
 	// GitHub-watching konflate emits [!CAUTION] admonitions with no param). Every
@@ -149,12 +146,29 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 			flavor = string(s.cfg.Forge.Kind)
 		}
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		w.WriteHeader(code)
+		// A Markdown consumer (a CI comment poster) waits with `curl --retry`. While
+		// the render is in flight, answer 503 + Retry-After so the retry kicks in —
+		// 202 is a success curl wouldn't retry. The JSON path keeps 202 (the SPA
+		// treats it as "still loading", not an error).
+		if rendering {
+			w.Header().Set("Retry-After", strconv.Itoa(summaryRetryAfterSeconds))
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 		_, _ = io.WriteString(w, summaryMarkdown(env, env.ReviewURL, flavor == "github"))
 		return
 	}
+	code := http.StatusOK
+	if rendering {
+		code = http.StatusAccepted
+	}
 	writeJSON(w, code, env)
 }
+
+// summaryRetryAfterSeconds is the Retry-After hint on a still-rendering Markdown
+// summary response, so a `curl --retry` consumer backs off a beat between tries.
+const summaryRetryAfterSeconds = 3
 
 // avatarClient fetches author avatars with a tight timeout; responses are
 // size-capped and must be images (see handleAvatar).
