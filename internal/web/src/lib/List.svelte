@@ -6,7 +6,6 @@
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
-  import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import MergeCommand from './MergeCommand.svelte';
@@ -33,7 +32,6 @@
     mdiUnfoldMoreHorizontal,
     mdiUnfoldLessHorizontal,
     mdiArrowUp,
-    mdiConsoleLine,
   } from './icons';
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
@@ -170,13 +168,7 @@
 {#snippet previewBody(pr: PRStatus)}
   {@const pv = store.previews[pr.number]}
   {#if pr.mergeCommand}
-    <div class="pv-group">
-      <span class="pv-label">Copy</span>
-      <div class="pv-cmd-row">
-        <code class="pv-cmd"><MergeCommand command={pr.mergeCommand} /></code>
-        <Copy text={pr.mergeCommand} label="Copy merge command" icon={mdiConsoleLine} />
-      </div>
-    </div>
+    <MergeCommand command={pr.mergeCommand} />
   {/if}
 
   {#if !pv || pv.state === 'loading'}

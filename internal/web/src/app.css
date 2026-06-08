@@ -611,24 +611,6 @@ a.repo:focus-visible .repo-ext {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-/* The copy-merge row: the command in a mono chip plus the copy button. */
-.pv-cmd-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pv-cmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 8px;
-}
 .pv-msg {
   display: flex;
   align-items: center;
@@ -1047,32 +1029,46 @@ button.sum-pill:hover {
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
-/* The optional "copy to merge" command rides on the right of the Summary
-   header (not its own strip) — a convenience, in a monospace chip. */
+/* The "copy to merge" command (MergeCommand.svelte): a terminal icon, the
+   command in a mono chip, and a copy button — shown identically on the right of
+   the Summary header and in the PR-list folded preview. A flex row, so it sizes
+   to content in the header (pushed right by .res-title's flex) and stretches to
+   fill in the preview's flex column; no margin needed. */
 .merge-cmd {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  margin-left: auto;
-  color: var(--muted);
+  color: var(--muted); /* the terminal icon */
 }
-.merge-cmd code {
-  flex: 0 1 auto;
+/* The chip is a button — clicking the command copies it (so does the adjacent
+   copy button). Recessed (--bg) so it reads the same on the panel header and the
+   panel-alt preview. */
+.merge-cmd-text {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text);
-  background: var(--panel-alt);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 3px 9px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+.merge-cmd-text:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.merge-cmd-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 /* Flag tokens (`--repo`, …) in a rendered merge command — dimmed so they read as
-   a separate token from the value before them (see MergeCommand.svelte). Shared
-   by the diff-overview chip and the list-row preview chip (.pv-cmd). */
+   a separate token from the value before them (see MergeCommand.svelte). */
 .cmd-flag {
   color: var(--muted);
 }

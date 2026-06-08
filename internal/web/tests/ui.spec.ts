@@ -649,11 +649,14 @@ test('merge command is copyable in the review header (not on list cards)', async
   // recorder before navigating away — a full document load resets it.)
   await page.goto('/#/pr/142');
   const bar = page.locator('.merge-cmd');
-  await expect(bar.locator('code')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  await expect(bar.locator('.merge-cmd-text')).toHaveText('gh pr merge 142 --repo acme/home-ops');
   // Flag tokens render dimmed/distinct, but the command text — and what copies —
   // is the verbatim command (the flag span only colours, never alters it).
-  await expect(bar.locator('code .cmd-flag')).toHaveText('--repo');
+  await expect(bar.locator('.merge-cmd-text .cmd-flag')).toHaveText('--repo');
+  // Both the copy button and the chip itself copy the verbatim command.
   await bar.locator('.copy-btn').click();
+  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+  await bar.locator('.merge-cmd-text').click();
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 
   // The PR list no longer carries a copy-merge affordance — it lives only in
@@ -675,11 +678,12 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   const preview = card.locator('.card-preview');
   await expect(preview).toBeVisible();
 
-  // Ordered sections: copy (the merge command, from the list data), resource
-  // diffs, cautions & warnings, image changes.
-  await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  // Ordered sections: copy (the merge command, from the list data — same
+  // MergeCommand chip as the diff overview), resource diffs, cautions & warnings,
+  // image changes.
+  await expect(preview.locator('.merge-cmd-text')).toHaveText('gh pr merge 142 --repo acme/home-ops');
   // Flags render as distinct (dimmed) tokens so `142 --repo` doesn't read joined.
-  await expect(preview.locator('.pv-cmd .cmd-flag')).toHaveText('--repo');
+  await expect(preview.locator('.merge-cmd-text .cmd-flag')).toHaveText('--repo');
   await expect(preview).toContainText('Resource diffs');
   await expect(preview).toContainText('Cautions');
   await expect(preview).toContainText('Render failures');
