@@ -63,28 +63,9 @@ type Config struct {
 	// once read (see Token).
 	PushToken string `env:"KONFLATE_PUSH_TOKEN,unset"`
 
-	// RenderForkPRs controls whether pull requests from FORKS (cross-repo, whose
-	// head branch lives in a contributor's repository) are rendered. Rendering
-	// runs the PR's manifests/charts through flate, which fetches the sources they
-	// declare — so a fork PR is untrusted external code with real attack surface
-	// (SSRF via attacker-chosen source URLs, resource exhaustion). Off by default:
-	// fork PRs are listed but shown as "not rendered (fork)" until an operator
-	// opts in. Same-repo PRs (the maintainers' own branches) always render.
-	RenderForkPRs bool `env:"KONFLATE_RENDER_FORK_PRS" envDefault:"false"`
-
-	// PRLabels is an optional allowlist of pull-request labels. When set, konflate
-	// only tracks (lists, renders, comments on) PRs carrying at least one of these
-	// labels; PRs with none are ignored entirely, and a tracked PR that loses its
-	// last matching label is dropped. Matched case-insensitively against the full
-	// label name, so both a bare label ("cluster") and a namespaced one
-	// ("cluster:production") work. Empty (the default) tracks every open PR.
-	// Comma-separated; surrounding whitespace is trimmed.
-	PRLabels []string `env:"KONFLATE_PR_LABELS" envSeparator:","`
-
-	// PRFilterExpr is an optional CEL expression for fine-grained control over
-	// which PRs konflate tracks — anything the label allowlist can't express
-	// (negation, author/base rules, draft handling, combinations). It evaluates
-	// against a single variable, pr, with these fields:
+	// PRFilterExpr is a CEL expression deciding which PRs konflate tracks (lists,
+	// renders, comments on) — the single PR filter, with no separate label
+	// allowlist or fork toggle. It evaluates against one variable, pr:
 	//
 	//	pr.number      int       PR number
 	//	pr.title       string    PR title
@@ -102,13 +83,19 @@ type Config struct {
 	//	pr.labels      list      [{name, color}] — e.g. pr.labels.exists(l, l.name == "x")
 	//
 	// The expression must return a boolean; it is compiled and type-checked at
-	// startup, so a malformed filter fails fast. Composes with PRLabels: when
-	// both are set a PR must satisfy both. Empty (the default) adds no filter.
-	// Example: pr.labels.exists(l, l.name == "cluster/production") && !pr.draft
+	// startup, so a malformed filter fails fast. Empty defaults to
+	// [DefaultPRFilter] ("!pr.fork"): every open PR except forks. Rendering a fork
+	// runs untrusted external code (SSRF via attacker-chosen sources, resource
+	// exhaustion), so forks are excluded unless the expression admits them —
+	// a tracked PR is rendered, so admitting a fork renders it. Examples:
+	//	one cluster only:     pr.labels.exists(l, l.name == "cluster/production")
+	//	non-draft, main base: !pr.draft && pr.baseRef == "main" && !pr.fork
+	//	include forks too:    true
 	PRFilterExpr string `env:"KONFLATE_PR_FILTER_EXPR"`
 
-	// PRFilter is the compiled PRFilterExpr, built in [Load] (nil when unset). A
-	// derived field, like Forge — never set it directly.
+	// PRFilter is the compiled filter — PRFilterExpr, or [DefaultPRFilter] when
+	// that is empty — built in [Load]. A derived field, like Forge; never set it
+	// directly.
 	PRFilter *prfilter.Program `env:"-"`
 
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
@@ -238,6 +225,12 @@ func (c *Config) WebhookEnabled() bool { return c.WebhookSecret != "" }
 // solely by a configured push token.
 func (c *Config) PushEnabled() bool { return c.PushToken != "" }
 
+// DefaultPRFilter is the PR filter applied when KONFLATE_PR_FILTER_EXPR is
+// empty: track every open PR except forks. Rendering a fork runs untrusted
+// external code, so forks are excluded by default and an operator opts in by
+// setting an expression that admits them.
+const DefaultPRFilter = "!pr.fork"
+
 // Load parses all KONFLATE_* environment variables, validates required fields,
 // and returns a ready-to-use Config. It is the only supported way to construct
 // a Config — direct struct initialization bypasses the forge URI parser and
@@ -248,19 +241,19 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
-	// Trim whitespace and drop empties so "cluster, cluster:production" or a
-	// trailing comma yields clean, exact label names to match against.
-	cfg.PRLabels = normalizeList(cfg.PRLabels)
-
 	// Compile the PR filter once, here, so a malformed expression fails at
-	// startup with a clear message rather than silently dropping every PR.
-	if expr := strings.TrimSpace(cfg.PRFilterExpr); expr != "" {
-		prg, err := prfilter.Compile(expr)
-		if err != nil {
-			return nil, fmt.Errorf("config: KONFLATE_PR_FILTER_EXPR: %w", err)
-		}
-		cfg.PRFilter = prg
+	// startup with a clear message rather than silently dropping every PR. An
+	// empty expression falls back to DefaultPRFilter, so cfg.PRFilter is always
+	// set and forks are excluded unless the operator opts in.
+	expr := strings.TrimSpace(cfg.PRFilterExpr)
+	if expr == "" {
+		expr = DefaultPRFilter
 	}
+	prg, err := prfilter.Compile(expr)
+	if err != nil {
+		return nil, fmt.Errorf("config: KONFLATE_PR_FILTER_EXPR: %w", err)
+	}
+	cfg.PRFilter = prg
 
 	forge, err := ParseForgeURI(cfg.Repo)
 	if err != nil {
@@ -279,19 +272,6 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// normalizeList trims surrounding whitespace from each entry and drops empties,
-// in place. Used for comma-separated env lists where spacing or a stray comma
-// shouldn't produce blank or padded entries.
-func normalizeList(in []string) []string {
-	out := in[:0]
-	for _, s := range in {
-		if s = strings.TrimSpace(s); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 // defaultDiffConcurrency derives the diff-render concurrency from the CPU budget

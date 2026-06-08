@@ -42,11 +42,6 @@ type queue struct {
 	sem chan struct{}
 	wg  sync.WaitGroup
 
-	// renderForks gates rendering of fork (cross-repo) PRs. When false (the
-	// default), a fork PR is recorded as JobBlocked and never rendered, so its
-	// untrusted content is never fetched.
-	renderForks bool
-
 	mu       sync.Mutex
 	inflight map[int]struct{}
 	pending  map[int]api.PR
@@ -54,32 +49,26 @@ type queue struct {
 
 func newQueue(
 	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
-	reconcile func(int), m *metrics, log *slog.Logger, concurrency int, renderForks bool,
+	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
 ) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
 	return &queue{
 		diff: diff, store: st, notify: notify, reconcile: reconcile, metrics: m, log: log,
-		ctx:         ctx,
-		sem:         make(chan struct{}, concurrency),
-		inflight:    map[int]struct{}{},
-		pending:     map[int]api.PR{},
-		renderForks: renderForks,
+		ctx:      ctx,
+		sem:      make(chan struct{}, concurrency),
+		inflight: map[int]struct{}{},
+		pending:  map[int]api.PR{},
 	}
 }
 
 // enqueue schedules a diff for pr, coalescing with any in-flight job for the
 // same PR number.
 func (q *queue) enqueue(pr api.PR) {
-	// Fork (cross-repo) PRs are untrusted external code. Unless an operator opted
-	// in, record them as blocked and render nothing — the engine never fetches or
-	// renders their content. Same-repo PRs always proceed.
-	if pr.Fork && !q.renderForks {
-		q.store.setStatus(pr, api.JobBlocked)
-		q.emit(pr.Number, api.JobBlocked, "")
-		return
-	}
+	// Which PRs reach the queue is decided upstream by the CEL PR filter
+	// (config.PRFilterExpr) — forks are excluded by default and only tracked when
+	// an operator's expression admits them. So whatever arrives here renders.
 	q.mu.Lock()
 	if _, ok := q.inflight[pr.Number]; ok {
 		q.pending[pr.Number] = pr // coalesce; remember the freshest metadata

@@ -23,8 +23,9 @@ type PR struct {
 	HeadSHA   string    `json:"headSha"` // head commit SHA
 	BaseRef   string    `json:"baseRef"` // target branch
 	// Fork is true when the head is in a different repository than the base (a
-	// cross-repo / fork PR) — an untrusted external contribution. Rendering of
-	// these is gated on KONFLATE_RENDER_FORK_PRS.
+	// cross-repo / fork PR) — an untrusted external contribution. The PR filter
+	// (KONFLATE_PR_FILTER_EXPR, default "!pr.fork") excludes these unless an
+	// operator's expression admits them; exposed to that filter as pr.fork.
 	Fork   bool    `json:"fork"`
 	Labels []Label `json:"labels"`
 	URL    string  `json:"url"`

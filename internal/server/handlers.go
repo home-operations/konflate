@@ -269,43 +269,44 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	return nil
 }
 
-// prAllowed reports whether a PR passes the configured tracking filters: the
-// label allowlist (KONFLATE_PR_LABELS) and the CEL expression
-// (KONFLATE_PR_FILTER_EXPR). When both are set a PR must satisfy both; when
-// neither is set, every PR is tracked. A filter that errors at runtime drops the
-// PR (and logs) — but the expression is type-checked at startup, so a
-// well-formed filter against the always-present field set won't.
+// prAllowed reports whether a PR passes the configured CEL filter
+// (KONFLATE_PR_FILTER_EXPR, defaulting to config.DefaultPRFilter — the single
+// gate over which PRs konflate tracks). A nil filter tracks every PR; that only
+// happens when a Config is built without Load (i.e. in tests). A runtime eval
+// error drops the PR (and logs) — but the expression is type-checked at startup
+// against an always-populated field set, so a well-formed filter won't error.
 func (s *Server) prAllowed(pr api.PR) bool {
-	if !s.labelAllowed(pr) {
-		return false
-	}
-	if s.cfg.PRFilter != nil {
-		ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
-		if err != nil {
-			s.log.Error("PR filter evaluation failed; dropping PR",
-				"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
-			return false
-		}
-		return ok
-	}
-	return true
-}
-
-// labelAllowed applies the KONFLATE_PR_LABELS allowlist: true when none is
-// configured, or when the PR carries at least one label matching (case-
-// insensitively) one of them.
-func (s *Server) labelAllowed(pr api.PR) bool {
-	if len(s.cfg.PRLabels) == 0 {
+	if s.cfg.PRFilter == nil {
 		return true
 	}
-	for _, l := range pr.Labels {
-		for _, want := range s.cfg.PRLabels {
-			if strings.EqualFold(l.Name, want) {
-				return true
-			}
-		}
+	ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
+	if err != nil {
+		s.log.Error("PR filter evaluation failed; dropping PR",
+			"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
+		return false
 	}
-	return false
+	return ok
+}
+
+// warnIfFilterAdmitsForks logs a prominent startup warning when the configured
+// filter would track a fork PR — a heads-up that rendering forks runs untrusted
+// external code. It probes the filter with a representative fork; admission can
+// be conditional, so this catches the common footgun (a filter that just omits
+// `!pr.fork`) rather than proving the negative.
+func (s *Server) warnIfFilterAdmitsForks() {
+	if s.cfg.PRFilter == nil {
+		return
+	}
+	sample := api.PR{
+		Number: 0, Title: "sample fork PR", Author: "external-contributor",
+		State: "open", Open: true, Fork: true,
+		HeadRef: "patch", HeadSHA: "0000000", BaseRef: "main", URL: "https://example.invalid/0",
+	}
+	if ok, err := s.cfg.PRFilter.Eval(prFilterVars(sample)); err == nil && ok {
+		s.log.Warn("PR filter admits fork PRs — rendering a fork runs untrusted external code "+
+			"(SSRF / resource-exhaustion surface). Add `&& !pr.fork` to KONFLATE_PR_FILTER_EXPR to exclude them.",
+			"filter", s.cfg.PRFilter.Source())
+	}
 }
 
 // prFilterVars projects a PR into the `pr` variable the CEL filter evaluates

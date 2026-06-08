@@ -12,7 +12,6 @@
     mdiOpenInNew,
     mdiSourceMerge,
     mdiSourcePull,
-    mdiSourceFork,
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
@@ -81,12 +80,7 @@
     {/if}
 
     <div class="review-body">
-      {#if pr?.status === 'blocked'}
-        <div class="loading-center">
-          <Icon path={mdiSourceFork} size={38} />
-          <p>This PR is from a fork. Rendering of external contributions is disabled on this instance.</p>
-        </div>
-      {:else if store.diffError}
+      {#if store.diffError}
         <p class="error-box">{store.diffError}</p>
       {:else if store.diff}
         <Diffs />

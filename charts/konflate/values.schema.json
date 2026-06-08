@@ -92,17 +92,9 @@
         },
         "prFilterExpr": {
           "default": "",
-          "description": "CEL expression for fine-grained PR selection, e.g. `pr.labels.exists(l, l.name == \"cluster/production\") \u0026\u0026 !pr.draft`; evaluates against a `pr` variable and must return a bool. Composes with `prLabels`; empty adds no filter.",
+          "description": "CEL expression selecting which PRs to track; must return a bool. Empty uses `!pr.fork` (every open PR except forks — rendering a fork runs untrusted code). e.g. `pr.labels.exists(l, l.name == \"cluster/production\") \u0026\u0026 !pr.draft`. See the README.",
           "title": "prFilterExpr",
           "type": "string"
-        },
-        "prLabels": {
-          "description": "Only track PRs carrying at least one of these labels (e.g. `[\"cluster:production\"]`); empty tracks every PR. Case-insensitive.",
-          "items": {
-            "required": []
-          },
-          "title": "prLabels",
-          "type": "array"
         },
         "refreshInterval": {
           "default": "30m",
@@ -115,12 +107,6 @@
           "description": "Advanced: cap on reconcile goroutines within one render. Empty/\"0\" = auto (NumCPU*4).",
           "title": "renderConcurrency",
           "type": "string"
-        },
-        "renderForkPrs": {
-          "default": false,
-          "description": "Render pull requests from forks. Forks are untrusted external code (SSRF / resource-exhaustion surface), so this is off by default; leave false on public instances.",
-          "title": "renderForkPrs",
-          "type": "boolean"
         },
         "repo": {
           "default": "",
