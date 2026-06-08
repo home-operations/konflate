@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
+:is(.btn, .card, .card-expand, .expand-all, .scroll-top, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -203,9 +203,13 @@ a.repo:focus-visible .repo-ext {
   white-space: nowrap;
   color: var(--muted);
   font-size: 12px;
+  /* Match the header icon buttons' box exactly: their height is the 18px icon
+     plus 6px padding + 1px border (= 32px). A smaller clock icon keeps the pill
+     balanced, so line-height carries the content to the same 18px. */
+  line-height: 18px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 6px 10px;
 }
 .spin {
   animation: spin 0.8s linear infinite;
@@ -343,6 +347,44 @@ a.repo:focus-visible .repo-ext {
   display: flex;
   flex-direction: column;
 }
+/* Scroll-to-top float. Fixed to the viewport (it sits in .list-screen but
+   position:fixed escapes the scroll container), hidden until the list has
+   scrolled past the threshold. */
+.scroll-top {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 22%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.scroll-top.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.scroll-top:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
 /* The toolbar (search box + sort) lives in the body, on the page background,
    constrained to the cards' 960px column — it's list furniture, not chrome. */
 .list-toolbar {
@@ -467,60 +509,198 @@ a.repo:focus-visible .repo-ext {
   flex-direction: column;
   gap: 8px;
 }
-.card {
+/* A card is a shell (the bordered, tinted box) wrapping the clickable content
+   button and a disclosure chevron. A <button> can't nest in a <button>, so the
+   two sit side by side inside the shell. */
+.card-shell {
+  display: flex;
+  align-items: stretch;
   width: 100%;
-  text-align: left;
-  font: inherit;
-  color: inherit;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+.card-shell:hover {
+  border-color: var(--accent);
+}
+/* Cards carrying cautions show a red edge. Inset shadow, not a
+   border, so layout is stable. */
+.card-shell.caution {
+  box-shadow: inset 3px 0 0 var(--caution);
+}
+/* Recently-merged cards are reference, not action — de-emphasized via a muted
+   title (whole-card opacity would push the meta text below AA contrast). */
+.card-shell.merged .card-title {
+  color: var(--muted);
+}
+.card-shell.merged:hover .card-title {
+  color: var(--text);
+}
+.card {
+  flex: 1 1 auto;
+  min-width: 0; /* let the flex child shrink so the title can ellipsize */
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 8px 0 0 8px;
   padding: 12px 14px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.card:hover {
-  border-color: var(--accent);
-}
-/* Cards carrying cautions show a red edge. Inset shadow, not a
-   border, so layout is stable. */
-.card.caution {
-  box-shadow: inset 3px 0 0 var(--caution);
-}
-/* Recently-merged cards are reference, not action — de-emphasized via a muted
-   title (whole-card opacity would push the meta text below AA contrast). */
-.card.merged .card-title {
+/* The disclosure chevron: a quiet column on the card's right edge that toggles
+   the inline summary without navigating to the review. */
+.card-expand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
   color: var(--muted);
+  cursor: pointer;
 }
-.card.merged:hover .card-title {
+.card-expand:hover {
   color: var(--text);
+  background: var(--panel-alt);
+  border-radius: 0 7px 7px 0;
 }
-/* Per-card "copy merge command" overlay. The card is itself a <button>, so the
-   copy (also a button) can't nest inside it — it's an absolutely-positioned
-   sibling, revealed on hover/focus to keep the list quiet (always shown on
-   touch, which has no hover; see the mobile block). Only open PRs carry a
-   command, so it never lands on the merged cards. */
 .card-li {
   position: relative;
 }
-.card-actions {
-  position: absolute;
-  top: 9px;
-  right: 11px;
-  opacity: 0;
-  transition: opacity 0.1s;
+/* Expanded: square off the shell's bottom corners so the summary panel below
+   reads as one connected card. */
+.card-li.expanded .card-shell,
+.card-li.expanded .card {
+  border-bottom-left-radius: 0;
 }
-.card-li:hover .card-actions,
-.card-li:focus-within .card-actions {
-  opacity: 1;
+.card-li.expanded .card-shell {
+  border-bottom-right-radius: 0;
 }
-.card-actions .copy-btn {
-  opacity: 1;
-  padding: 4px;
+.card-li.expanded .card-expand:hover {
+  border-bottom-right-radius: 0;
+}
+/* The inline row summary, tucked directly under the card. */
+.card-preview {
+  padding: 10px 14px 12px;
   background: var(--panel-alt);
   border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* One labelled section of the row summary (Copy / Resource diffs / …). */
+.pv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+/* The copy-merge row: the command in a mono chip plus the copy button. */
+.pv-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pv-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+.pv-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.pv-error {
+  color: var(--danger);
+}
+.pv-impact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.pv-stat {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pv-stat.add {
+  color: var(--add-bar);
+}
+.pv-stat.chg {
+  color: var(--warn);
+}
+.pv-stat.del {
+  color: var(--danger);
+}
+.pv-dim {
+  color: var(--muted);
+}
+.pv-trunc {
+  color: var(--warn);
+  font-weight: 600;
+}
+.pv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-caution,
+.pv-image,
+.pv-failure {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  overflow-wrap: anywhere;
+}
+.pv-caution {
+  color: var(--caution);
+}
+.pv-failure {
+  color: var(--danger);
+}
+.pv-res {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.pv-detail,
+.pv-delta {
+  color: var(--muted);
+}
+.pv-delta {
+  font-family: var(--font-mono);
+}
+.pv-more {
+  color: var(--muted);
+  font-style: italic;
 }
 /* Collapsible "Recently merged" group header. */
 .group-head {
@@ -589,11 +769,31 @@ a.repo:focus-visible .repo-ext {
 .list-summary {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   width: 100%; /* flex items with margin:auto shrink-wrap without it */
   max-width: 960px;
   margin: 12px auto 4px;
   padding: 0 12px;
+}
+/* Expand/collapse every row summary — pushed to the far right of the pills. */
+.expand-all {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+.expand-all:hover {
+  color: var(--text);
+  background: var(--panel-alt);
 }
 .sum-pill {
   display: inline-flex;
@@ -1787,13 +1987,7 @@ kbd {
     flex-wrap: wrap;
     row-gap: 6px;
   }
-  /* No hover on touch — keep the per-card copy-merge affordance visible, and
-     reserve a gutter so the title doesn't slide under it. */
-  .card-actions {
-    opacity: 1;
-  }
   .card-top {
-    padding-right: 26px;
     align-items: flex-start; /* dot beside the first title line, not the block centre */
   }
   .card-top .dot {

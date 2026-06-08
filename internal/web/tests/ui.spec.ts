@@ -16,6 +16,9 @@ async function stubApi(page: Page, meta: Meta = defaultMeta) {
   await page.route('**/api/meta', (route) => route.fulfill({ json: meta }));
   await page.route('**/api/prs', (route) => route.fulfill({ json: samplePRs }));
   await page.route('**/api/prs/142/diff', (route) => route.fulfill({ json: diffEnvelope }));
+  // The row expander hits the lean summary endpoint; the fixture envelope serves
+  // both (the UI reads the same headline fields).
+  await page.route('**/api/prs/142/summary', (route) => route.fulfill({ json: diffEnvelope }));
   await page.routeWebSocket('**/ws', () => {
     /* accept; no live events needed */
   });
@@ -131,7 +134,7 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
 
   // Expand → the merged card appears, de-emphasized and labelled.
   await group.click();
-  const mergedCard = page.locator('.merged-cards .card.merged', { hasText: '#128' });
+  const mergedCard = page.locator('.merged-cards .card-shell.merged', { hasText: '#128' });
   await expect(mergedCard).toBeVisible();
   // No redundant "merged" tag — the group header, dimmed card, purple dot, and
   // "merged …" timestamp already convey it.
@@ -141,7 +144,7 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
   await page.route('**/api/prs/128/diff', (route) =>
     route.fulfill({ json: { status: 'ready', pr: samplePRs[3], diff: { ...diffEnvelope.diff, prNumber: 128 } } }),
   );
-  await mergedCard.click();
+  await mergedCard.locator('.card').click();
   await expect(page).toHaveURL(/#\/pr\/128$/);
   await expect(page.locator('.merged-strip')).toContainText('frozen');
 });
@@ -388,6 +391,26 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await expect(page.locator('.empty')).toContainText('match your filter');
 });
 
+test('the open pill filters back to all open and hides the merged shelf', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // From a caution-filtered view, the open pill returns the full open set.
+  await page.locator('.sum-pill', { hasText: 'caution' }).click();
+  await expect(page.locator('.card')).toHaveCount(1);
+
+  const open = page.locator('.sum-pill', { hasText: 'open' });
+  await open.click();
+  await expect(open).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.card')).toHaveCount(3); // all three open PRs
+  await expect(page.locator('.merged-cards')).toHaveCount(0); // merged shelf hidden
+
+  // Toggling it off returns to the unfiltered view.
+  await open.click();
+  await expect(open).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.card')).toHaveCount(3);
+});
+
 test('list sort: direction toggle, and changing field resets to its natural order', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
@@ -570,7 +593,7 @@ test('copy buttons copy the full underlying value', async ({ page }) => {
   expect(copied2).toContain('Deployment rook-ceph/rook-ceph-operator');
 });
 
-test('merge command is copyable in the review header and on list cards', async ({ page }) => {
+test('merge command is copyable in the review header (not on list cards)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __copied: string[] }).__copied = [];
     Object.defineProperty(navigator, 'clipboard', {
@@ -594,13 +617,102 @@ test('merge command is copyable in the review header and on list cards', async (
   await bar.locator('.copy-btn').click();
   expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
 
-  // List: one copy affordance per open PR (the merged card carries none).
+  // The PR list no longer carries a copy-merge affordance — it lives only in
+  // the review header now.
   await page.goto('/');
-  await expect(page.locator('.card-actions')).toHaveCount(3);
+  await expect(page.locator('.card-actions')).toHaveCount(0);
+});
+
+test('a list row expands to a brief diff summary; the row still opens the PR', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
   const card = page.locator('.card-li', { hasText: '#142' });
-  await card.hover();
-  await card.locator('.card-actions .copy-btn').click();
-  expect(await clipboard()).toContain('gh pr merge 142 --repo acme/home-ops');
+  await expect(card.locator('.card-preview')).toHaveCount(0); // collapsed by default
+
+  // The chevron expands the row and lazy-loads the summary — without navigating.
+  await card.locator('.card-expand').click();
+  await expect(page).not.toHaveURL(/#\/pr\//);
+  const preview = card.locator('.card-preview');
+  await expect(preview).toBeVisible();
+
+  // Ordered sections: copy (the merge command, from the list data), resource
+  // diffs, cautions & warnings, image changes.
+  await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
+  await expect(preview).toContainText('Resource diffs');
+  await expect(preview).toContainText('Cautions');
+  await expect(preview).toContainText('Render failures');
+  await expect(preview).toContainText('Image changes');
+  await expect(preview.locator('.pv-caution')).toHaveCount(2);
+  await expect(preview.locator('.pv-caution').first()).toContainText('StatefulSet default/postgres');
+  await expect(preview.locator('.pv-image').first()).toContainText('ghcr.io/rook/ceph');
+  await expect(preview.locator('.pv-failure')).toContainText('plex');
+
+  // The chevron toggles it shut again.
+  await card.locator('.card-expand').click();
+  await expect(card.locator('.card-preview')).toHaveCount(0);
+
+  // Clicking the row itself still opens the full review.
+  await card.locator('.card').click();
+  await expect(page).toHaveURL(/#\/pr\/142$/);
+});
+
+test('the expand-all control toggles every row summary at once', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  await expect(page.locator('.card-preview')).toHaveCount(0);
+  const toggle = page.locator('.expand-all');
+  await expect(toggle).toContainText('Expand all');
+
+  // Expand all → every rendered row's summary opens (only #142 here has one).
+  await toggle.click();
+  await expect(toggle).toContainText('Collapse all');
+  await expect(page.locator('.card-preview')).toHaveCount(1);
+  await expect(page.locator('.card-preview')).toContainText('StatefulSet default/postgres');
+
+  // Collapse all → back to none.
+  await toggle.click();
+  await expect(toggle).toContainText('Expand all');
+  await expect(page.locator('.card-preview')).toHaveCount(0);
+});
+
+test('a scroll-to-top button appears after scrolling and returns to the top', async ({ page }) => {
+  // A tall list so .list-screen actually overflows in the test viewport.
+  const many = Array.from({ length: 24 }, (_, i) => ({
+    number: 200 + i,
+    title: `chore: bump dependency number ${200 + i}`,
+    author: 'renovate[bot]',
+    state: 'open',
+    open: true,
+    draft: false,
+    headRef: `pr/${200 + i}`,
+    headSha: 'abc',
+    baseRef: 'main',
+    createdAt: '2026-06-01T09:00:00Z',
+    updatedAt: '2026-06-04T12:00:00Z',
+    labels: [],
+    url: '#',
+    status: 'ready',
+    signals: { resources: 1, caution: 0, images: 1, failures: 0 },
+  }));
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: many }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(24);
+
+  const fab = page.locator('.scroll-top');
+  await expect(fab).toBeHidden();
+
+  // Scroll the list down → the button appears.
+  await page.locator('.list-screen').evaluate((el) => el.scrollTo({ top: 1500 }));
+  await expect(fab).toBeVisible();
+
+  // Clicking it smooth-scrolls back to the top, and the button hides again.
+  await fab.click();
+  await expect.poll(() => page.locator('.list-screen').evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(fab).toBeHidden();
 });
 
 test('the review is one scrollable document; scrolling drives the selection', async ({ page }) => {
@@ -674,8 +786,8 @@ test('an open PR with cautions carries a red card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
   // #142 carries a caution signal; #138 doesn't. The merged #128 never does.
-  await expect(page.locator('.card', { hasText: '#142' })).toHaveClass(/caution/);
-  await expect(page.locator('.card', { hasText: '#138' })).not.toHaveClass(/caution/);
+  await expect(page.locator('.card-shell', { hasText: '#142' })).toHaveClass(/caution/);
+  await expect(page.locator('.card-shell', { hasText: '#138' })).not.toHaveClass(/caution/);
 });
 
 test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter', async ({ page }) => {

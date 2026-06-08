@@ -108,6 +108,39 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, env)
 }
 
+// handleSummary serves the same envelope as handleDiff but with the heavy
+// per-resource render dropped (Resources, Tree, ChromaCSS). It backs the PR
+// list's row expander, which only needs the headline facts (impact, cautions,
+// image bumps, failures) and shouldn't pull the full diff payload to show them.
+func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
+	number, err := strconv.Atoi(r.PathValue("number"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid PR number")
+		return
+	}
+	env, ok := s.store.get(number)
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown PR")
+		return
+	}
+	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
+	env.MergeCommand = s.mergeCommand(env.PR)
+	if env.Diff != nil {
+		// Shallow-copy then trim, so the cached diff keeps its rendered resources —
+		// only this response is lightened.
+		lite := *env.Diff
+		lite.Resources = nil
+		lite.Tree = nil
+		lite.ChromaCSS = ""
+		env.Diff = &lite
+	}
+	code := http.StatusOK
+	if env.Status == api.JobPending || env.Status == api.JobRunning {
+		code = http.StatusAccepted
+	}
+	writeJSON(w, code, env)
+}
+
 // avatarClient fetches author avatars with a tight timeout; responses are
 // size-capped and must be images (see handleAvatar).
 var avatarClient = &http.Client{Timeout: 8 * time.Second}

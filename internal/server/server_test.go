@@ -164,6 +164,57 @@ func TestServer_RefreshListAndDiff(t *testing.T) {
 	}
 }
 
+func TestServer_Summary(t *testing.T) {
+	t.Parallel()
+	pr := api.PR{Number: 7, Title: "feat: widget", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123"}
+	// An engine that renders a full diff — resources, tree, chroma CSS, and the
+	// headline facts — so we can assert the summary endpoint keeps the latter and
+	// drops the former.
+	rich := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		return api.DiffResult{
+			PRNumber:  pr.Number,
+			HeadSHA:   "abc123",
+			Summary:   api.DiffSummary{Changed: 2, Added: 1, Removed: 1},
+			Impact:    api.Impact{Resources: 4, Parents: 2, CRDs: 1},
+			Warnings:  []api.Warning{{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api", Detail: "scaled to zero"}},
+			Images:    []api.ImageChange{{Name: "ghcr.io/app", From: "v1", To: "v2"}},
+			ChromaCSS: ".chroma{}",
+			Tree:      []api.DiffTreeParent{{Label: "HelmRelease app", Kinds: []api.DiffTreeKind{{Kind: "Deployment", Items: []api.DiffTreeItem{{ID: "r0", Name: "web/api", Status: "changed", Add: 1, Del: 1}}}}}},
+			Resources: []api.DiffResource{{ID: "r0", Title: "Deployment web/api", Kind: "Deployment", Name: "web/api", Status: "changed"}},
+		}, nil
+	}}
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, rich)
+	h := s.mainHandler()
+	s.refreshList(s.runCtx)
+	waitFor(t, s, 7)
+
+	// Summary keeps the headline facts but drops the heavy per-resource render.
+	rec := do(h, "GET", "/api/prs/7/summary", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("summary: got %d, want 200", rec.Code)
+	}
+	var sum api.DiffEnvelope
+	mustJSON(t, rec, &sum)
+	if sum.Diff == nil {
+		t.Fatal("summary envelope has no diff")
+	}
+	if len(sum.Diff.Resources) != 0 || len(sum.Diff.Tree) != 0 || sum.Diff.ChromaCSS != "" {
+		t.Errorf("summary should drop resources/tree/chroma; got %d resources, %d tree, css=%q",
+			len(sum.Diff.Resources), len(sum.Diff.Tree), sum.Diff.ChromaCSS)
+	}
+	if sum.Diff.Summary.Changed != 2 || sum.Diff.Impact.Resources != 4 || len(sum.Diff.Warnings) != 1 || len(sum.Diff.Images) != 1 {
+		t.Errorf("summary dropped headline facts: %+v", sum.Diff)
+	}
+
+	// The full diff endpoint is unaffected — the cached render still has its
+	// resources and tree (the summary copy didn't mutate the cache).
+	var full api.DiffEnvelope
+	mustJSON(t, do(h, "GET", "/api/prs/7/diff", nil, nil), &full)
+	if full.Diff == nil || len(full.Diff.Resources) != 1 || len(full.Diff.Tree) != 1 {
+		t.Errorf("diff endpoint should keep the full render; got %+v", full.Diff)
+	}
+}
+
 func TestServer_AvatarProxy(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())

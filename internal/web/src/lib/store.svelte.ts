@@ -2,15 +2,43 @@
 // this store owns the data (instance meta, the PR list, the currently-loaded
 // diff) and the actions that mutate it.
 
-import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from './types';
+import type {
+  DiffEnvelope,
+  DiffResult,
+  DiffSummary,
+  ImageChange,
+  Impact,
+  Meta,
+  PRStatus,
+  RenderFailure,
+  Warning,
+  WSEvent,
+} from './types';
 import { router, navigate } from './router.svelte';
 
-// The status facets a summary pill can filter the list down to ('' = all).
-export type StatusFilter = '' | 'caution' | 'merged';
+// The status facets a summary pill can filter the list down to ('' = unfiltered;
+// 'open' narrows to just the open set, hiding the merged shelf).
+export type StatusFilter = '' | 'open' | 'caution' | 'merged';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
 export type SortDir = 'asc' | 'desc';
+
+// A lazily-loaded, compact summary of a PR's diff for the list-row expander —
+// just the headline facts (impact, cautions, image bumps, failures), never the
+// rendered resource HTML. Keyed by PR number; headSha lets a re-render of the
+// same PR invalidate a stale entry on the next expand.
+export interface RowPreview {
+  state: 'loading' | 'ready' | 'pending' | 'error';
+  headSha: string;
+  error?: string;
+  summary?: DiffSummary;
+  impact?: Impact;
+  warnings?: Warning[];
+  images?: ImageChange[];
+  failures?: RenderFailure[];
+  truncated?: number;
+}
 
 interface Store {
   meta: Meta | null;
@@ -26,6 +54,7 @@ interface Store {
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
   loading: boolean; // a diff fetch/render is in flight
+  previews: Record<number, RowPreview>; // lazy list-row diff summaries, by PR number
   connected: boolean;
 }
 
@@ -43,6 +72,7 @@ export const store: Store = $state({
   diffRefreshError: '',
   diffMergeCommand: '',
   loading: false,
+  previews: {},
   connected: false,
 });
 
@@ -108,10 +138,9 @@ export function matchesQuery(p: PRStatus, q: ParsedQuery): boolean {
   for (const t of q.tokens) {
     switch (t.key) {
       case 'status': {
-        // Prefix-match the canonical names so "status:dang" works.
+        // Prefix-match the canonical names so "status:cau" works.
         const want = STATUS_VALUES.find((v) => v.startsWith(t.value));
-        if (!want || !matchesStatus(p, want === 'open' ? '' : (want as StatusFilter))) return false;
-        if (want === 'open' && !p.open) return false;
+        if (!want || !matchesStatus(p, want as StatusFilter)) return false;
         break;
       }
       case 'author':
@@ -150,6 +179,8 @@ export function filteredPRs(): PRStatus[] {
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
+    case 'open':
+      return p.open;
     case 'caution':
       return (p.signals?.caution ?? 0) > 0;
     case 'merged':
@@ -285,6 +316,47 @@ async function loadDiff(n: number): Promise<void> {
     if (store.diffFor === n) {
       settleLoading(false);
       store.diffError = String(err);
+    }
+  }
+}
+
+// ensurePreview lazily loads the compact diff summary behind a list row's
+// expander. Cached per PR and keyed by headSha, so it fetches once per render —
+// a re-render (new sha) refetches on the next expand. Errors are cached too (no
+// auto-retry loop); reopen the PR for the live view.
+export function ensurePreview(n: number, headSha: string): void {
+  const cur = store.previews[n];
+  if (cur && cur.headSha === headSha) return;
+  store.previews[n] = { state: 'loading', headSha };
+  void loadPreview(n, headSha);
+}
+
+async function loadPreview(n: number, headSha: string): Promise<void> {
+  try {
+    // The lean summary endpoint: the headline facts without the per-resource
+    // render, so a row preview doesn't pull the whole diff payload.
+    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/summary`);
+    if (store.previews[n]?.headSha !== headSha) return; // a newer expand superseded this
+    if (env.status === 'ready' && env.diff) {
+      const d = env.diff;
+      store.previews[n] = {
+        state: 'ready',
+        headSha,
+        summary: d.summary,
+        impact: d.impact,
+        warnings: d.warnings ?? [],
+        images: d.images ?? [],
+        failures: d.failures ?? [],
+        truncated: d.truncated,
+      };
+    } else if (env.status === 'error') {
+      store.previews[n] = { state: 'error', headSha, error: env.error ?? 'render failed' };
+    } else {
+      store.previews[n] = { state: 'pending', headSha };
+    }
+  } catch (err) {
+    if (store.previews[n]?.headSha === headSha) {
+      store.previews[n] = { state: 'error', headSha, error: String(err) };
     }
   }
 }
