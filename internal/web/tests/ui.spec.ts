@@ -702,6 +702,33 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   await expect(page).toHaveURL(/#\/pr\/142$/);
 });
 
+test('the row summary waits for its fetch before sliding open (no first-open jump)', async ({ page }) => {
+  await stubApi(page);
+  // Hold the summary response so we can observe the pre-load state. (Registered
+  // after stubApi, so this handler wins for the summary route.)
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route('**/api/prs/142/summary', async (route) => {
+    await gate;
+    await route.fulfill({ json: diffEnvelope });
+  });
+  await page.goto('/');
+  const card = page.locator('.card-li', { hasText: '#142' });
+
+  await card.locator('.card-expand').click();
+  // Toggled open, but the panel is deferred until the summary lands: the chevron
+  // shows a spinner and no panel (which would otherwise slide to a loading height
+  // and then jump) has mounted yet.
+  await expect(card.locator('.card-expand')).toHaveAttribute('aria-expanded', 'true');
+  await expect(card.locator('.card-expand .kspin')).toBeVisible();
+  await expect(card.locator('.card-preview')).toHaveCount(0);
+
+  // Summary lands → the panel mounts once, with its full content.
+  release();
+  await expect(card.locator('.card-preview')).toBeVisible();
+  await expect(card.locator('.card-preview')).toContainText('StatefulSet default/postgres');
+});
+
 test('the expand-all control toggles every row summary at once', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
