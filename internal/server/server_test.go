@@ -24,6 +24,7 @@ import (
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/gitclone"
+	"github.com/home-operations/konflate/internal/prfilter"
 )
 
 // --- fakes ---------------------------------------------------------------
@@ -190,6 +191,39 @@ func TestServer_PRLabelFilter(t *testing.T) {
 	s.refreshList(s.runCtx)
 	if list := s.store.list(); len(list) != 0 {
 		t.Fatalf("a PR that lost its allowlisted label should be dropped; got %+v", list)
+	}
+}
+
+func TestServer_PRFilterExpr(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	prg, err := prfilter.Compile(`pr.baseRef == "main" && !pr.draft`)
+	if err != nil {
+		t.Fatalf("compile filter: %v", err)
+	}
+	cfg.PRFilter = prg
+
+	keep := api.PR{Number: 1, Title: "ok", HeadRef: "a", BaseRef: "main", HeadSHA: "s1", Open: true}
+	draft := api.PR{Number: 2, Title: "draft", HeadRef: "b", BaseRef: "main", HeadSHA: "s2", Open: true, Draft: true}
+	otherBase := api.PR{Number: 3, Title: "dev base", HeadRef: "c", BaseRef: "dev", HeadSHA: "s3", Open: true}
+	prov := &fakeProvider{prs: []api.PR{keep, draft, otherBase}}
+	s := newTestServer(t, cfg, prov, okEngine())
+
+	// Only the PR satisfying the expression (main base, not a draft) is tracked.
+	s.refreshList(s.runCtx)
+	waitFor(t, s, 1)
+	if list := s.store.list(); len(list) != 1 || list[0].Number != 1 {
+		t.Fatalf("CEL filter should track only #1; got %+v", list)
+	}
+
+	// #1 becomes a draft (still open) → it now fails the expression and is dropped.
+	drafted := keep
+	drafted.Draft = true
+	prov.setPRs(drafted, draft, otherBase)
+	prov.setDetail(drafted) // reconcileClosed re-fetches #1 via GetPR
+	s.refreshList(s.runCtx)
+	if list := s.store.list(); len(list) != 0 {
+		t.Fatalf("a PR that no longer satisfies the filter should be dropped; got %+v", list)
 	}
 }
 

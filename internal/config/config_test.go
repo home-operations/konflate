@@ -183,3 +183,32 @@ func TestLoad_PRLabels(t *testing.T) {
 		t.Errorf("PRLabels = %v, want %v", cfg.PRLabels, want)
 	}
 }
+
+func TestLoad_PRFilterExpr(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	// Unset → no compiled filter.
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.PRFilter != nil {
+		t.Errorf("default PRFilter = %v, want nil", cfg.PRFilter)
+	}
+
+	// A valid expression compiles into a ready filter.
+	t.Setenv("KONFLATE_PR_FILTER_EXPR", `!pr.draft && pr.baseRef == "main"`)
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load with valid expr: %v", err)
+	}
+	if cfg.PRFilter == nil {
+		t.Fatal("PRFilter should be compiled when KONFLATE_PR_FILTER_EXPR is set")
+	}
+
+	// A malformed expression fails fast at Load (not silently at request time).
+	t.Setenv("KONFLATE_PR_FILTER_EXPR", "pr.draft &&")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load with a malformed KONFLATE_PR_FILTER_EXPR should error")
+	}
+}

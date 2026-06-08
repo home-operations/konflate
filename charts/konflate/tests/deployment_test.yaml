@@ -125,6 +125,24 @@ tests:
             name: KONFLATE_PR_LABELS
             value: "cluster:production,cluster:staging"
 
+  - it: omits KONFLATE_PR_FILTER_EXPR when prFilterExpr is empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_PR_FILTER_EXPR
+
+  - it: emits KONFLATE_PR_FILTER_EXPR verbatim when prFilterExpr is set
+    set:
+      config.prFilterExpr: '!pr.draft && pr.baseRef == "main"'
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PR_FILTER_EXPR
+            value: '!pr.draft && pr.baseRef == "main"'
+
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
       - notContains:

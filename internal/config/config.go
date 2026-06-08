@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+
+	"github.com/home-operations/konflate/internal/prfilter"
 )
 
 // Config holds the complete runtime configuration for konflate.
@@ -78,6 +80,36 @@ type Config struct {
 	// ("cluster:production") work. Empty (the default) tracks every open PR.
 	// Comma-separated; surrounding whitespace is trimmed.
 	PRLabels []string `env:"KONFLATE_PR_LABELS" envSeparator:","`
+
+	// PRFilterExpr is an optional CEL expression for fine-grained control over
+	// which PRs konflate tracks — anything the label allowlist can't express
+	// (negation, author/base rules, draft handling, combinations). It evaluates
+	// against a single variable, pr, with these fields:
+	//
+	//	pr.number      int       PR number
+	//	pr.title       string    PR title
+	//	pr.author      string    author login
+	//	pr.state       string    raw forge state ("open"/"merged"/…)
+	//	pr.open        bool       normalized: still an open PR
+	//	pr.merged      bool       closed via merge
+	//	pr.draft       bool       draft PR
+	//	pr.fork        bool       head is in a different repo (external contribution)
+	//	pr.headRef     string    head branch
+	//	pr.headSha     string    head commit SHA
+	//	pr.baseRef     string    target branch
+	//	pr.url         string    PR URL
+	//	pr.createdAt   timestamp opened-at time
+	//	pr.labels      list      [{name, color}] — e.g. pr.labels.exists(l, l.name == "x")
+	//
+	// The expression must return a boolean; it is compiled and type-checked at
+	// startup, so a malformed filter fails fast. Composes with PRLabels: when
+	// both are set a PR must satisfy both. Empty (the default) adds no filter.
+	// Example: pr.labels.exists(l, l.name == "cluster/production") && !pr.draft
+	PRFilterExpr string `env:"KONFLATE_PR_FILTER_EXPR"`
+
+	// PRFilter is the compiled PRFilterExpr, built in [Load] (nil when unset). A
+	// derived field, like Forge — never set it directly.
+	PRFilter *prfilter.Program `env:"-"`
 
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
@@ -219,6 +251,16 @@ func Load() (*Config, error) {
 	// Trim whitespace and drop empties so "cluster, cluster:production" or a
 	// trailing comma yields clean, exact label names to match against.
 	cfg.PRLabels = normalizeList(cfg.PRLabels)
+
+	// Compile the PR filter once, here, so a malformed expression fails at
+	// startup with a clear message rather than silently dropping every PR.
+	if expr := strings.TrimSpace(cfg.PRFilterExpr); expr != "" {
+		prg, err := prfilter.Compile(expr)
+		if err != nil {
+			return nil, fmt.Errorf("config: KONFLATE_PR_FILTER_EXPR: %w", err)
+		}
+		cfg.PRFilter = prg
+	}
 
 	forge, err := ParseForgeURI(cfg.Repo)
 	if err != nil {

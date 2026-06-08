@@ -69,6 +69,10 @@ spec:
             - name: KONFLATE_PR_LABELS
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- with .Values.config.prFilterExpr }}
+            - name: KONFLATE_PR_FILTER_EXPR
+              value: {{ . | quote }}
+            {{- end }}
             {{- if ne (toString .Values.config.maxDiffResources) "" }}
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}

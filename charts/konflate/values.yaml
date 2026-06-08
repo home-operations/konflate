@@ -83,6 +83,17 @@ config:
 
   # -- Only track PRs carrying at least one of these labels (e.g. `["cluster:production"]`); empty tracks every PR. Case-insensitive.
   prLabels: []
+  # KONFLATE_PR_FILTER_EXPR — optional CEL expression for fine-grained PR
+  # selection beyond the label allowlist (negation, author/base rules, drafts,
+  # combinations). Evaluated against a `pr` variable (pr.number/title/author/
+  # draft/open/merged/state/fork/headRef/headSha/baseRef/url/createdAt, and
+  # pr.labels[].name/.color); must return a bool. Compiled and type-checked at
+  # startup, so a bad expression fails fast. Composes with prLabels (a PR must
+  # pass both). Example:
+  # 'pr.labels.exists(l, l.name == "cluster/production") && !pr.draft'
+
+  # -- CEL expression for fine-grained PR selection, e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`; evaluates against a `pr` variable and must return a bool. Composes with `prLabels`; empty adds no filter.
+  prFilterExpr: ""
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------

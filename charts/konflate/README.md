@@ -58,6 +58,7 @@ Kubernetes: `>=1.25.0-0`
 | config.maxDiffConcurrency | int | `0` | Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4). |
 | config.maxDiffResources | string | `""` | Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables. |
 | config.mergeCommand | string | `""` | Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it. |
+| config.prFilterExpr | string | `""` | CEL expression for fine-grained PR selection, e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`; evaluates against a `pr` variable and must return a bool. Composes with `prLabels`; empty adds no filter. |
 | config.prLabels | list | `[]` | Only track PRs carrying at least one of these labels (e.g. `["cluster:production"]`); empty tracks every PR. Case-insensitive. |
 | config.refreshInterval | string | `"30m"` | How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). |
 | config.renderConcurrency | string | `""` | Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4). |

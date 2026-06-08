@@ -90,6 +90,12 @@
           "title": "mergeCommand",
           "type": "string"
         },
+        "prFilterExpr": {
+          "default": "",
+          "description": "CEL expression for fine-grained PR selection, e.g. `pr.labels.exists(l, l.name == \"cluster/production\") \u0026\u0026 !pr.draft`; evaluates against a `pr` variable and must return a bool. Composes with `prLabels`; empty adds no filter.",
+          "title": "prFilterExpr",
+          "type": "string"
+        },
         "prLabels": {
           "description": "Only track PRs carrying at least one of these labels (e.g. `[\"cluster:production\"]`); empty tracks every PR. Case-insensitive.",
           "items": {

@@ -269,10 +269,32 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	return nil
 }
 
-// prAllowed reports whether a PR passes the configured label allowlist
-// (KONFLATE_PR_LABELS): true when no labels are configured, or when the PR
-// carries at least one label matching (case-insensitively) one of them.
+// prAllowed reports whether a PR passes the configured tracking filters: the
+// label allowlist (KONFLATE_PR_LABELS) and the CEL expression
+// (KONFLATE_PR_FILTER_EXPR). When both are set a PR must satisfy both; when
+// neither is set, every PR is tracked. A filter that errors at runtime drops the
+// PR (and logs) — but the expression is type-checked at startup, so a
+// well-formed filter against the always-present field set won't.
 func (s *Server) prAllowed(pr api.PR) bool {
+	if !s.labelAllowed(pr) {
+		return false
+	}
+	if s.cfg.PRFilter != nil {
+		ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
+		if err != nil {
+			s.log.Error("PR filter evaluation failed; dropping PR",
+				"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
+			return false
+		}
+		return ok
+	}
+	return true
+}
+
+// labelAllowed applies the KONFLATE_PR_LABELS allowlist: true when none is
+// configured, or when the PR carries at least one label matching (case-
+// insensitively) one of them.
+func (s *Server) labelAllowed(pr api.PR) bool {
 	if len(s.cfg.PRLabels) == 0 {
 		return true
 	}
@@ -284,6 +306,33 @@ func (s *Server) prAllowed(pr api.PR) bool {
 		}
 	}
 	return false
+}
+
+// prFilterVars projects a PR into the `pr` variable the CEL filter evaluates
+// against (see config.Config.PRFilterExpr for the documented field set). Every
+// field is always present, so a valid field reference never hits a missing key;
+// labels are [{name, color}] for `pr.labels.exists(l, l.name == "…")`.
+func prFilterVars(pr api.PR) map[string]any {
+	labels := make([]any, len(pr.Labels))
+	for i, l := range pr.Labels {
+		labels[i] = map[string]any{"name": l.Name, "color": l.Color}
+	}
+	return map[string]any{
+		"number":    pr.Number,
+		"title":     pr.Title,
+		"author":    pr.Author,
+		"state":     pr.State,
+		"open":      pr.Open,
+		"merged":    pr.Merged,
+		"draft":     pr.Draft,
+		"fork":      pr.Fork,
+		"headRef":   pr.HeadRef,
+		"headSha":   pr.HeadSHA,
+		"baseRef":   pr.BaseRef,
+		"url":       pr.URL,
+		"createdAt": pr.CreatedAt,
+		"labels":    labels,
+	}
 }
 
 // handleWebhook verifies an inbound forge webhook and re-renders the affected
