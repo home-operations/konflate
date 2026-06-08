@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.24](https://github.com/home-operations/konflate/compare/0.1.23...0.1.24) (2026-06-08)
+
+
+### Features
+
+* **api:** 503 + Retry-After for still-rendering Markdown summaries ([#88](https://github.com/home-operations/konflate/issues/88)) ([2a28557](https://github.com/home-operations/konflate/commit/2a28557f371b0f5f10540b071edfd10df0371488))
+* **config:** KONFLATE_PR_LABELS — track only PRs with allowlisted labels ([#90](https://github.com/home-operations/konflate/issues/90)) ([3e293bd](https://github.com/home-operations/konflate/commit/3e293bd9d25bb1b964c65c4e2ed007462051c734))
+* **deps:** update module golang.org/x/sync (v0.20.0 → v0.21.0) ([#87](https://github.com/home-operations/konflate/issues/87)) ([72dfb77](https://github.com/home-operations/konflate/commit/72dfb77e3894d06c3b9695877789c36fba91b350))
+
 ## [0.1.23](https://github.com/home-operations/konflate/compare/0.1.22...0.1.23) (2026-06-08)
 
 
