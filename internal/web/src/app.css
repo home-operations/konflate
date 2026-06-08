@@ -738,6 +738,21 @@ button.sum-pill:hover {
 .sum-pill.merged strong {
   color: var(--merged);
 }
+.sum-pill.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+}
+.sum-pill.ok strong {
+  color: var(--ok);
+}
+.sum-pill.ok.active {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, var(--panel));
+  color: color-mix(in srgb, var(--ok) 75%, var(--text));
+}
+.sum-pill.ok:hover {
+  border-color: var(--ok);
+}
 .badges {
   display: flex;
   align-items: center;
@@ -765,6 +780,10 @@ button.sum-pill:hover {
 .badge.muted {
   color: var(--muted);
   font-weight: 400;
+}
+.badge.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
 }
 .card-status {
   display: inline-flex;
