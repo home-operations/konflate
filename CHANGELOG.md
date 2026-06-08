@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.23](https://github.com/home-operations/konflate/compare/0.1.22...0.1.23) (2026-06-08)
+
+
+### Features
+
+* **api:** serve the PR summary as Markdown for CI comments ([#85](https://github.com/home-operations/konflate/issues/85)) ([64a4ddb](https://github.com/home-operations/konflate/commit/64a4ddbe19f97565b8d3c961d6b4fc07928570b4))
+
 ## [0.1.22](https://github.com/home-operations/konflate/compare/0.1.21...0.1.22) (2026-06-08)
 
 
