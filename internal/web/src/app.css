@@ -1047,15 +1047,14 @@ button.sum-pill:hover {
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
-/* The optional "copy to merge" command: a quiet bar below the status strips
-   (it's a convenience, not a status), with the command in a monospace chip. */
+/* The optional "copy to merge" command rides on the right of the Summary
+   header (not its own strip) — a convenience, in a monospace chip. */
 .merge-cmd {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
   color: var(--muted);
 }
 .merge-cmd code {
