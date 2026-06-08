@@ -1104,6 +1104,28 @@ button.sum-pill:hover {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+/* The image name links to its registry page; muted until hovered, then accent +
+   underline + a revealed external-link glyph (matching the topbar repo link). */
+.img-name-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.img-name-link .icon {
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.img-name-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.img-name-link:hover .icon,
+.img-name-link:focus-visible .icon {
+  opacity: 1;
+}
 .img-delta {
   display: flex;
   align-items: center;

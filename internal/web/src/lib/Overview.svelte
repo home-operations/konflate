@@ -3,7 +3,7 @@
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
+  import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline, mdiOpenInNew } from './icons';
 
   const d = $derived(store.diff);
 
@@ -32,6 +32,46 @@
   // with '@' (a tag can never contain ':', so a ':' in the version means digest).
   function imageRef(name: string, ver: string): string {
     return ver.includes(':') ? `${name}@${ver}` : `${name}:${ver}`;
+  }
+
+  // Best-effort web link for an image repository, so a reviewer can jump from a
+  // bump to the image's registry page (its tags, README, and from there the
+  // upstream source / release notes). Returns null for registries with no
+  // derivable web UI — the name then renders as plain text.
+  function registryUrl(name: string): string | null {
+    if (!name) return null;
+    // Split an optional registry host from the repo path; a bare "org/repo" (no
+    // host) is the implicit Docker Hub registry.
+    const slash = name.indexOf('/');
+    const head = slash === -1 ? '' : name.slice(0, slash);
+    const hasHost = head.includes('.') || head.includes(':') || head === 'localhost';
+    const host = hasHost ? head : 'docker.io';
+    let repo = hasHost ? name.slice(slash + 1) : name;
+    // A digest-pinned image carries its human tag on the name (e.g. x/y:4.5.0),
+    // and a name may carry an @sha256 digest — drop either from the final
+    // segment (the host's :port was already split off above).
+    const lastSlash = repo.lastIndexOf('/');
+    const tail = repo.slice(lastSlash + 1);
+    const cut = tail.search(/[:@]/);
+    if (cut !== -1) repo = repo.slice(0, lastSlash + 1) + tail.slice(0, cut);
+    if (!repo) return null;
+    const segs = repo.split('/');
+    switch (host) {
+      case 'ghcr.io':
+        // ghcr images are overwhelmingly built from the like-named GitHub repo;
+        // link there. Best-effort — a repackaged image may not have one.
+        return segs.length >= 2 ? `https://github.com/${segs[0]}/${segs[1]}` : null;
+      case 'quay.io':
+        return `https://quay.io/repository/${repo}`;
+      case 'docker.io':
+      case 'index.docker.io':
+      case 'registry-1.docker.io':
+        if (segs.length === 1) return `https://hub.docker.com/_/${segs[0]}`;
+        if (segs[0] === 'library') return `https://hub.docker.com/_/${segs.slice(1).join('/')}`;
+        return `https://hub.docker.com/r/${repo}`;
+      default:
+        return null;
+    }
   }
 </script>
 
@@ -92,7 +132,13 @@
         {#each d.images as img}
           <li class="img-change">
             <div class="img-head">
-              <span class="img-name">{img.name}</span>
+              {#if registryUrl(img.name)}
+                <a class="img-name img-name-link" href={registryUrl(img.name)} target="_blank" rel="noopener noreferrer" title={`Open ${img.name} on its registry`}>
+                  {img.name}<Icon path={mdiOpenInNew} size={11} />
+                </a>
+              {:else}
+                <span class="img-name">{img.name}</span>
+              {/if}
               {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
             </div>
             <!-- ∅ = no reference on that side (image added/removed); tooltip spells it out. -->
