@@ -125,6 +125,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
 	env.MergeCommand = s.mergeCommand(env.PR)
+	env.ReviewURL = reviewURLFromRequest(r, number)
 	if env.Diff != nil {
 		// Shallow-copy then trim, so the cached diff keeps its rendered resources —
 		// only this response is lightened.
@@ -137,6 +138,20 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	code := http.StatusOK
 	if env.Status == api.JobPending || env.Status == api.JobRunning {
 		code = http.StatusAccepted
+	}
+	// Content negotiation: a caller asking for Markdown gets a paste-ready block
+	// (forge flavour from ?forge=, defaulting to this instance's forge — so a
+	// GitHub-watching konflate emits [!CAUTION] admonitions with no param). Every
+	// other caller, the SPA included, gets the JSON envelope unchanged.
+	if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+		flavor := r.URL.Query().Get("forge")
+		if flavor == "" {
+			flavor = string(s.cfg.Forge.Kind)
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.WriteHeader(code)
+		_, _ = io.WriteString(w, summaryMarkdown(env, env.ReviewURL, flavor == "github"))
+		return
 	}
 	writeJSON(w, code, env)
 }

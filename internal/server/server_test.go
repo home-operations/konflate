@@ -215,6 +215,56 @@ func TestServer_Summary(t *testing.T) {
 	}
 }
 
+func TestServer_SummaryMarkdown(t *testing.T) {
+	t.Parallel()
+	pr := api.PR{Number: 7, Title: "feat: widget", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123"}
+	rich := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		return api.DiffResult{
+			PRNumber: pr.Number, HeadSHA: "abc123",
+			Summary:  api.DiffSummary{Changed: 1},
+			Impact:   api.Impact{Resources: 1},
+			Warnings: []api.Warning{{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api", Detail: "scaled to zero"}},
+		}, nil
+	}}
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, rich)
+	h := s.mainHandler()
+	s.refreshList(s.runCtx)
+	waitFor(t, s, 7)
+
+	// Accept: text/markdown → a paste-ready block. The instance is GitHub, so it
+	// emits admonitions with no ?forge param, and the review URL is derived from
+	// the request host.
+	rec := do(h, "GET", "/api/prs/7/summary", nil, map[string]string{"Accept": "text/markdown"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("summary md: got %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/markdown") {
+		t.Errorf("content-type = %q, want text/markdown", ct)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"rendered diff for #7", "> [!CAUTION]", "`Deployment web/api`", "/#/pr/7"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("markdown body missing %q\n%s", want, body)
+		}
+	}
+
+	// ?forge=gitlab forces the plain (non-admonition) flavour.
+	plain := do(h, "GET", "/api/prs/7/summary?forge=gitlab", nil, map[string]string{"Accept": "text/markdown"}).Body.String()
+	if strings.Contains(plain, "[!CAUTION]") {
+		t.Errorf("?forge=gitlab should not emit GitHub admonitions:\n%s", plain)
+	}
+	if !strings.Contains(plain, "**⚠ Cautions (1)**") {
+		t.Errorf("plain flavour missing the cautions heading:\n%s", plain)
+	}
+
+	// Default (no Accept) is JSON, unchanged, now carrying reviewUrl.
+	var env api.DiffEnvelope
+	mustJSON(t, do(h, "GET", "/api/prs/7/summary", nil, nil), &env)
+	if env.Diff == nil || !strings.HasSuffix(env.ReviewURL, "/#/pr/7") {
+		t.Errorf("json summary reviewUrl = %q (diff set: %v)", env.ReviewURL, env.Diff != nil)
+	}
+}
+
 func TestServer_AvatarProxy(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())

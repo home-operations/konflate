@@ -59,6 +59,11 @@ type DiffEnvelope struct {
 	// MergeCommand is the rendered "copy to merge" CLI command, set only for open
 	// PRs when the feature is enabled (see PRStatus.MergeCommand).
 	MergeCommand string `json:"mergeCommand,omitempty"`
+	// ReviewURL is the canonical link to this PR's review in the konflate UI
+	// (e.g. https://konflate.example/#/pr/142), derived from the request. Set by
+	// the summary endpoint for external consumers (a PR-comment bot links back to
+	// it); the SPA never needs it. Absent elsewhere.
+	ReviewURL string `json:"reviewUrl,omitempty"`
 }
 
 // Meta is the non-secret identity of this konflate instance, served at
