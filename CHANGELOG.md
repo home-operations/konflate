@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.21](https://github.com/home-operations/konflate/compare/0.1.20...0.1.21) (2026-06-08)
+
+
+### Features
+
+* **ui:** installable PWA, plus a quieter PR list & review ([#81](https://github.com/home-operations/konflate/issues/81)) ([4b291cb](https://github.com/home-operations/konflate/commit/4b291cbb03ca3daeb1c47d728c376e6e9d78f0c7))
+
 ## [0.1.20](https://github.com/home-operations/konflate/compare/0.1.19...0.1.20) (2026-06-08)
 
 
