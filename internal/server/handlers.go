@@ -257,9 +257,9 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 		return err
 	}
 	if !pr.Open || !s.prAllowed(pr) {
-		// Merged/closed since we last saw it, or filtered out by the label
-		// allowlist — reconcile (shelve or drop) instead of enqueueing a render
-		// whose head branch may already be gone, or that we shouldn't track.
+		// Merged/closed since we last saw it, or filtered out by the PR filter —
+		// reconcile (shelve or drop) instead of enqueueing a render whose head
+		// branch may already be gone, or that we shouldn't track.
 		s.reconcileState(pr)
 		return nil
 	}
@@ -386,7 +386,7 @@ func (s *Server) refreshList(ctx context.Context) {
 	open := make(map[int]struct{}, len(prs))
 	for _, pr := range prs {
 		if !s.prAllowed(pr) {
-			continue // outside the label allowlist — never tracked (and if it was, it
+			continue // rejected by the PR filter — never tracked (and if it was, it
 			// falls out of `open` below, so reconcileClosed drops it).
 		}
 		open[pr.Number] = struct{}{}
@@ -435,8 +435,9 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 // "recently merged" shelf keeping its last rendered diff, and an abandoned
 // (closed-unmerged) PR is dropped and broadcast so clients remove it live.
 func (s *Server) reconcileState(pr api.PR) {
-	// Outside the label allowlist (e.g. its last matching label was removed):
-	// drop it and tell clients to remove it, whatever its open/merged state.
+	// Rejected by the PR filter (e.g. it became a draft, or lost a label the
+	// expression requires): drop it and tell clients to remove it, whatever its
+	// open/merged state.
 	// remove is a no-op for a PR we weren't tracking, so a webhook for an
 	// unrelated PR is harmless.
 	if !s.prAllowed(pr) {
