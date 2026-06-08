@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -156,5 +157,29 @@ func TestLoad_RequiresRepo(t *testing.T) {
 	t.Setenv("KONFLATE_TOKEN", "tok")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() with no KONFLATE_REPO should error")
+	}
+}
+
+func TestLoad_PRLabels(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	// Unset → empty (track every PR).
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.PRLabels) != 0 {
+		t.Errorf("default PRLabels = %v, want empty", cfg.PRLabels)
+	}
+
+	// Comma-separated with stray whitespace and a trailing comma → trimmed,
+	// empties dropped.
+	t.Setenv("KONFLATE_PR_LABELS", "cluster, cluster:production ,")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if want := []string{"cluster", "cluster:production"}; !slices.Equal(cfg.PRLabels, want) {
+		t.Errorf("PRLabels = %v, want %v", cfg.PRLabels, want)
 	}
 }

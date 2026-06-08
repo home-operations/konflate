@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -68,6 +69,15 @@ type Config struct {
 	// fork PRs are listed but shown as "not rendered (fork)" until an operator
 	// opts in. Same-repo PRs (the maintainers' own branches) always render.
 	RenderForkPRs bool `env:"KONFLATE_RENDER_FORK_PRS" envDefault:"false"`
+
+	// PRLabels is an optional allowlist of pull-request labels. When set, konflate
+	// only tracks (lists, renders, comments on) PRs carrying at least one of these
+	// labels; PRs with none are ignored entirely, and a tracked PR that loses its
+	// last matching label is dropped. Matched case-insensitively against the full
+	// label name, so both a bare label ("cluster") and a namespaced one
+	// ("cluster:production") work. Empty (the default) tracks every open PR.
+	// Comma-separated; surrounding whitespace is trimmed.
+	PRLabels []string `env:"KONFLATE_PR_LABELS" envSeparator:","`
 
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
@@ -206,6 +216,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
+	// Trim whitespace and drop empties so "cluster, cluster:production" or a
+	// trailing comma yields clean, exact label names to match against.
+	cfg.PRLabels = normalizeList(cfg.PRLabels)
+
 	forge, err := ParseForgeURI(cfg.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("config: KONFLATE_REPO: %w", err)
@@ -223,6 +237,19 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// normalizeList trims surrounding whitespace from each entry and drops empties,
+// in place. Used for comma-separated env lists where spacing or a stray comma
+// shouldn't produce blank or padded entries.
+func normalizeList(in []string) []string {
+	out := in[:0]
+	for _, s := range in {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // defaultDiffConcurrency derives the diff-render concurrency from the CPU budget

@@ -242,9 +242,10 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	if err != nil {
 		return err
 	}
-	if !pr.Open {
-		// Merged/closed since we last saw it — reconcile it onto the shelf or drop
-		// it rather than enqueueing a render whose head branch may already be gone.
+	if !pr.Open || !s.prAllowed(pr) {
+		// Merged/closed since we last saw it, or filtered out by the label
+		// allowlist — reconcile (shelve or drop) instead of enqueueing a render
+		// whose head branch may already be gone, or that we shouldn't track.
 		s.reconcileState(pr)
 		return nil
 	}
@@ -252,6 +253,23 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	s.log.Info("queuing render", "pr", number, "reason", reason)
 	s.queue.enqueue(pr)
 	return nil
+}
+
+// prAllowed reports whether a PR passes the configured label allowlist
+// (KONFLATE_PR_LABELS): true when no labels are configured, or when the PR
+// carries at least one label matching (case-insensitively) one of them.
+func (s *Server) prAllowed(pr api.PR) bool {
+	if len(s.cfg.PRLabels) == 0 {
+		return true
+	}
+	for _, l := range pr.Labels {
+		for _, want := range s.cfg.PRLabels {
+			if strings.EqualFold(l.Name, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // handleWebhook verifies an inbound forge webhook and re-renders the affected
@@ -303,6 +321,10 @@ func (s *Server) refreshList(ctx context.Context) {
 	s.metrics.prsKnown.Set(float64(len(prs)))
 	open := make(map[int]struct{}, len(prs))
 	for _, pr := range prs {
+		if !s.prAllowed(pr) {
+			continue // outside the label allowlist — never tracked (and if it was, it
+			// falls out of `open` below, so reconcileClosed drops it).
+		}
 		open[pr.Number] = struct{}{}
 		prev, known := s.store.get(pr.Number)
 		s.store.upsertPR(pr)
@@ -349,6 +371,15 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 // "recently merged" shelf keeping its last rendered diff, and an abandoned
 // (closed-unmerged) PR is dropped and broadcast so clients remove it live.
 func (s *Server) reconcileState(pr api.PR) {
+	// Outside the label allowlist (e.g. its last matching label was removed):
+	// drop it and tell clients to remove it, whatever its open/merged state.
+	// remove is a no-op for a PR we weren't tracking, so a webhook for an
+	// unrelated PR is harmless.
+	if !s.prAllowed(pr) {
+		s.store.remove(pr.Number)
+		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: pr.Number})
+		return
+	}
 	switch {
 	case pr.Open:
 		s.store.upsertPR(pr)
