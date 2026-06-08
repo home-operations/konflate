@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.22](https://github.com/home-operations/konflate/compare/0.1.21...0.1.22) (2026-06-08)
+
+
+### Features
+
+* **ui:** PR-list polish — open pill, expandable rows, expand-all, scroll-to-top ([#83](https://github.com/home-operations/konflate/issues/83)) ([c2869ea](https://github.com/home-operations/konflate/commit/c2869ea90343d8e3c87e20645c09238de62b44db))
+
 ## [0.1.21](https://github.com/home-operations/konflate/compare/0.1.20...0.1.21) (2026-06-08)
 
 
