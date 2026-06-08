@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.26](https://github.com/home-operations/konflate/compare/0.1.25...0.1.26) (2026-06-08)
+
+
+### Bug Fixes
+
+* **ui:** mobile diff-header overflow + unified click-to-copy merge command ([#93](https://github.com/home-operations/konflate/issues/93)) ([cab20b7](https://github.com/home-operations/konflate/commit/cab20b7f246d4e274c3805d8f77b3ed812be49bf))
+
 ## [0.1.25](https://github.com/home-operations/konflate/compare/0.1.24...0.1.25) (2026-06-08)
 
 
