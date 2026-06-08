@@ -239,6 +239,23 @@ httpRoute:
   # -- Redirect HTTP→HTTPS (301) instead of routing to the backend (needs HTTP+HTTPS listeners).
   httpsRedirect: false
 
+# NetworkPolicy for konflate (off by default). konflate must reach the forge API
+# plus the OCI/Helm/git sources a PR declares to render, so the policy *shapes*
+# egress to DNS + HTTPS rather than locking it down — still blocking lateral
+# access to other cluster services on other ports — and limits ingress to
+# konflate's own HTTP + metrics ports. Pick the flavor matching your CNI; the
+# Cilium/Calico variants render that CNI's CRD, so validate against your cluster.
+networkPolicy:
+  # -- Create a NetworkPolicy for konflate.
+  enabled: false
+  # -- Policy flavor for your CNI: "default" (networking.k8s.io/v1 NetworkPolicy), "cilium" (CiliumNetworkPolicy), or "calico" (projectcalico.org/v3 NetworkPolicy).
+  type: default
+  # -- Allow DNS egress (UDP/TCP 53). konflate must resolve forge/registry/git hosts to render, so leave this on unless DNS is handled out-of-band.
+  allowDNS: true
+  # -- TCP ports konflate may egress to fetch sources during a render (forge API + git/OCI/Helm over HTTPS). Add 80 / 22 for plain-HTTP or SSH git sources.
+  egressPorts:
+    - 443
+
 # Persist konflate's on-disk caches and the bare git mirror across restarts; with it disabled they live in an emptyDir and are rebuilt on each restart. Recommended for any non-trivial repo.
 persistence:
   # -- Persist caches + the git mirror across restarts (recommended for any non-trivial repo).

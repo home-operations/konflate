@@ -477,6 +477,45 @@
       "title": "nameOverride",
       "type": "string"
     },
+    "networkPolicy": {
+      "description": "NetworkPolicy for konflate (off by default). konflate must reach the forge API\nplus the OCI/Helm/git sources a PR declares to render, so the policy *shapes*\negress to DNS + HTTPS rather than locking it down — still blocking lateral\naccess to other cluster services on other ports — and limits ingress to\nkonflate's own HTTP + metrics ports. Pick the flavor matching your CNI; the\nCilium/Calico variants render that CNI's CRD, so validate against your cluster.",
+      "properties": {
+        "allowDNS": {
+          "default": true,
+          "description": "Allow DNS egress (UDP/TCP 53). konflate must resolve forge/registry/git hosts to render, so leave this on unless DNS is handled out-of-band.",
+          "title": "allowDNS",
+          "type": "boolean"
+        },
+        "egressPorts": {
+          "description": "TCP ports konflate may egress to fetch sources during a render (forge API + git/OCI/Helm over HTTPS). Add 80 / 22 for plain-HTTP or SSH git sources.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "required": []
+          },
+          "title": "egressPorts",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Create a NetworkPolicy for konflate.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "type": {
+          "default": "default",
+          "description": "Policy flavor for your CNI: \"default\" (networking.k8s.io/v1 NetworkPolicy), \"cilium\" (CiliumNetworkPolicy), or \"calico\" (projectcalico.org/v3 NetworkPolicy).",
+          "title": "type",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "networkPolicy",
+      "type": "object"
+    },
     "nodeSelector": {
       "description": "Node selector for pod scheduling.",
       "required": [],
