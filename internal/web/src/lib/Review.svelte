@@ -4,6 +4,7 @@
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Avatar from './Avatar.svelte';
+  import Breakable from './Breakable.svelte';
   import {
     mdiArrowLeft,
     mdiChevronLeft,
@@ -44,7 +45,7 @@
       </div>
       <div class="review-title">
         <div class="rt-line">
-          <span class="rt-name">{pr?.title ?? ''}</span>
+          <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
         </div>
         <div class="rt-meta">
           <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>

@@ -7,6 +7,7 @@
   import Avatar from './Avatar.svelte';
   import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
+  import Breakable from './Breakable.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -128,7 +129,7 @@
     >
       <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
-        <span class="card-title">{pr.title}</span>
+        <span class="card-title"><Breakable text={pr.title} /></span>
       </div>
       <div class="card-meta">
         <span class="pr-id"><Icon path={mdiSourcePull} size={12} /> #{pr.number}</span>
