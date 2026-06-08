@@ -45,7 +45,7 @@ export {
   mdiLoading,
 } from '@mdi/js';
 
-import { siDiscord, siForgejo, siGithub, siGitlab, siKubernetes } from 'simple-icons';
+import { siDiscord, siForgejo, siGithub, siGitlab } from 'simple-icons';
 
 interface BrandIcon {
   path: string;
@@ -64,8 +64,6 @@ export const forgeIcon: Record<string, BrandIcon> = {
 // there, independent of which forge the reviewed repo lives on).
 export const githubMark: BrandIcon = siGithub;
 export const discordMark: BrandIcon = siDiscord;
-// The official heptagon-helm mark, for the loading mascot's smashee.
-export const kubernetesMark: BrandIcon = siKubernetes;
 export const KONFLATE_REPO_URL = 'https://github.com/home-operations/konflate';
 export const DISCORD_URL = 'https://discord.gg/home-operations';
 export const LICENSE_URL = 'https://github.com/home-operations/konflate/blob/main/LICENSE';

@@ -200,21 +200,22 @@ test('list shows a spinner for rendering PRs and a queued icon for pending', asy
   await expect(page.locator('.card', { hasText: 'waiting pr' })).toContainText('queued');
 });
 
-test('the PR list loading state shows the smasher, then the list arrives', async ({ page }) => {
+test('the PR list loads without a loading mascot, then the list arrives', async ({ page }) => {
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', async (r) => {
-    await new Promise((res) => setTimeout(res, 800)); // hold the list briefly
+    await new Promise((res) => setTimeout(res, 400)); // hold the list briefly
     await r.fulfill({ json: samplePRs });
   });
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/');
 
-  await expect(page.locator('.list-screen .smasher')).toBeVisible();
-  await expect(page.locator('.loading-center')).toContainText('Loading pull requests');
-  await expect(page.locator('.card')).toHaveCount(3); // and the data still lands
+  // No loading mascot flashes during the (held) load — the pane stays quiet…
+  await expect(page.locator('.smasher')).toHaveCount(0);
+  // …and the data still lands.
+  await expect(page.locator('.card')).toHaveCount(3);
 });
 
-test('review body shows a big spinner while a diff is still rendering', async ({ page }) => {
+test('review body shows a status message (not a spinner) while a diff renders', async ({ page }) => {
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', (r) =>
     r.fulfill({
@@ -228,10 +229,9 @@ test('review body shows a big spinner while a diff is still rendering', async ({
   await page.route('**/api/prs/5/diff', (r) => r.fulfill({ status: 202, json: { status: 'running', pr: { number: 5 } } }));
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/5');
-  // The percussive-maintenance mascot, with its parts present and animated.
-  await expect(page.locator('.loading-center .smasher')).toBeVisible();
-  await expect(page.locator('.smasher .smash-arm')).toBeAttached();
+  // A plain text status for a genuine server-side render — no animated mascot.
   await expect(page.locator('.loading-center')).toContainText('Rendering');
+  await expect(page.locator('.smasher')).toHaveCount(0);
 });
 
 test('deep link opens a specific resource diff', async ({ page }) => {

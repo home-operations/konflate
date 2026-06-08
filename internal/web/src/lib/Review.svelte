@@ -3,7 +3,6 @@
   import { store, currentPR, goList, adjacentPR } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
-  import Smasher from './Smasher.svelte';
   import Avatar from './Avatar.svelte';
   import {
     mdiArrowLeft,
@@ -101,15 +100,17 @@
         <p class="error-box">{store.diffError}</p>
       {:else if store.diff}
         <Diffs />
-      {:else if store.loadingSlow}
-        {#if pr?.status === 'pending'}
-          <div class="loading-center"><Icon path={mdiTrayFull} size={38} /><p>Queued — waiting to render…</p></div>
-        {:else}
-          <div class="loading-center"><Smasher size={130} /><p>Rendering the diff…</p></div>
-        {/if}
+      {:else if store.loading && (pr?.status === 'pending' || pr?.status === 'running')}
+        <!-- A genuine server-side render (not a quick fetch): a status message,
+             never a spinner — it can take a moment, and this isn't a fast-load
+             flash. -->
+        <div class="loading-center">
+          <Icon path={mdiTrayFull} size={38} />
+          <p>{pr?.status === 'pending' ? 'Queued — waiting to render…' : 'Rendering the diff…'}</p>
+        </div>
       {:else if store.loading}
-        <!-- Brief pre-spinner window: keep the pane blank so a fast load (an
-             already-rendered diff, or a reload) never flashes the spinner. -->
+        <!-- Fetching an already-rendered diff: keep the pane blank — it resolves
+             fast, so any loader would only flash. -->
       {:else}
         <p class="empty">No diff available.</p>
       {/if}

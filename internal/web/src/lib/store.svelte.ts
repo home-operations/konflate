@@ -26,7 +26,6 @@ interface Store {
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
   loading: boolean; // a diff fetch/render is in flight
-  loadingSlow: boolean; // …and has lasted long enough to show the spinner (anti-flash)
   connected: boolean;
 }
 
@@ -44,7 +43,6 @@ export const store: Store = $state({
   diffRefreshError: '',
   diffMergeCommand: '',
   loading: false,
-  loadingSlow: false,
   connected: false,
 });
 
@@ -283,29 +281,11 @@ export async function loadPRs(): Promise<void> {
   }
 }
 
-// The diff spinner only appears once a fetch/render has been in flight this
-// long, so an already-rendered diff (a PR switch, or a page reload) resolves
-// first and never flashes it.
-const SPINNER_DELAY_MS = 200;
-let slowTimer: ReturnType<typeof setTimeout> | undefined;
-
-// beginLoading marks a fetch in flight and arms the delayed spinner.
-function beginLoading(n: number): void {
-  store.loading = true;
-  store.loadingSlow = false;
-  clearTimeout(slowTimer);
-  slowTimer = setTimeout(() => {
-    if (store.loading && store.diffFor === n) store.loadingSlow = true;
-  }, SPINNER_DELAY_MS);
-}
-
 // settleLoading applies the loading state from a resolved fetch: a still-
-// rendering PR shows the spinner at once (we now know it's slow); a ready or
-// errored one clears it.
+// rendering PR keeps `loading` set (the review shows a text status message,
+// never a spinner); a ready or errored one clears it.
 function settleLoading(rendering: boolean): void {
-  clearTimeout(slowTimer);
   store.loading = rendering;
-  store.loadingSlow = rendering;
 }
 
 // ensureDiff loads PR n's diff if it isn't already the current one. Called by
@@ -316,7 +296,7 @@ export function ensureDiff(n: number): void {
   store.diff = null;
   store.diffError = '';
   store.diffMergeCommand = '';
-  beginLoading(n);
+  store.loading = true;
   void loadDiff(n);
 }
 

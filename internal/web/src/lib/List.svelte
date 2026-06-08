@@ -7,7 +7,6 @@
   import Avatar from './Avatar.svelte';
   import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
-  import Smasher from './Smasher.svelte';
   import {
     mdiAlertOctagon,
     mdiAlert,
@@ -250,7 +249,7 @@
   {/if}
 
   {#if !store.loaded}
-    <div class="loading-center"><Smasher size={130} /><p>Loading pull requests…</p></div>
+    <!-- Initial list load is fast; show nothing rather than flash a loader. -->
   {:else if shown.length === 0}
     {#if filterActive}
       <p class="empty">No pull requests match your filter.</p>
