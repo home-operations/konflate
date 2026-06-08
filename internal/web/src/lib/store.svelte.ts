@@ -6,7 +6,7 @@ import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from 
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = all).
-export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged';
+export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged' | 'clean' | 'images';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -92,7 +92,7 @@ export interface ParsedQuery {
 }
 
 const FACETS = ['status', 'author', 'base', 'label'];
-const STATUS_VALUES = ['danger', 'failed', 'rendering', 'merged', 'open'];
+const STATUS_VALUES = ['danger', 'failed', 'rendering', 'merged', 'open', 'clean', 'images'];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -151,6 +151,20 @@ export function filteredPRs(): PRStatus[] {
   return store.prs.filter((p) => matchesQuery(p, q));
 }
 
+// isClean reports a successfully-rendered open PR with no flagged risk — the
+// "nothing scary here" set a reviewer can scan (and often merge) fastest. It is
+// not a merge guarantee: a clean render can still carry config changes worth a
+// look, so it flags the absence of warnings, not safety.
+export function isClean(p: PRStatus): boolean {
+  return (
+    p.open &&
+    p.status === 'ready' &&
+    (p.signals?.danger ?? 0) === 0 &&
+    (p.signals?.caution ?? 0) === 0 &&
+    (p.signals?.failures ?? 0) === 0
+  );
+}
+
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
@@ -162,6 +176,10 @@ export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
       return p.status === 'pending' || p.status === 'running';
     case 'merged':
       return !p.open;
+    case 'clean':
+      return isClean(p);
+    case 'images':
+      return (p.signals?.images ?? 0) > 0;
     default:
       return true;
   }
