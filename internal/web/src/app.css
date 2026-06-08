@@ -203,9 +203,13 @@ a.repo:focus-visible .repo-ext {
   white-space: nowrap;
   color: var(--muted);
   font-size: 12px;
+  /* Match the header icon buttons' box exactly: their height is the 18px icon
+     plus 6px padding + 1px border (= 32px). A smaller clock icon keeps the pill
+     balanced, so line-height carries the content to the same 18px. */
+  line-height: 18px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 6px 10px;
 }
 .spin {
   animation: spin 0.8s linear infinite;
