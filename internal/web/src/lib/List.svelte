@@ -219,7 +219,7 @@
 
   {#if store.loaded && openAll.length}
     <div class="list-summary">
-      <span class="sum-pill"><strong>{summary.open}</strong> open</span>
+      {@render pill('open', summary.open, '', 'Show all open pull requests')}
       {#if showPill(summary.caution, 'caution')}
         {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
       {/if}

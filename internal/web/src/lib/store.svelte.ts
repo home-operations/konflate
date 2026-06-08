@@ -5,8 +5,9 @@
 import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from './types';
 import { router, navigate } from './router.svelte';
 
-// The status facets a summary pill can filter the list down to ('' = all).
-export type StatusFilter = '' | 'caution' | 'merged';
+// The status facets a summary pill can filter the list down to ('' = unfiltered;
+// 'open' narrows to just the open set, hiding the merged shelf).
+export type StatusFilter = '' | 'open' | 'caution' | 'merged';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -108,10 +109,9 @@ export function matchesQuery(p: PRStatus, q: ParsedQuery): boolean {
   for (const t of q.tokens) {
     switch (t.key) {
       case 'status': {
-        // Prefix-match the canonical names so "status:dang" works.
+        // Prefix-match the canonical names so "status:cau" works.
         const want = STATUS_VALUES.find((v) => v.startsWith(t.value));
-        if (!want || !matchesStatus(p, want === 'open' ? '' : (want as StatusFilter))) return false;
-        if (want === 'open' && !p.open) return false;
+        if (!want || !matchesStatus(p, want as StatusFilter)) return false;
         break;
       }
       case 'author':
@@ -150,6 +150,8 @@ export function filteredPRs(): PRStatus[] {
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
+    case 'open':
+      return p.open;
     case 'caution':
       return (p.signals?.caution ?? 0) > 0;
     case 'merged':

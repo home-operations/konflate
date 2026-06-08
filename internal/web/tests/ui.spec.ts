@@ -388,6 +388,26 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await expect(page.locator('.empty')).toContainText('match your filter');
 });
 
+test('the open pill filters back to all open and hides the merged shelf', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // From a caution-filtered view, the open pill returns the full open set.
+  await page.locator('.sum-pill', { hasText: 'caution' }).click();
+  await expect(page.locator('.card')).toHaveCount(1);
+
+  const open = page.locator('.sum-pill', { hasText: 'open' });
+  await open.click();
+  await expect(open).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.card')).toHaveCount(3); // all three open PRs
+  await expect(page.locator('.merged-cards')).toHaveCount(0); // merged shelf hidden
+
+  // Toggling it off returns to the unfiltered view.
+  await open.click();
+  await expect(open).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.card')).toHaveCount(3);
+});
+
 test('list sort: direction toggle, and changing field resets to its natural order', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
