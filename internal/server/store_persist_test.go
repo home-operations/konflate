@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -56,6 +58,44 @@ func TestStore_PersistsAcrossRestart(t *testing.T) {
 	s2.remove(1)
 	if _, ok := open().get(1); ok {
 		t.Fatal("a removed PR must not reload after a restart")
+	}
+}
+
+// TestStore_SkipsUnchangedWrites verifies the staleness backstop's identical
+// re-render is a no-op on disk: we delete the file behind the store's back, and
+// because the content digest is unchanged the store must not recreate it — only
+// a genuinely different diff rewrites.
+func TestStore_SkipsUnchangedWrites(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p, err := persist.New(dir, discardLog())
+	if err != nil {
+		t.Fatalf("persist.New: %v", err)
+	}
+	s := newStore()
+	s.loadFrom(p, discardLog())
+
+	s.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true})
+	s.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a"})
+
+	file := filepath.Join(dir, "1.json.zst")
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("first render should have written the file: %v", err)
+	}
+
+	// Delete it out from under the store; an identical re-render must NOT rewrite.
+	if err := os.Remove(file); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	s.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a"})
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatal("an identical re-render must not rewrite the file")
+	}
+
+	// A genuinely different diff is persisted again.
+	s.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a", Warnings: []api.Warning{{}}})
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("a changed diff should rewrite the file: %v", err)
 	}
 }
 

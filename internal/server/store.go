@@ -2,6 +2,8 @@ package server
 
 import (
 	"cmp"
+	"encoding/json"
+	"hash/fnv"
 	"log/slog"
 	"slices"
 	"sync"
@@ -31,6 +33,11 @@ type job struct {
 	// earlier diff is still shown; empty after a success. Lets the UI flag
 	// "couldn't refresh" without discarding the last-good diff.
 	refreshErr string
+	// savedDigest is the content hash (timestamps excluded) of what's currently
+	// on disk for this PR. The staleness backstop re-renders open PRs ~every
+	// interval even when nothing changed; comparing against this skips rewriting
+	// an identical multi-MB diff each time.
+	savedDigest uint64
 }
 
 // store is the in-memory, concurrency-safe record of every known PR and the
@@ -76,6 +83,7 @@ func (s *store) loadFrom(p *persist.Store, log *slog.Logger) {
 		if rec.Result != nil {
 			j.signals = computeSignals(rec.Result)
 		}
+		j.savedDigest = contentDigest(rec) // so an identical re-render after restart skips re-writing
 		s.jobs[rec.PR.Number] = j
 	}
 }
@@ -92,6 +100,19 @@ func (j *job) record() persist.Record {
 		ClosedAt:   j.closedAt,
 		RenderedAt: j.renderedAt,
 	}
+}
+
+// contentDigest hashes the parts of a record that define its persisted content,
+// excluding the volatile Updated/RenderedAt timestamps. Two renders of the same
+// PR that produce the same diff (the common staleness-backstop case) hash equal,
+// so the store can skip rewriting the file; a real change (diff moved, merged,
+// metadata edited) hashes differently and is persisted.
+func contentDigest(rec persist.Record) uint64 {
+	rec.Updated, rec.RenderedAt = time.Time{}, time.Time{}
+	b, _ := json.Marshal(rec) // Record is always marshalable
+	h := fnv.New64a()
+	_, _ = h.Write(b)
+	return h.Sum64()
 }
 
 // save / del run the persistence I/O. Callers snapshot under s.mu, release it,
@@ -171,9 +192,14 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	j.renderedAt = j.updated
 	sig := j.signals
 	rec := j.record()
+	d := contentDigest(rec)
+	changed := d != j.savedDigest
+	j.savedDigest = d
 	s.mu.Unlock()
 
-	s.save(rec) // durably record the freshly rendered diff
+	if changed {
+		s.save(rec) // only persist when the diff actually differs from what's on disk
+	}
 	return sig
 }
 
@@ -291,6 +317,7 @@ func (s *store) markClosed(number int, when time.Time) {
 	j.pr.Merged = true
 	j.updated = when
 	rec := j.record()
+	j.savedDigest = contentDigest(rec)
 	s.mu.Unlock()
 
 	s.save(rec) // re-record with the merge stamp so the shelf survives a restart

@@ -118,8 +118,8 @@ type Config struct {
 	// layers, git objects). Shared across diff jobs; persisted across restarts.
 	CacheDir string `env:"KONFLATE_CACHE_DIR"`
 
-	// StateDir is where konflate persists its rendered diffs (one gzipped JSON
-	// per PR) so the store survives restarts. Derived as <CacheDir>/state in
+	// StateDir is where konflate persists its rendered diffs (one zstd-compressed
+	// JSON per PR) so the store survives restarts. Derived as <CacheDir>/state in
 	// [Load] — it rides on the same volume as the source cache, so persistence is
 	// automatic once that volume is durable, and there is no separate knob. It
 	// sits beside flate's cache entries, which the cache GC leaves untouched.

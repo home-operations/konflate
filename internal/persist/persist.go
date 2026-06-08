@@ -1,17 +1,20 @@
 // Package persist gives konflate's in-memory PR store durability across
-// restarts: each PR's rendered diff is written to a gzipped JSON file under a
-// state directory (on the operator's persistent cache volume), and reloaded at
-// startup. Open PRs come back showing their last diff immediately and only
-// re-render if the head advanced; the recently-merged shelf survives at all
-// (it is never re-listed from the forge, so without this a restart empties it).
+// restarts: each PR's rendered diff is written to a zstd-compressed JSON file
+// under a state directory (on the operator's persistent cache volume), and
+// reloaded at startup. Open PRs come back showing their last diff immediately
+// and only re-render if the head advanced; the recently-merged shelf survives
+// at all (it is never re-listed from the forge, so without this a restart
+// empties it).
 //
-// One file per PR, named "<number>.json.gz". Writes are atomic (temp file +
+// One file per PR, named "<number>.json.zst". Writes are atomic (temp file +
 // rename) so a crash mid-write can't leave a torn record, and Load skips any
-// file it can't read rather than failing startup.
+// file it can't read rather than failing startup. zstd (over gzip) buys a
+// better ratio on the highlight-HTML payload and markedly faster decompression,
+// which is what dominates startup; klauspost/compress is already in the module
+// graph, so it costs nothing extra.
 package persist
 
 import (
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,14 +22,38 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/klauspost/compress/zstd"
 
 	"github.com/home-operations/konflate/internal/api"
 )
 
-const fileSuffix = ".json.gz"
+const fileSuffix = ".json.zst"
+
+// Package-level codec: zstd's EncodeAll/DecodeAll are safe for concurrent use,
+// so one shared encoder/decoder serves every Save/Load with no per-call stream
+// allocation. SpeedDefault already beats gzip on both ratio and speed here.
+var (
+	zEnc = func() *zstd.Encoder {
+		e, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
+		if err != nil {
+			panic("persist: zstd encoder: " + err.Error()) // only fails on a bad constant option
+		}
+		return e
+	}()
+	zDec = func() *zstd.Decoder {
+		d, err := zstd.NewReader(nil)
+		if err != nil {
+			panic("persist: zstd decoder: " + err.Error())
+		}
+		return d
+	}()
+)
 
 // Record is the durable snapshot of one PR's store entry. It mirrors the store's
 // internal job (minus derived fields like signals, recomputed from Result on
@@ -63,9 +90,16 @@ func (s *Store) path(number int) string {
 	return filepath.Join(s.dir, strconv.Itoa(number)+fileSuffix)
 }
 
-// Save writes rec atomically: the gzipped JSON goes to a temp file that is then
-// renamed over the PR's file, so a reader (or a crash) never sees a partial one.
+// Save writes rec atomically: the zstd-compressed JSON goes to a temp file that
+// is then renamed over the PR's file, so a reader (or a crash) never sees a
+// partial one.
 func (s *Store) Save(rec Record) error {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf("persist: encode: %w", err)
+	}
+	blob := zEnc.EncodeAll(data, nil)
+
 	tmp, err := os.CreateTemp(s.dir, strconv.Itoa(rec.PR.Number)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("persist: temp file: %w", err)
@@ -73,14 +107,9 @@ func (s *Store) Save(rec Record) error {
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }() // harmless no-op once the rename below succeeds
 
-	gz := gzip.NewWriter(tmp)
-	if err := json.NewEncoder(gz).Encode(rec); err != nil {
+	if _, err := tmp.Write(blob); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("persist: encode: %w", err)
-	}
-	if err := gz.Close(); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("persist: gzip: %w", err)
+		return fmt.Errorf("persist: write: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("persist: close temp: %w", err)
@@ -99,8 +128,10 @@ func (s *Store) Delete(number int) error {
 	return nil
 }
 
-// Load returns every readable Record in the directory. Unreadable or corrupt
-// files are logged and skipped — one bad file must not block startup.
+// Load returns every readable Record in the directory. Files are read and
+// decompressed concurrently (CPU-bound zstd, so it scales with cores) since a
+// keep-forever shelf can hold many; unreadable or corrupt files are logged and
+// skipped — one bad file must not block startup.
 func (s *Store) Load() []Record {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -109,34 +140,53 @@ func (s *Store) Load() []Record {
 		}
 		return nil
 	}
-	var recs []Record
+	var paths []string
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), fileSuffix) {
-			continue
+		if !e.IsDir() && strings.HasSuffix(e.Name(), fileSuffix) {
+			paths = append(paths, filepath.Join(s.dir, e.Name()))
 		}
-		rec, err := s.read(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			s.log.Warn("persist: skipping unreadable state file", "file", e.Name(), "error", err)
-			continue
-		}
-		recs = append(recs, rec)
 	}
-	return recs
+
+	recs := make([]Record, len(paths))
+	loaded := make([]bool, len(paths))
+	sem := make(chan struct{}, max(1, runtime.GOMAXPROCS(0)))
+	var wg sync.WaitGroup
+	for i, p := range paths {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			rec, err := s.read(p)
+			if err != nil {
+				s.log.Warn("persist: skipping unreadable state file", "file", filepath.Base(p), "error", err)
+				return
+			}
+			recs[i], loaded[i] = rec, true
+		}()
+	}
+	wg.Wait()
+
+	out := make([]Record, 0, len(paths))
+	for i := range recs {
+		if loaded[i] {
+			out = append(out, recs[i])
+		}
+	}
+	return out
 }
 
 func (s *Store) read(path string) (Record, error) {
-	f, err := os.Open(path)
+	blob, err := os.ReadFile(path)
 	if err != nil {
 		return Record{}, err
 	}
-	defer func() { _ = f.Close() }()
-	gz, err := gzip.NewReader(f)
+	data, err := zDec.DecodeAll(blob, nil)
 	if err != nil {
 		return Record{}, err
 	}
-	defer func() { _ = gz.Close() }()
 	var rec Record
-	if err := json.NewDecoder(gz).Decode(&rec); err != nil {
+	if err := json.Unmarshal(data, &rec); err != nil {
 		return Record{}, err
 	}
 	return rec, nil

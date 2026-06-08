@@ -90,9 +90,9 @@ func TestLoadSkipsCorrupt(t *testing.T) {
 	if err := p.Save(Record{PR: api.PR{Number: 1}, Status: api.JobReady}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	// A file with the right suffix but garbage (non-gzip) contents must be
+	// A file with the right suffix but garbage (non-zstd) contents must be
 	// skipped, not crash the load.
-	if err := os.WriteFile(filepath.Join(p.dir, "99"+fileSuffix), []byte("not gzip"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(p.dir, "99"+fileSuffix), []byte("not a zstd frame"), 0o644); err != nil {
 		t.Fatalf("write corrupt file: %v", err)
 	}
 	got := p.Load()
