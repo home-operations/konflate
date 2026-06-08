@@ -640,7 +640,8 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   // diffs, cautions & warnings, image changes.
   await expect(preview.locator('.pv-cmd')).toHaveText('gh pr merge 142 --repo acme/home-ops');
   await expect(preview).toContainText('Resource diffs');
-  await expect(preview).toContainText('Cautions & warnings');
+  await expect(preview).toContainText('Cautions');
+  await expect(preview).toContainText('Render failures');
   await expect(preview).toContainText('Image changes');
   await expect(preview.locator('.pv-caution')).toHaveCount(2);
   await expect(preview.locator('.pv-caution').first()).toContainText('StatefulSet default/postgres');

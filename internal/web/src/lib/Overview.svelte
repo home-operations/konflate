@@ -70,10 +70,10 @@
 
   {#if d.warnings?.length}
     <section class="ov-section">
-      <h3>Warnings</h3>
+      <h3>Cautions</h3>
       {#each d.warnings as w}
         {@const target = warningTarget(w.resource)}
-        <!-- Warnings whose resource rendered into the diff deep-link to it. -->
+        <!-- Cautions whose resource rendered into the diff deep-link to it. -->
         {#if target}
           <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
             {@render warningBody(w)}

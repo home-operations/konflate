@@ -163,9 +163,9 @@
 {/snippet}
 
 <!-- The inline row summary, lazy-loaded into store.previews. Read-only — the row
-     click still opens the full review. Ordered: copy, resource diffs, cautions &
-     warnings, image changes. The copy command rides on the list data, so it
-     shows immediately; the rest waits on the summary fetch. -->
+     click still opens the full review. Ordered: copy, resource diffs, cautions,
+     render failures, image changes. The copy command rides on the list data, so
+     it shows immediately; the rest waits on the summary fetch. -->
 {#snippet previewBody(pr: PRStatus)}
   {@const pv = store.previews[pr.number]}
   {#if pr.mergeCommand}
@@ -201,15 +201,23 @@
       </div>
     </div>
 
-    {#if pv.warnings?.length || pv.failures?.length}
+    {#if pv.warnings?.length}
       <div class="pv-group">
-        <span class="pv-label">Cautions &amp; warnings</span>
+        <span class="pv-label">Cautions</span>
         <ul class="pv-list">
-          {#each (pv.warnings ?? []).slice(0, 8) as w}
+          {#each pv.warnings.slice(0, 8) as w}
             <li class="pv-caution"><Icon path={mdiAlert} size={13} /> <span class="pv-res">{w.resource}</span> <span class="pv-detail">{w.detail}</span></li>
           {/each}
-          {#if (pv.warnings?.length ?? 0) > 8}<li class="pv-more">+{(pv.warnings?.length ?? 0) - 8} more cautions</li>{/if}
-          {#each pv.failures ?? [] as f}
+          {#if pv.warnings.length > 8}<li class="pv-more">+{pv.warnings.length - 8} more cautions</li>{/if}
+        </ul>
+      </div>
+    {/if}
+
+    {#if pv.failures?.length}
+      <div class="pv-group">
+        <span class="pv-label">Render failures</span>
+        <ul class="pv-list">
+          {#each pv.failures as f}
             <li class="pv-failure"><Icon path={mdiAlertCircleOutline} size={13} /> <span class="pv-res">{f.parent}</span> <span class="pv-detail">{f.message}</span></li>
           {/each}
         </ul>
