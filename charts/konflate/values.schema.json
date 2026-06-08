@@ -18,13 +18,13 @@
         },
         "closedPrMax": {
           "default": 25,
-          "description": "Cap on retained merged PRs (most-recent win); this count, not the age, bounds memory. 0 disables the cap.",
+          "description": "Cap on retained merged PRs (most-recent win); bounds disk + memory. 0 disables the cap (with `closedPrTtl: \"0\"`, merged diffs are kept forever).",
           "title": "closedPrMax",
           "type": "integer"
         },
         "closedPrTtl": {
           "default": "336h",
-          "description": "How long a merged PR is kept (Go duration); 0 disables the age cap. In-memory — a restart clears the shelf.",
+          "description": "How long a merged PR is kept (Go duration); 0 disables the age cap.",
           "title": "closedPrTtl",
           "type": "string"
         },
@@ -523,7 +523,7 @@
       "type": "object"
     },
     "persistence": {
-      "description": "Persist konflate's on-disk caches and the bare git mirror across restarts; with it disabled they live in an emptyDir and are rebuilt on each restart. Recommended for any non-trivial repo.",
+      "description": "Persist konflate's state across restarts: the flate source caches, the bare git mirror, and the rendered diffs themselves. With diffs persisted, open PRs reload showing their last render (re-rendering only if the head advanced) and the recently-merged shelf survives at all (see `config.closedPr*`). Disabled, everything lives in an emptyDir and is rebuilt or lost on each restart. Recommended for any non-trivial repo.",
       "properties": {
         "accessModes": {
           "description": "PVC access modes.",
@@ -546,7 +546,7 @@
         },
         "enabled": {
           "default": false,
-          "description": "Persist caches + the git mirror across restarts (recommended for any non-trivial repo).",
+          "description": "Persist caches, the git mirror, and rendered diffs across restarts: open PRs reload instantly and the merged shelf survives. Recommended for any non-trivial repo.",
           "title": "enabled",
           "type": "boolean"
         },

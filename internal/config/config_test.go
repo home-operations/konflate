@@ -192,3 +192,15 @@ func TestLoad_PRFilterExpr(t *testing.T) {
 		t.Fatal("Load with a malformed KONFLATE_PR_FILTER_EXPR should error")
 	}
 }
+
+func TestLoad_StateDir(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	t.Setenv("KONFLATE_CACHE_DIR", "/var/cache/konflate")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if want := "/var/cache/konflate/state"; cfg.StateDir != want {
+		t.Errorf("StateDir = %q, want %q (derived from CacheDir)", cfg.StateDir, want)
+	}
+}

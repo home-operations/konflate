@@ -22,6 +22,7 @@ import (
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
+	"github.com/home-operations/konflate/internal/persist"
 	"github.com/home-operations/konflate/internal/provider"
 )
 
@@ -60,9 +61,21 @@ type Server struct {
 func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *slog.Logger) *Server {
 	avatarKey := make([]byte, 32)
 	_, _ = rand.Read(avatarKey) // crypto/rand; signs the same-origin avatar-proxy URLs
+
+	// Durability: persist rendered diffs under the (operator-persisted) cache
+	// volume so the store — open PRs and the recently-merged shelf alike —
+	// survives a restart, and reload them now. Best-effort: if the state dir
+	// can't be created, log and run in-memory only (the prior behaviour).
+	st := newStore()
+	if p, err := persist.New(cfg.StateDir, log); err != nil {
+		log.Warn("diff persistence disabled", "dir", cfg.StateDir, "error", err)
+	} else {
+		st.loadFrom(p, log)
+	}
+
 	return &Server{
 		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
-		store: newStore(), hub: newHub(log), metrics: newMetrics(),
+		store: st, hub: newHub(log), metrics: newMetrics(),
 		avatarKey: avatarKey,
 		mergeTmpl: newMergeTemplate(cfg, log),
 	}

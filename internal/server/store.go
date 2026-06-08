@@ -2,11 +2,13 @@ package server
 
 import (
 	"cmp"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/persist"
 )
 
 // job is the stored state of one pull request's diff computation.
@@ -38,10 +40,79 @@ type store struct {
 	mu   sync.RWMutex
 	now  func() time.Time
 	jobs map[int]*job
+	// persist (nil = durability disabled) writes each rendered/merged job to disk
+	// and is reloaded at startup; log records its rare I/O failures. Both are set
+	// once by loadFrom before the server starts serving, then only read, so the
+	// save/del helpers may touch them after releasing s.mu.
+	persist *persist.Store
+	log     *slog.Logger
 }
 
 func newStore() *store {
 	return &store{now: time.Now, jobs: map[int]*job{}}
+}
+
+// loadFrom attaches a persistence store and restores the records it holds into
+// this (freshly built, empty) store. Records are restored verbatim; the next
+// refresh reconciles them against the forge — an open PR re-renders only if its
+// head advanced, a merged PR is dropped only once past retention. Signals are
+// recomputed from the diff rather than persisted. Call once, at startup.
+func (s *store) loadFrom(p *persist.Store, log *slog.Logger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.persist = p
+	s.log = log
+	for _, rec := range p.Load() {
+		j := &job{
+			pr:         rec.PR,
+			status:     rec.Status,
+			result:     rec.Result,
+			errMsg:     rec.ErrMsg,
+			refreshErr: rec.RefreshErr,
+			updated:    rec.Updated,
+			closedAt:   rec.ClosedAt,
+			renderedAt: rec.RenderedAt,
+		}
+		if rec.Result != nil {
+			j.signals = computeSignals(rec.Result)
+		}
+		s.jobs[rec.PR.Number] = j
+	}
+}
+
+// record snapshots a job into its durable form. Held under the store lock.
+func (j *job) record() persist.Record {
+	return persist.Record{
+		PR:         j.pr,
+		Status:     j.status,
+		Result:     j.result,
+		ErrMsg:     j.errMsg,
+		RefreshErr: j.refreshErr,
+		Updated:    j.updated,
+		ClosedAt:   j.closedAt,
+		RenderedAt: j.renderedAt,
+	}
+}
+
+// save / del run the persistence I/O. Callers snapshot under s.mu, release it,
+// then call these — the file write/remove never holds the store lock. No-ops
+// when durability is disabled.
+func (s *store) save(rec persist.Record) {
+	if s.persist == nil {
+		return
+	}
+	if err := s.persist.Save(rec); err != nil && s.log != nil {
+		s.log.Warn("persist render", "pr", rec.PR.Number, "error", err)
+	}
+}
+
+func (s *store) del(number int) {
+	if s.persist == nil {
+		return
+	}
+	if err := s.persist.Delete(number); err != nil && s.log != nil {
+		s.log.Warn("persist delete", "pr", number, "error", err)
+	}
 }
 
 // upsertPR records (or refreshes) a PR's metadata. A PR seen for the first time
@@ -85,9 +156,9 @@ func (s *store) setStatus(pr api.PR, status api.JobStatus) {
 // stored) so the caller can log them without recomputing.
 func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	j := s.jobs[number]
 	if j == nil || !j.closedAt.IsZero() {
+		s.mu.Unlock()
 		return nil
 	}
 	r := result
@@ -98,7 +169,12 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	j.refreshErr = ""
 	j.updated = s.now()
 	j.renderedAt = j.updated
-	return j.signals
+	sig := j.signals
+	rec := j.record()
+	s.mu.Unlock()
+
+	s.save(rec) // durably record the freshly rendered diff
+	return sig
 }
 
 // computeSignals reduces a diff to its at-a-glance counts for the PR list.
@@ -204,9 +280,9 @@ func staleJitter(prNumber int, interval time.Duration) time.Duration {
 // refreshes); unknown PRs are ignored.
 func (s *store) markClosed(number int, when time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	j := s.jobs[number]
 	if j == nil || !j.closedAt.IsZero() {
+		s.mu.Unlock()
 		return
 	}
 	j.closedAt = when
@@ -214,6 +290,10 @@ func (s *store) markClosed(number int, when time.Time) {
 	j.pr.Open = false
 	j.pr.Merged = true
 	j.updated = when
+	rec := j.record()
+	s.mu.Unlock()
+
+	s.save(rec) // re-record with the merge stamp so the shelf survives a restart
 }
 
 // remove drops a PR from the store entirely (used for abandoned PRs and by
@@ -221,8 +301,10 @@ func (s *store) markClosed(number int, when time.Time) {
 // setResult/setStatus find no job and no-op.
 func (s *store) remove(number int) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.jobs, number)
+	s.mu.Unlock()
+
+	s.del(number)
 }
 
 // pruneClosed enforces the retention bounds on the merged shelf and returns the
@@ -231,8 +313,6 @@ func (s *store) remove(number int) {
 // non-positive bound disables that dimension. Open PRs are never touched.
 func (s *store) pruneClosed(now time.Time, maxAge time.Duration, maxCount int) []int {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	closed := make([]*job, 0, len(s.jobs))
 	for _, j := range s.jobs {
 		if !j.closedAt.IsZero() {
@@ -249,6 +329,11 @@ func (s *store) pruneClosed(now time.Time, maxAge time.Duration, maxCount int) [
 			delete(s.jobs, j.pr.Number)
 			removed = append(removed, j.pr.Number)
 		}
+	}
+	s.mu.Unlock()
+
+	for _, n := range removed {
+		s.del(n) // evict the pruned PRs from disk too
 	}
 	return removed
 }
