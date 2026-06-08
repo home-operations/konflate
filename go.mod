@@ -15,7 +15,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.23.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.36.1
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
