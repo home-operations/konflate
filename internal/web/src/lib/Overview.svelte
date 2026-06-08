@@ -3,7 +3,7 @@
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlertOctagon, mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
+  import { mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
 
   const d = $derived(store.diff);
 
@@ -37,7 +37,7 @@
 
 {#snippet warningBody(w: { level: string; resource: string; detail: string })}
   <span class="warning-badge">
-    <Icon path={w.level === 'danger' ? mdiAlertOctagon : mdiAlert} size={12} />
+    <Icon path={mdiAlert} size={12} />
     {w.level}
   </span>
   <span class="warning-res">{w.resource}</span>

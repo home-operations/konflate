@@ -1,15 +1,14 @@
 <script lang="ts">
   import type { PRStatus } from './types';
-  import { store, filteredPRs, matchesStatus, sortPRs, openPR, isClean, type StatusFilter } from './store.svelte';
+  import { store, filteredPRs, matchesStatus, sortPRs, openPR, type StatusFilter } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import Icon from './Icon.svelte';
   import Spinner from './Spinner.svelte';
   import Avatar from './Avatar.svelte';
   import Copy from './Copy.svelte';
   import Footer from './Footer.svelte';
-  import Smasher from './Smasher.svelte';
+  import Breakable from './Breakable.svelte';
   import {
-    mdiAlertOctagon,
     mdiAlert,
     mdiPackageVariantClosed,
     mdiAlertCircleOutline,
@@ -45,11 +44,7 @@
   // also a toggle that filters the list down to that status.
   const summary = $derived.by(() => ({
     open: openAll.length,
-    clean: openAll.filter(isClean).length,
-    danger: openAll.filter((p) => (p.signals?.danger ?? 0) > 0).length,
-    failed: openAll.filter((p) => p.status === 'error').length,
-    images: openAll.filter((p) => (p.signals?.images ?? 0) > 0).length,
-    rendering: openAll.filter((p) => p.status === 'pending' || p.status === 'running').length,
+    caution: openAll.filter((p) => (p.signals?.caution ?? 0) > 0).length,
     merged: prs.length - openAll.length,
   }));
 
@@ -124,12 +119,12 @@
     <button
       class="card"
       class:merged={!pr.open}
-      class:danger={pr.open && (pr.signals?.danger ?? 0) > 0}
+      class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
       onclick={() => openPR(pr.number)}
     >
       <div class="card-top">
         <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
-        <span class="card-title">{pr.title}</span>
+        <span class="card-title"><Breakable text={pr.title} /></span>
       </div>
       <div class="card-meta">
         <span class="pr-id"><Icon path={mdiSourcePull} size={12} /> #{pr.number}</span>
@@ -142,13 +137,12 @@
         {/if}
         {#if !pr.open && pr.closedAt}
           <span class="ago" title={`Merged ${absolute(pr.closedAt)}`}><Icon path={mdiClockOutline} size={12} /> merged {timeAgo(pr.closedAt, clock.now)}</span>
-        {:else}
-          {#if pr.createdAt}
-            <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={12} /> opened {timeAgo(pr.createdAt, clock.now)}</span>
-          {/if}
-          {#if pr.updatedAt}
-            <span class="ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={12} /> {timeAgo(pr.updatedAt, clock.now)}</span>
-          {/if}
+        {:else if pr.createdAt}
+          <!-- Created date only — render freshness lives on the review screen, and
+               a failed refresh is flagged by the badge below. The clock icon labels
+               it (full "Opened …" date in the title), so the word would just crowd
+               the row (worst on mobile). -->
+          <span class="ago" title={`Opened ${absolute(pr.createdAt)}`}><Icon path={mdiClockOutline} size={12} /> {timeAgo(pr.createdAt, clock.now)}</span>
         {/if}
         {#if pr.labels?.length}
           <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{#if labelColor(l)}<span class="label-dot" style:background-color={labelColor(l)}></span>{/if}{l.name}</span>{/each}</span>
@@ -157,13 +151,7 @@
         {#if pr.signals}
           <span class="badges">
             {#if pr.refreshError}
-              <span class="badge caution" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
-            {/if}
-            {#if isClean(pr)}
-              <span class="badge ok" title="Rendered with no danger or caution warnings"><Icon path={mdiCheckCircleOutline} size={13} /> clean</span>
-            {/if}
-            {#if pr.signals.danger}
-              <span class="badge danger" title="danger warnings"><Icon path={mdiAlertOctagon} size={13} /> {pr.signals.danger}</span>
+              <span class="badge warn" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
             {/if}
             {#if pr.signals.caution}
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
@@ -203,7 +191,7 @@
       <Icon path={mdiFilterOutline} size={15} />
       <input
         class="pr-search"
-        placeholder="Filter pull requests… (try status:danger or author:renovate)"
+        placeholder="Filter pull requests… (try status:caution or author:renovate)"
         bind:value={store.query}
         aria-label="Filter pull requests"
       />
@@ -232,20 +220,8 @@
   {#if store.loaded && openAll.length}
     <div class="list-summary">
       <span class="sum-pill"><strong>{summary.open}</strong> open</span>
-      {#if showPill(summary.clean, 'clean')}
-        {@render pill('clean', summary.clean, 'ok', 'Only PRs rendered with no warnings')}
-      {/if}
-      {#if showPill(summary.danger, 'danger')}
-        {@render pill('danger', summary.danger, 'danger', 'Only PRs with danger warnings')}
-      {/if}
-      {#if showPill(summary.failed, 'failed')}
-        {@render pill('failed', summary.failed, 'danger', 'Only PRs whose render failed')}
-      {/if}
-      {#if showPill(summary.images, 'images')}
-        {@render pill('images', summary.images, '', 'Only PRs with image changes')}
-      {/if}
-      {#if showPill(summary.rendering, 'rendering')}
-        {@render pill('rendering', summary.rendering, '', 'Only PRs still rendering')}
+      {#if showPill(summary.caution, 'caution')}
+        {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
       {/if}
       {#if showPill(summary.merged, 'merged')}
         {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}
@@ -254,7 +230,7 @@
   {/if}
 
   {#if !store.loaded}
-    <div class="loading-center"><Smasher size={130} /><p>Loading pull requests…</p></div>
+    <!-- Initial list load is fast; show nothing rather than flash a loader. -->
   {:else if shown.length === 0}
     {#if filterActive}
       <p class="empty">No pull requests match your filter.</p>

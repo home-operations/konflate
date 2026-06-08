@@ -48,8 +48,9 @@ test('list → review → single-page flow', async ({ page }) => {
   // Author avatar renders when present; a PR without one falls back to the icon.
   await expect(card142.locator('img.avatar')).toBeVisible();
   await expect(page.locator('.card', { hasText: '#138' }).locator('img.avatar')).toHaveCount(0);
-  // PR age ("opened …") and a colored label dot.
-  await expect(card142.locator('.ago', { hasText: 'opened' })).toBeVisible();
+  // PR age: a clock icon + relative time (the full "Opened …" date is in the
+  // title, so the word itself is dropped), plus a colored label dot.
+  await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
   await expect(card142.locator('.label-dot')).toBeVisible();
 
   // Open a PR → the single-page review lands on the Summary (impact, warnings,
@@ -57,13 +58,13 @@ test('list → review → single-page flow', async ({ page }) => {
   await card142.click();
   await expect(page).toHaveURL(/#\/pr\/142$/);
   await expect(page.locator('.impact')).toContainText('resources');
-  await expect(page.locator('.warning.danger')).toContainText('StatefulSet');
+  await expect(page.locator('.warning.caution', { hasText: 'StatefulSet' })).toBeVisible();
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.failure')).toContainText('plex');
   // The tree: a Summary node (selected by default) + one leaf per changed
-  // resource. The danger warning surfaces a marker on the Summary node.
+  // resource. A caution surfaces a marker on the Summary node.
   await expect(page.locator('.tree .tree-summary')).toHaveClass(/selected/);
-  await expect(page.locator('.tree-summary .summary-danger')).toBeVisible();
+  await expect(page.locator('.tree-summary .summary-caution')).toBeVisible();
   await expect(page.locator('.tree .tree-item')).toHaveCount(3);
 
   // Click a resource → its diff renders in the same view (no tab switch) and the
@@ -84,12 +85,11 @@ test('landing health summary + non-default base branch tag', async ({ page }) =>
   await stubApi(page);
   await page.goto('/');
 
-  // One-line health summary over the open set: 3 open, #142 danger, #131 failed
-  // to render, #138 still rendering.
+  // One-line health summary over the open set: 3 open, #142 carrying cautions,
+  // plus the recently-merged shelf count.
   const summary = page.locator('.list-summary');
   await expect(summary).toContainText('3 open');
-  await expect(summary.locator('.sum-pill.danger')).toContainText(['1 danger', '1 failed']);
-  await expect(summary).toContainText('1 rendering');
+  await expect(summary.locator('.sum-pill.caution')).toContainText('1 caution');
   await expect(summary.locator('.sum-pill.merged')).toContainText('1 merged');
 
   // Most PRs target main, so only #138 (→ staging) is flagged with a base tag.
@@ -199,21 +199,22 @@ test('list shows a spinner for rendering PRs and a queued icon for pending', asy
   await expect(page.locator('.card', { hasText: 'waiting pr' })).toContainText('queued');
 });
 
-test('the PR list loading state shows the smasher, then the list arrives', async ({ page }) => {
+test('the PR list loads without a loading mascot, then the list arrives', async ({ page }) => {
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', async (r) => {
-    await new Promise((res) => setTimeout(res, 800)); // hold the list briefly
+    await new Promise((res) => setTimeout(res, 400)); // hold the list briefly
     await r.fulfill({ json: samplePRs });
   });
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/');
 
-  await expect(page.locator('.list-screen .smasher')).toBeVisible();
-  await expect(page.locator('.loading-center')).toContainText('Loading pull requests');
-  await expect(page.locator('.card')).toHaveCount(3); // and the data still lands
+  // No loading mascot flashes during the (held) load — the pane stays quiet…
+  await expect(page.locator('.smasher')).toHaveCount(0);
+  // …and the data still lands.
+  await expect(page.locator('.card')).toHaveCount(3);
 });
 
-test('review body shows a big spinner while a diff is still rendering', async ({ page }) => {
+test('review body shows a status message (not a spinner) while a diff renders', async ({ page }) => {
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', (r) =>
     r.fulfill({
@@ -227,10 +228,9 @@ test('review body shows a big spinner while a diff is still rendering', async ({
   await page.route('**/api/prs/5/diff', (r) => r.fulfill({ status: 202, json: { status: 'running', pr: { number: 5 } } }));
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/5');
-  // The percussive-maintenance mascot, with its parts present and animated.
-  await expect(page.locator('.loading-center .smasher')).toBeVisible();
-  await expect(page.locator('.smasher .smash-arm')).toBeAttached();
+  // A plain text status for a genuine server-side render — no animated mascot.
   await expect(page.locator('.loading-center')).toContainText('Rendering');
+  await expect(page.locator('.smasher')).toHaveCount(0);
 });
 
 test('deep link opens a specific resource diff', async ({ page }) => {
@@ -279,7 +279,7 @@ test('the filter understands facet tokens (status:/author:/base:/label:)', async
   await page.goto('/');
   const input = page.locator('.pr-search');
 
-  await input.fill('status:danger');
+  await input.fill('status:caution');
   await expect(page.locator('.card')).toHaveCount(1);
   await expect(page.locator('.card')).toContainText('#142');
 
@@ -308,10 +308,10 @@ test('Ctrl+K palette: search, keyboard nav, open, recents', async ({ page }) => 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('textbox')).toBeFocused();
 
-  // Risk floats first with no query: the danger PR leads the group.
+  // Risk floats first with no query: the riskiest PR (failures + cautions) leads.
   await expect(dialog.locator('.palette-row .row-title').first()).toContainText('rook-ceph');
   // Signal preview rides on the row.
-  await expect(dialog.locator('.palette-row').first().locator('.badge.danger').first()).toBeVisible();
+  await expect(dialog.locator('.palette-row').first().locator('.badge.caution').first()).toBeVisible();
 
   // Typing narrows (and highlights the match); Enter opens the active row.
   await dialog.getByRole('textbox').fill('plex');
@@ -366,20 +366,15 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await expect(ids.nth(0)).toContainText('#142');
   await expect(ids.nth(1)).toContainText('#138');
 
-  // The danger pill narrows to the one PR carrying danger warnings; clicking
-  // again clears it.
-  const danger = page.locator('.sum-pill', { hasText: 'danger' });
-  await danger.click();
-  await expect(danger).toHaveAttribute('aria-pressed', 'true');
+  // The caution pill narrows to the one PR carrying cautions; clicking again
+  // clears it.
+  const caution = page.locator('.sum-pill', { hasText: 'caution' });
+  await caution.click();
+  await expect(caution).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.card')).toHaveCount(1);
   await expect(page.locator('.card')).toContainText('#142');
-  await danger.click();
+  await caution.click();
   await expect(page.locator('.card')).toHaveCount(3);
-
-  // failed → the render-error PR.
-  await page.locator('.sum-pill', { hasText: 'failed' }).click();
-  await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card')).toContainText('#131');
 
   // merged → only the merged shelf, auto-expanded; counts stay visible.
   await page.locator('.sum-pill', { hasText: 'merged' }).click();
@@ -641,15 +636,15 @@ test('a warning deep-links to the flagged resource diff', async ({ page }) => {
   await stubApi(page);
   await page.goto('/#/pr/142');
 
-  // The danger warning's resource rendered into the diff → it's a button that
-  // jumps straight to that diff.
-  await page.locator('.warning.danger').click();
+  // The caution's resource rendered into the diff → it's a button that jumps
+  // straight to that diff.
+  await page.locator('.warning-link.caution').click();
   await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
   await expect(page.locator('[data-sel="r2"] .res-title')).toContainText('StatefulSet default/postgres');
 
-  // The warning also rides along in that resource's sticky header (the global
-  // danger strip scrolls away in the stacked view); clean resources carry none.
-  const headerBadge = page.locator('[data-sel="r2"] .res-header .badge.danger');
+  // The caution also rides along in that resource's sticky header (the global
+  // caution strip scrolls away in the stacked view); clean resources carry none.
+  const headerBadge = page.locator('[data-sel="r2"] .res-header .badge.caution');
   await expect(headerBadge).toBeVisible();
   await expect(headerBadge).toHaveAttribute('title', /PersistentVolumeClaims/);
   await expect(page.locator('[data-sel="r0"] .res-header .badge')).toHaveCount(0);
@@ -675,12 +670,12 @@ test('zero counts stay neutral (impact pills) and hidden (diff header)', async (
   await expect(page.locator('[data-sel="r2"] .res-counts .add')).toHaveCount(0);
 });
 
-test('an open PR with danger warnings carries a red card edge', async ({ page }) => {
+test('an open PR with cautions carries a red card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
-  // #142 carries a danger signal; #138 doesn't. The merged #128 never does.
-  await expect(page.locator('.card', { hasText: '#142' })).toHaveClass(/danger/);
-  await expect(page.locator('.card', { hasText: '#138' })).not.toHaveClass(/danger/);
+  // #142 carries a caution signal; #138 doesn't. The merged #128 never does.
+  await expect(page.locator('.card', { hasText: '#142' })).toHaveClass(/caution/);
+  await expect(page.locator('.card', { hasText: '#138' })).not.toHaveClass(/caution/);
 });
 
 test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter', async ({ page }) => {

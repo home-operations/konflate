@@ -15,10 +15,11 @@
   --del-bg: #fdeeec;
   --del-bar: #cf222e;
   --danger: #cf222e;
-  --caution: #9a6700;
+  --caution: #cf222e; /* the sole lint severity — red */
+  --warn: #9a6700; /* amber accent: changed-status pill, the "showing last render" notice, truncation */
   --ok: #1a7f37;
   --merged: #8250df;
-  --caution-bg: #fff8c5;
+  --warn-bg: #fff8c5;
 }
 .dark {
   --bg: #0b0e14;
@@ -33,10 +34,11 @@
   --del-bg: #221015;
   --del-bar: #f85149;
   --danger: #f85149;
-  --caution: #d29922;
+  --caution: #f85149; /* the sole lint severity — red */
+  --warn: #d29922; /* amber accent: changed-status pill, the "showing last render" notice, truncation */
   --ok: #3fb950;
   --merged: #a371f7;
-  --caution-bg: #272115;
+  --warn-bg: #272115;
 }
 
 /* Font families: UI/prose in Geist (sans), code + identifiers in Geist Mono.
@@ -219,87 +221,6 @@ a.repo:focus-visible .repo-ext {
   transform-origin: center;
   animation: spin 1.8s linear infinite;
 }
-/* ---- loading smasher --------------------------------------------------
-   Percussive maintenance while something loads: wind-up (0–35%), swing
-   (35–48%), impact at 48% (sparks + wheel jolt + crack), recover. */
-.smash-arm {
-  transform-origin: 90px 38px;
-  animation: smash-swing 1.3s ease-in-out infinite;
-}
-@keyframes smash-swing {
-  0%,
-  30% {
-    transform: rotate(70deg);
-  }
-  35% {
-    transform: rotate(78deg); /* little wind-up before the blow */
-  }
-  48%,
-  62% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(70deg);
-  }
-}
-.smash-wheel {
-  transform-origin: 30px 80px; /* rocks on its contact point with the ground */
-  animation: smash-jolt 1.3s linear infinite;
-}
-@keyframes smash-jolt {
-  0%,
-  47% {
-    transform: none;
-  }
-  50% {
-    transform: translate(-1.5px, 1px) rotate(-3deg);
-  }
-  54% {
-    transform: translate(1px, 0) rotate(2deg);
-  }
-  58% {
-    transform: translate(-0.5px, 0.5px) rotate(-1deg);
-  }
-  62%,
-  100% {
-    transform: none;
-  }
-}
-.smash-sparks {
-  opacity: 0;
-  animation: smash-flash 1.3s linear infinite;
-}
-.spark-tint {
-  stroke: var(--caution);
-}
-.smash-crack {
-  stroke: var(--panel); /* a crack through the solid logo fill */
-}
-@keyframes smash-flash {
-  0%,
-  46% {
-    opacity: 0;
-  }
-  48%,
-  60% {
-    opacity: 1;
-  }
-  70%,
-  100% {
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .smash-arm,
-  .smash-wheel,
-  .smash-sparks {
-    animation: none;
-  }
-  .smash-sparks {
-    opacity: 1; /* the static frame still reads as the impact */
-  }
-}
-
 /* Big centred render/queued state in the review body. */
 .loading-center {
   display: flex;
@@ -311,8 +232,6 @@ a.repo:focus-visible .repo-ext {
   color: var(--muted);
   font-size: 14px;
 }
-.loading-center .kspin,
-.loading-center .smasher,
 .loading-center .icon {
   color: var(--accent);
 }
@@ -565,10 +484,10 @@ a.repo:focus-visible .repo-ext {
 .card:hover {
   border-color: var(--accent);
 }
-/* Cards carrying danger warnings show a red edge. Inset shadow, not a
+/* Cards carrying cautions show a red edge. Inset shadow, not a
    border, so layout is stable. */
-.card.danger {
-  box-shadow: inset 3px 0 0 var(--danger);
+.card.caution {
+  box-shadow: inset 3px 0 0 var(--caution);
 }
 /* Recently-merged cards are reference, not action — de-emphasized via a muted
    title (whole-card opacity would push the meta text below AA contrast). */
@@ -691,8 +610,8 @@ a.repo:focus-visible .repo-ext {
   color: var(--text);
   font-weight: 600;
 }
-/* The danger/failed/rendering/merged pills are buttons that filter the list to
-   that status; the active one fills with its own tint. */
+/* The caution/merged pills are buttons that filter the list to that status;
+   the active one fills with its own tint. */
 button.sum-pill {
   font: inherit;
   font-size: 12px;
@@ -708,13 +627,13 @@ button.sum-pill:hover {
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
   color: color-mix(in srgb, var(--accent) 75%, var(--text));
 }
-.sum-pill.danger.active {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
-  color: color-mix(in srgb, var(--danger) 75%, var(--text));
+.sum-pill.caution.active {
+  border-color: var(--caution);
+  background: color-mix(in srgb, var(--caution) 12%, var(--panel));
+  color: color-mix(in srgb, var(--caution) 75%, var(--text));
 }
-.sum-pill.danger:hover {
-  border-color: var(--danger);
+.sum-pill.caution:hover {
+  border-color: var(--caution);
 }
 .sum-pill.merged.active {
   border-color: var(--merged);
@@ -724,12 +643,12 @@ button.sum-pill:hover {
 .sum-pill.merged:hover {
   border-color: var(--merged);
 }
-.sum-pill.danger {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+.sum-pill.caution {
+  color: var(--caution);
+  border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
 }
-.sum-pill.danger strong {
-  color: var(--danger);
+.sum-pill.caution strong {
+  color: var(--caution);
 }
 .sum-pill.merged {
   color: var(--merged);
@@ -737,21 +656,6 @@ button.sum-pill:hover {
 }
 .sum-pill.merged strong {
   color: var(--merged);
-}
-.sum-pill.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
-}
-.sum-pill.ok strong {
-  color: var(--ok);
-}
-.sum-pill.ok.active {
-  border-color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 12%, var(--panel));
-  color: color-mix(in srgb, var(--ok) 75%, var(--text));
-}
-.sum-pill.ok:hover {
-  border-color: var(--ok);
 }
 .badges {
   display: flex;
@@ -777,13 +681,15 @@ button.sum-pill:hover {
   color: var(--caution);
   border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
 }
+/* The stale-render badge ("showing the last render") is a soft amber notice,
+   not a caution — it shares the amber accent, not the red lint severity. */
+.badge.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
 .badge.muted {
   color: var(--muted);
   font-weight: 400;
-}
-.badge.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
 }
 .card-status {
   display: inline-flex;
@@ -932,11 +838,11 @@ button.sum-pill:hover {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: var(--caution-bg);
-  color: var(--caution);
+  background: var(--warn-bg);
+  color: var(--warn);
   font-size: 13px;
   font-weight: 600;
-  border-bottom: 1px solid color-mix(in srgb, var(--caution) 30%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
 /* The optional "copy to merge" command: a quiet bar below the status strips
    (it's a convenience, not a status), with the command in a monospace chip. */
@@ -1010,11 +916,12 @@ button.sum-pill:hover {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
   background: color-mix(in srgb, var(--danger) 10%, var(--panel));
 }
-/* Truncation pill: the diff was capped, so flag it in the caution color. */
+/* Truncation pill: the diff was capped — a soft "heads up, incomplete" in the
+   amber accent, not the red lint severity. */
 .impact-pill.trunc {
-  color: var(--caution);
-  border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
-  background: color-mix(in srgb, var(--caution) 10%, var(--panel));
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, var(--panel));
 }
 /* Overview sections sit flat on the pane — headed lists, not boxed cards. */
 .ov-section {
@@ -1056,16 +963,9 @@ button.sum-pill:hover {
 .warning:last-child {
   margin-bottom: 0;
 }
-.warning.danger {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-}
 .warning.caution {
   border-color: color-mix(in srgb, var(--caution) 35%, var(--border));
   background: color-mix(in srgb, var(--caution) 8%, transparent);
-}
-.warning-link.danger:hover {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 .warning-link.caution:hover {
   background: color-mix(in srgb, var(--caution) 14%, transparent);
@@ -1080,9 +980,6 @@ button.sum-pill:hover {
   text-transform: uppercase;
   border-radius: 4px;
   padding: 1px 6px;
-}
-.warning.danger .warning-badge {
-  color: var(--danger);
 }
 .warning.caution .warning-badge {
   color: var(--caution);
@@ -1284,9 +1181,9 @@ button.sum-pill:hover {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   box-shadow: inset 2px 0 0 var(--accent); /* selected ≠ hover, even in dark */
 }
-.summary-danger {
+.summary-caution {
   display: inline-flex;
-  color: var(--danger);
+  color: var(--caution);
 }
 .tree-parent {
   margin-top: 10px;
@@ -1396,8 +1293,8 @@ button.sum-pill:hover {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
 .res-status.status-changed {
-  color: var(--caution);
-  border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
 }
 .res-counts {
   white-space: nowrap;
@@ -1427,14 +1324,8 @@ button.sum-pill:hover {
   color: var(--panel); /* white fails 4.5:1 on the dark theme's lighter accent */
   font-weight: 600;
 }
-/* The per-resource warning badge rides in the sticky header — tinted so the
+/* The per-resource caution badge rides in the sticky header — tinted so the
    flagged resource reads as flagged even with the Summary scrolled away. */
-.res-header .badge.danger {
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-}
 .res-header .badge.caution {
   background: color-mix(in srgb, var(--caution) 10%, transparent);
   text-transform: uppercase;

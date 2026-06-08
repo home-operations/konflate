@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -49,6 +50,13 @@ func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 		Version:                s.Version,
 		RefreshIntervalSeconds: int(s.cfg.RefreshInterval.Seconds()),
 	})
+}
+
+func init() {
+	// Go's built-in MIME table has no .webmanifest entry, so the embedded PWA
+	// manifest would be served with a sniffed type. Register the conventional
+	// one (browsers tolerate others but warn).
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 }
 
 // uiHandler serves the embedded UI with cache headers tuned for content-hashed

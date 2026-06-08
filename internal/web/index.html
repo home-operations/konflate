@@ -6,6 +6,16 @@
     <meta name="color-scheme" content="light dark" />
     <title>konflate</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Installable PWA: the manifest + icons drive Android/desktop install; the
+         apple-* tags + apple-touch-icon drive iOS "Add to Home Screen" (Safari
+         ignores the manifest's icons and display mode). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0b0e14" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="konflate" />
   </head>
   <body>
     <div id="app"></div>

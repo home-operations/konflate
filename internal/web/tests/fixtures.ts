@@ -29,7 +29,7 @@ export const samplePRs: PRStatus[] = [
     url: 'https://github.com/acme/home-ops/pull/142',
     status: 'ready',
     updatedAt: '2026-06-04T12:00:00Z',
-    signals: { resources: 3, danger: 1, caution: 1, images: 1, failures: 1 },
+    signals: { resources: 3, caution: 2, images: 1, failures: 1 },
     mergeCommand: 'gh pr merge 142 --repo acme/home-ops',
   },
   {
@@ -84,7 +84,7 @@ export const samplePRs: PRStatus[] = [
     status: 'ready',
     updatedAt: '2026-06-02T09:00:00Z',
     closedAt: '2026-06-02T09:05:00Z',
-    signals: { resources: 5, danger: 0, caution: 0, images: 2, failures: 0 },
+    signals: { resources: 5, caution: 0, images: 2, failures: 0 },
   },
 ];
 
@@ -113,7 +113,7 @@ export const sampleDiff: DiffResult = {
   ],
   warnings: [
     {
-      level: 'danger',
+      level: 'caution',
       rule: 'removed-statefulset',
       resource: 'StatefulSet default/postgres',
       detail: 'removed StatefulSet — its PersistentVolumeClaims and data may be deleted',

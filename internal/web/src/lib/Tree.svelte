@@ -2,16 +2,16 @@
   import { router } from './router.svelte';
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
-  import { mdiAlertOctagon, mdiFileDocumentOutline } from './icons';
+  import { mdiAlert, mdiFileDocumentOutline } from './icons';
 
   // d can briefly be null while a new diff loads — every use below tolerates it.
   const d = $derived(store.diff);
   // A null selection (bare #/pr/N) defaults to the Summary node.
   const sel = $derived(router.route.name === 'review' ? (router.route.sel ?? 'summary') : null);
-  // Resource titles ("Kind ns/name") carrying a danger warning, and the total
-  // danger count — both from the shared diff index (computed once per diff).
-  const dangerLabels = $derived(diffIndex().dangerResources);
-  const dangerCount = $derived(diffIndex().dangerCount);
+  // Resource titles ("Kind ns/name") carrying a caution, and the total caution
+  // count — both from the shared diff index (computed once per diff).
+  const cautionLabels = $derived(diffIndex().cautionResources);
+  const cautionCount = $derived(diffIndex().cautionCount);
 
   function open(id: string) {
     if (router.route.name === 'review') openSel(router.route.pr, id);
@@ -27,8 +27,8 @@
   >
     <Icon path={mdiFileDocumentOutline} size={14} />
     <span class="leaf-name">Summary</span>
-    {#if dangerCount}
-      <span class="summary-danger"><Icon path={mdiAlertOctagon} size={13} label="has danger warnings" /></span>
+    {#if cautionCount}
+      <span class="summary-caution"><Icon path={mdiAlert} size={13} label="has cautions" /></span>
     {/if}
   </button>
 
@@ -45,8 +45,8 @@
             onclick={() => open(item.id)}
           >
             <span class="leaf-name">{item.name}</span>
-            {#if dangerLabels.has(`${kind.kind} ${item.name}`)}
-              <Icon path={mdiAlertOctagon} size={13} label="has a danger warning" />
+            {#if cautionLabels.has(`${kind.kind} ${item.name}`)}
+              <Icon path={mdiAlert} size={13} label="has a caution" />
             {/if}
             <span class="leaf-counts">
               {#if item.add}<span class="add">+{item.add}</span>{/if}

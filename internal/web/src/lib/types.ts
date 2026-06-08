@@ -27,8 +27,7 @@ export interface PR {
 
 export interface Signals {
   resources: number;
-  danger: number;
-  caution: number;
+  caution: number; // caution warnings (the sole severity)
   images: number;
   failures: number;
 }
@@ -69,7 +68,7 @@ export interface RenderFailure {
 }
 
 export interface Warning {
-  level: 'danger' | 'caution';
+  level: 'caution'; // the sole severity
   rule: string;
   resource: string;
   detail: string;

@@ -39,7 +39,7 @@
   import { diffIndex } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlertOctagon, mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import { mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
   // `active` gates the heavy diff table: when false (the section is parked
   // off-screen — see Diffs.svelte's lazy-mount) the sticky header still renders
@@ -48,12 +48,10 @@
   // so any other caller renders fully.
   let { resource, active = true }: { resource: DiffResource; active?: boolean } = $props();
 
-  // This resource's lint warnings, shown in its sticky header — in the stacked
-  // scroll the global danger strip scrolls away, so the warning rides along
+  // This resource's lint cautions, shown in its sticky header — in the stacked
+  // scroll the global caution strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
-  const warns = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
-  const dangers = $derived(warns.filter((w) => w.level === 'danger'));
-  const cautions = $derived(warns.filter((w) => w.level !== 'danger'));
+  const cautions = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
@@ -86,11 +84,6 @@
        server's structured fields (title is exactly "kind name"). -->
   <span class="res-title"><span class="res-kind">{resource.kind}</span> {resource.name}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  {#if dangers.length}
-    <span class="badge danger" title={detail(dangers)}>
-      <Icon path={mdiAlertOctagon} size={13} /> danger{dangers.length > 1 ? ` ${dangers.length}` : ''}
-    </span>
-  {/if}
   {#if cautions.length}
     <span class="badge caution" title={detail(cautions)}>
       <Icon path={mdiAlert} size={13} /> caution{cautions.length > 1 ? ` ${cautions.length}` : ''}

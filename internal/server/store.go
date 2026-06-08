@@ -103,20 +103,12 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 
 // computeSignals reduces a diff to its at-a-glance counts for the PR list.
 func computeSignals(d *api.DiffResult) *api.Signals {
-	s := &api.Signals{
+	return &api.Signals{
 		Resources: len(d.Resources),
+		Caution:   len(d.Warnings), // every warning is a caution (the sole severity)
 		Images:    len(d.Images),
 		Failures:  len(d.Failures),
 	}
-	for _, w := range d.Warnings {
-		switch w.Level {
-		case api.LevelDanger:
-			s.Danger++
-		case api.LevelCaution:
-			s.Caution++
-		}
-	}
-	return s
 }
 
 // failRender records a render failure. If the PR still has a previously rendered

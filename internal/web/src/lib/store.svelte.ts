@@ -6,7 +6,7 @@ import type { DiffEnvelope, DiffResult, Meta, PRStatus, Warning, WSEvent } from 
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = all).
-export type StatusFilter = '' | 'danger' | 'failed' | 'rendering' | 'merged' | 'clean' | 'images';
+export type StatusFilter = '' | 'caution' | 'merged';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -26,7 +26,6 @@ interface Store {
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
   loading: boolean; // a diff fetch/render is in flight
-  loadingSlow: boolean; // …and has lasted long enough to show the spinner (anti-flash)
   connected: boolean;
 }
 
@@ -44,7 +43,6 @@ export const store: Store = $state({
   diffRefreshError: '',
   diffMergeCommand: '',
   loading: false,
-  loadingSlow: false,
   connected: false,
 });
 
@@ -57,22 +55,20 @@ export const store: Store = $state({
 // exporting a derived directly, so callers read it through diffIndex().
 const diffIndexState = $derived.by(() => {
   const warningsByResource = new Map<string, Warning[]>();
-  const dangerResources = new Set<string>(); // resource titles carrying a danger
-  let dangerCount = 0; // total danger warnings (a resource may have several)
+  const cautionResources = new Set<string>(); // resource titles carrying a caution
+  let cautionCount = 0; // total cautions (a resource may have several)
   for (const w of store.diff?.warnings ?? []) {
     let list = warningsByResource.get(w.resource);
     if (!list) warningsByResource.set(w.resource, (list = []));
     list.push(w);
-    if (w.level === 'danger') {
-      dangerResources.add(w.resource);
-      dangerCount++;
-    }
+    cautionResources.add(w.resource);
+    cautionCount++;
   }
   // Resource id keyed by its "Kind ns/name" title, so a warning can deep-link to
   // the diff it flags without a linear find.
   const idByTitle = new Map<string, string>();
   for (const r of store.diff?.resources ?? []) idByTitle.set(r.title, r.id);
-  return { warningsByResource, dangerResources, dangerCount, idByTitle };
+  return { warningsByResource, cautionResources, cautionCount, idByTitle };
 });
 
 // diffIndex exposes the shared diff lookups (see diffIndexState). Read it inside
@@ -83,7 +79,7 @@ export function diffIndex() {
 
 // ---- query grammar ----------------------------------------------------
 // A query is free text plus optional facet tokens, AND-ed together:
-//   "plex status:danger author:renovate base:main label:storage"
+//   "plex status:caution author:renovate base:main label:storage"
 // The same grammar drives the inline filter and the command palette.
 
 export interface ParsedQuery {
@@ -92,7 +88,7 @@ export interface ParsedQuery {
 }
 
 const FACETS = ['status', 'author', 'base', 'label'];
-const STATUS_VALUES = ['danger', 'failed', 'rendering', 'merged', 'open', 'clean', 'images'];
+const STATUS_VALUES = ['caution', 'merged', 'open'];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -151,35 +147,13 @@ export function filteredPRs(): PRStatus[] {
   return store.prs.filter((p) => matchesQuery(p, q));
 }
 
-// isClean reports a successfully-rendered open PR with no flagged risk — the
-// "nothing scary here" set a reviewer can scan (and often merge) fastest. It is
-// not a merge guarantee: a clean render can still carry config changes worth a
-// look, so it flags the absence of warnings, not safety.
-export function isClean(p: PRStatus): boolean {
-  return (
-    p.open &&
-    p.status === 'ready' &&
-    (p.signals?.danger ?? 0) === 0 &&
-    (p.signals?.caution ?? 0) === 0 &&
-    (p.signals?.failures ?? 0) === 0
-  );
-}
-
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
-    case 'danger':
-      return (p.signals?.danger ?? 0) > 0;
-    case 'failed':
-      return p.status === 'error';
-    case 'rendering':
-      return p.status === 'pending' || p.status === 'running';
+    case 'caution':
+      return (p.signals?.caution ?? 0) > 0;
     case 'merged':
       return !p.open;
-    case 'clean':
-      return isClean(p);
-    case 'images':
-      return (p.signals?.images ?? 0) > 0;
     default:
       return true;
   }
@@ -283,29 +257,11 @@ export async function loadPRs(): Promise<void> {
   }
 }
 
-// The diff spinner only appears once a fetch/render has been in flight this
-// long, so an already-rendered diff (a PR switch, or a page reload) resolves
-// first and never flashes it.
-const SPINNER_DELAY_MS = 200;
-let slowTimer: ReturnType<typeof setTimeout> | undefined;
-
-// beginLoading marks a fetch in flight and arms the delayed spinner.
-function beginLoading(n: number): void {
-  store.loading = true;
-  store.loadingSlow = false;
-  clearTimeout(slowTimer);
-  slowTimer = setTimeout(() => {
-    if (store.loading && store.diffFor === n) store.loadingSlow = true;
-  }, SPINNER_DELAY_MS);
-}
-
 // settleLoading applies the loading state from a resolved fetch: a still-
-// rendering PR shows the spinner at once (we now know it's slow); a ready or
-// errored one clears it.
+// rendering PR keeps `loading` set (the review shows a text status message,
+// never a spinner); a ready or errored one clears it.
 function settleLoading(rendering: boolean): void {
-  clearTimeout(slowTimer);
   store.loading = rendering;
-  store.loadingSlow = rendering;
 }
 
 // ensureDiff loads PR n's diff if it isn't already the current one. Called by
@@ -316,7 +272,7 @@ export function ensureDiff(n: number): void {
   store.diff = null;
   store.diffError = '';
   store.diffMergeCommand = '';
-  beginLoading(n);
+  store.loading = true;
   void loadDiff(n);
 }
 
