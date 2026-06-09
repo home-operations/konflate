@@ -224,6 +224,75 @@ func TestServer_PRFilterExpr(t *testing.T) {
 	}
 }
 
+// TestServer_CheckFilterCatchesFieldTypo verifies the startup smoke-test: an
+// expression that references a field by the wrong name compiles (pr is a dynamic
+// map, so CEL can't catch it) but checkFilter rejects it, turning a runtime
+// "hide every PR" into a fail-fast startup error. A well-formed filter passes.
+func TestServer_CheckFilterCatchesFieldTypo(t *testing.T) {
+	t.Parallel()
+	typo, err := prfilter.Compile(`!pr.isDraft`) // real field is pr.draft
+	if err != nil {
+		t.Fatalf("the typo should compile (caught only at eval); got %v", err)
+	}
+	cfg := ghCfg("")
+	cfg.PRFilter = typo
+	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+	if err := s.checkFilter(); err == nil {
+		t.Fatal("checkFilter must reject a filter referencing a nonexistent field")
+	}
+
+	good, err := prfilter.Compile(`!pr.draft && pr.baseRef == "main"`)
+	if err != nil {
+		t.Fatalf("compile good filter: %v", err)
+	}
+	s.cfg.PRFilter = good
+	if err := s.checkFilter(); err != nil {
+		t.Fatalf("checkFilter on a valid filter: %v", err)
+	}
+}
+
+// TestServer_DropFilteredOnLoadKeepsOnEvalError verifies a filter evaluation
+// error never deletes persisted state: a typo'd expression would otherwise wipe
+// the recently-merged shelf on restart. A cleanly-excluded PR is still dropped.
+func TestServer_DropFilteredOnLoadKeepsOnEvalError(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("")
+	typo, err := prfilter.Compile(`pr.isMerged`) // real field is pr.merged
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	cfg.PRFilter = typo
+	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+
+	// A merged PR on the shelf with a rendered diff — exactly what a filter typo
+	// must not destroy.
+	s.store.upsertPR(api.PR{Number: 5, Merged: true}, false)
+	s.store.setResult(5, api.DiffResult{PRNumber: 5})
+	s.store.markClosed(5, s.store.now())
+
+	s.dropFilteredOnLoad()
+	if _, ok := s.store.get(5); !ok {
+		t.Fatal("a filter eval error deleted persisted state; PR 5 must be kept")
+	}
+
+	// A clean exclusion still drops (the function's original job): pr.merged
+	// evaluates fine and excludes a non-merged PR.
+	good, err := prfilter.Compile(`pr.merged`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	s.cfg.PRFilter = good
+	s.store.upsertPR(api.PR{Number: 6, Open: true}, false)
+	s.store.setResult(6, api.DiffResult{PRNumber: 6})
+	s.dropFilteredOnLoad()
+	if _, ok := s.store.get(6); ok {
+		t.Fatal("a cleanly-excluded PR should be dropped on load")
+	}
+	if _, ok := s.store.get(5); !ok {
+		t.Fatal("PR 5 (merged, matches pr.merged) must still be kept")
+	}
+}
+
 func TestServer_RenderForkPRs(t *testing.T) {
 	t.Parallel()
 	fork := api.PR{Number: 7, Title: "fork PR", HeadRef: "patch", BaseRef: "main", HeadSHA: "s7", Open: true, Fork: true}

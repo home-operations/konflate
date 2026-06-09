@@ -67,11 +67,18 @@ func run() error {
 	srv := server.New(cfg, prov, engine.New(cfg), web.FS(), logger)
 	srv.Version = version // surfaced at /api/meta for the UI footer
 
-	// Honour the usual termination signals plus SIGHUP/SIGQUIT (matching the
-	// org's services) for a graceful shutdown.
-	ctx, stop := signal.NotifyContext(context.Background(),
-		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	// Graceful shutdown on the usual termination signals. SIGQUIT is deliberately
+	// left to Go's default (goroutine dump + crash) so a wedged drain stays
+	// diagnosable, and SIGHUP is not captured. stop() runs as soon as the first
+	// signal arrives — not just deferred to run's end — so a second signal restores
+	// default handling and force-terminates instead of being swallowed during a
+	// slow drain.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		stop() // re-arm default termination for a second signal
+	}()
 
 	// Best-effort background GC of flate's on-disk source cache so it doesn't
 	// grow without bound across the process lifetime. Stops with ctx; disabled

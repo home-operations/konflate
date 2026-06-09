@@ -88,10 +88,20 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // shelf is never re-listed — so without this, a merged entry the current filter
 // now excludes (e.g. a fork after tightening to !pr.fork) would linger across a
 // restart, reclaimed only by retention. Drop those, which deletes their files.
+//
+// It removes a PR only on a clean exclusion (the filter genuinely says no). A
+// filter *evaluation* error never deletes anything: a typo'd expression — which
+// CEL accepts at compile time, since pr is a dynamic map — would otherwise wipe
+// the whole recently-merged shelf on the next restart. Such a PR is kept as-is;
+// checkFilter (in Run) fails startup on the same error, so the operator fixes
+// the filter without losing persisted diffs.
 func (s *Server) dropFilteredOnLoad() {
-	dropped := 0
+	dropped, errored := 0, 0
 	for _, pr := range s.store.list() {
-		if !s.prAllowed(pr.PR) {
+		switch allowed, err := s.prVerdict(pr.PR); {
+		case err != nil:
+			errored++ // keep it; never delete on an eval error (see above)
+		case !allowed:
 			s.store.remove(pr.Number)
 			dropped++
 		}
@@ -99,15 +109,59 @@ func (s *Server) dropFilteredOnLoad() {
 	if dropped > 0 {
 		s.log.Info("dropped restored PRs no longer matching the filter", "count", dropped)
 	}
+	if errored > 0 {
+		s.log.Warn("kept restored PRs the filter could not evaluate; check KONFLATE_PR_FILTER_EXPR", "count", errored)
+	}
+}
+
+// checkFilter smoke-tests the compiled PR filter against a fully-populated
+// sample PR. The filter's pr variable is a dynamic map, so CEL accepts a
+// reference to a field that doesn't exist (e.g. pr.isDraft for the real
+// pr.draft) at compile time and only errors when evaluated — which at runtime
+// would silently hide every PR. Evaluating one representative PR here turns that
+// class of typo back into a fail-fast startup error, making good on the
+// documented "fails fast at startup" guarantee. The sample carries every
+// documented field (and one label, so label-field access is exercised — exists()
+// over an empty list never runs its body). A nil filter (only in tests) is a
+// no-op.
+func (s *Server) checkFilter() error {
+	if s.cfg.PRFilter == nil {
+		return nil
+	}
+	sample := api.PR{
+		Number: 1, Title: "sample", Author: "octocat", State: "open",
+		Open: true, Merged: false, Draft: false, Fork: false,
+		HeadRef: "feature", HeadSHA: "0000000", BaseRef: "main",
+		URL:       "https://example.invalid/pr/1",
+		CreatedAt: time.Unix(0, 0).UTC(),
+		Labels:    []api.Label{{Name: "example", Color: "ededed"}},
+	}
+	if _, err := s.cfg.PRFilter.Eval(prFilterVars(sample)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Run starts both servers and blocks until ctx is cancelled or a server fails,
 // then drains in-flight diffs and shuts both down. It returns nil on a clean,
 // signal-triggered shutdown.
 func (s *Server) Run(ctx context.Context) error {
-	s.runCtx = ctx
+	// Fail fast on a filter that compiles but can't evaluate (e.g. a field typo,
+	// which CEL accepts on the dynamic pr map) — it would otherwise hide every PR
+	// at runtime. Before any goroutine starts or anything is served.
+	if err := s.checkFilter(); err != nil {
+		return fmt.Errorf("config: KONFLATE_PR_FILTER_EXPR: %w", err)
+	}
+
+	// gctx cancels when ctx is cancelled (shutdown) OR any server goroutine
+	// returns an error. Bind the render queue, the refresh loops, and the
+	// inbound-trigger goroutines (s.runCtx) to it so a server failure cancels
+	// in-flight renders too — the drain below then returns promptly instead of
+	// waiting out each render's full DiffTimeout while refreshLoop keeps feeding it.
+	g, gctx := errgroup.WithContext(ctx)
+	s.runCtx = gctx
 	s.queue = newQueue(
-		ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
+		gctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
 		s.metrics, s.log, s.cfg.MaxDiffConcurrency,
 	)
 
@@ -127,10 +181,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// Warm the PR list at startup so the UI has content immediately, then run the
 	// periodic refresh (re-list + per-PR staleness). Both are best effort —
 	// failures are logged inside.
-	go s.refreshList(ctx)
-	go s.refreshLoop(ctx)
+	go s.refreshList(gctx)
+	go s.refreshLoop(gctx)
 
-	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return serve(mainSrv, "main", s.log) })
 	g.Go(func() error { return serve(metricsSrv, "metrics", s.log) })
 	g.Go(func() error {
@@ -139,7 +192,7 @@ func (s *Server) Run(ctx context.Context) error {
 		defer cancel()
 		_ = mainSrv.Shutdown(sctx)
 		_ = metricsSrv.Shutdown(sctx)
-		s.queue.wait() // ctx is already cancelled; drain in-flight renders
+		s.queue.wait() // gctx is cancelled, so in-flight renders observe it and drain promptly
 		return nil
 	})
 

@@ -302,28 +302,40 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	return nil
 }
 
-// prAllowed reports whether a PR should be rendered. Two gates, AND-ed: the fork
-// gate (KONFLATE_RENDER_FORK_PRS, default off) excludes forks regardless of the
-// expression — so editing the filter can't accidentally enable untrusted fork
-// rendering — and the CEL filter (KONFLATE_PR_FILTER_EXPR) decides the rest. A
-// PR that fails either is still tracked, but hidden and never rendered. A nil
-// filter admits every non-fork PR; that only happens when a Config is built
-// without Load (i.e. in tests). A runtime eval error hides the PR (and logs) —
-// but the expression is type-checked at startup, so a well-formed filter won't.
+// prAllowed reports whether a PR should be rendered — the render decision used
+// everywhere live. It collapses prVerdict's (allowed, error) result: a filter
+// evaluation error hides the PR (and logs). dropFilteredOnLoad is the one caller
+// that must tell an eval error apart from an intentional exclusion, so it uses
+// prVerdict directly (an error there must never delete persisted state).
 func (s *Server) prAllowed(pr api.PR) bool {
-	if pr.Fork && !s.cfg.RenderForkPRs {
-		return false // untrusted fork code: never rendered unless explicitly enabled
-	}
-	if s.cfg.PRFilter == nil {
-		return true
-	}
-	ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
+	allowed, err := s.prVerdict(pr)
 	if err != nil {
 		s.log.Error("PR filter evaluation failed; hiding PR",
 			"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
 		return false
 	}
-	return ok
+	return allowed
+}
+
+// prVerdict decides whether pr should be rendered, separating an intentional
+// exclusion (allowed=false, err=nil) from a filter evaluation error (err!=nil).
+// Two gates are AND-ed for the verdict: the fork gate (KONFLATE_RENDER_FORK_PRS,
+// default off) excludes forks regardless of the expression — so editing the
+// filter can't accidentally enable untrusted fork rendering — and the CEL filter
+// (KONFLATE_PR_FILTER_EXPR) decides the rest. A PR that fails either is still
+// tracked, but hidden and never rendered. A nil filter admits every non-fork PR;
+// that only happens when a Config is built without Load (i.e. in tests). The
+// error is non-nil only when the expression fails to evaluate (e.g. it
+// references a field the PR map doesn't carry); checkFilter turns that class of
+// mistake into a fail-fast startup error.
+func (s *Server) prVerdict(pr api.PR) (allowed bool, err error) {
+	if pr.Fork && !s.cfg.RenderForkPRs {
+		return false, nil // untrusted fork code: never rendered unless explicitly enabled
+	}
+	if s.cfg.PRFilter == nil {
+		return true, nil
+	}
+	return s.cfg.PRFilter.Eval(prFilterVars(pr))
 }
 
 // prFilterVars projects a PR into the `pr` variable the CEL filter evaluates

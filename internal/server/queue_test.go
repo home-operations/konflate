@@ -258,3 +258,26 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	waitTerminal(t, st, 1)
 	waitTerminal(t, st, 2)
 }
+
+// TestQueue_ClosingRejectsNewWork verifies the shutdown gate: once wait() has
+// marked the queue closing, enqueue is a no-op — it starts no render and records
+// nothing. That gate (wg.Add only while holding mu and not closing) is what keeps
+// a refresh tick or webhook landing mid-drain from racing wg.Add against wg.Wait
+// or leaking a job past shutdown.
+func TestQueue_ClosingRejectsNewWork(t *testing.T) {
+	t.Parallel()
+	diff := func(context.Context, api.PR) (api.DiffResult, error) {
+		t.Error("a render started after the queue was marked closing")
+		return api.DiffResult{}, nil
+	}
+	st := newStore()
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+
+	q.wait() // no in-flight work: returns at once and marks the queue closing
+	q.enqueue(api.PR{Number: 1})
+
+	if _, ok := st.get(1); ok {
+		t.Fatal("enqueue on a closing queue must not record the PR")
+	}
+	q.wait() // must still return; would block here if enqueue had started a render
+}
