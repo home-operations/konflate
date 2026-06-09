@@ -211,8 +211,9 @@ func TestLoad_RequiresRepo(t *testing.T) {
 func TestLoad_PRFilterExpr(t *testing.T) {
 	t.Setenv("KONFLATE_REPO", "github://owner/repo")
 
-	// Unset → the default filter is always compiled (cfg.PRFilter never nil), so
-	// forks are excluded out of the box.
+	// Unset → the default filter is always compiled (cfg.PRFilter never nil), and
+	// fork rendering is off by default — forks are excluded out of the box by the
+	// RenderForkPRs gate, not by the filter expression.
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -222,6 +223,9 @@ func TestLoad_PRFilterExpr(t *testing.T) {
 	}
 	if got := cfg.PRFilter.Source(); got != DefaultPRFilter {
 		t.Errorf("default filter = %q, want %q", got, DefaultPRFilter)
+	}
+	if cfg.RenderForkPRs {
+		t.Error("RenderForkPRs must default to false (forks not rendered out of the box)")
 	}
 
 	// A custom valid expression is compiled verbatim.
@@ -233,6 +237,14 @@ func TestLoad_PRFilterExpr(t *testing.T) {
 	}
 	if cfg.PRFilter == nil || cfg.PRFilter.Source() != expr {
 		t.Fatalf("custom filter not compiled as set: %+v", cfg.PRFilter)
+	}
+
+	// The fork gate parses from its own env var (default-closed, set here).
+	t.Setenv("KONFLATE_RENDER_FORK_PRS", "true")
+	if cfg, err := Load(); err != nil {
+		t.Fatalf("Load with fork gate: %v", err)
+	} else if !cfg.RenderForkPRs {
+		t.Error("KONFLATE_RENDER_FORK_PRS=true should enable fork rendering")
 	}
 
 	// A malformed expression fails fast at Load (not silently at request time).

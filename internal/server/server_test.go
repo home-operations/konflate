@@ -224,6 +224,38 @@ func TestServer_PRFilterExpr(t *testing.T) {
 	}
 }
 
+func TestServer_RenderForkPRs(t *testing.T) {
+	t.Parallel()
+	fork := api.PR{Number: 7, Title: "fork PR", HeadRef: "patch", BaseRef: "main", HeadSHA: "s7", Open: true, Fork: true}
+	plain := api.PR{Number: 8, Title: "same-repo PR", HeadRef: "feat", BaseRef: "main", HeadSHA: "s8", Open: true}
+
+	// Gate off (the default): the fork is tracked but hidden and never rendered,
+	// independent of the filter; the same-repo PR renders.
+	off := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{fork, plain}}, okEngine())
+	off.refreshList(off.runCtx)
+	waitFor(t, off, 8)
+	got := map[int]api.PRStatus{}
+	for _, p := range off.store.list() {
+		got[p.Number] = p
+	}
+	if !got[7].Hidden || got[7].Signals != nil {
+		t.Errorf("a fork must be hidden and unrendered with the gate off; got %+v", got[7])
+	}
+	if got[8].Hidden {
+		t.Errorf("a same-repo PR must not be hidden")
+	}
+
+	// Gate on: the fork is admitted and rendered like any other PR.
+	cfg := ghCfg("tok")
+	cfg.RenderForkPRs = true
+	on := newTestServer(t, cfg, &fakeProvider{prs: []api.PR{fork}}, okEngine())
+	on.refreshList(on.runCtx)
+	waitFor(t, on, 7)
+	if list := on.store.list(); len(list) != 1 || list[0].Hidden {
+		t.Fatalf("a fork should render (not hidden) with the gate on; got %+v", list)
+	}
+}
+
 func TestServer_Summary(t *testing.T) {
 	t.Parallel()
 	pr := api.PR{Number: 7, Title: "feat: widget", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123"}
