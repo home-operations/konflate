@@ -276,7 +276,7 @@ func TestServer_SummaryMarkdown(t *testing.T) {
 		t.Errorf("content-type = %q, want text/markdown", ct)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"rendered diff for #7", "> [!CAUTION]", "`Deployment web/api`", "/#/pr/7"} {
+	for _, want := range []string{"konflate — summary", "> [!CAUTION]", "`Deployment web/api`", "/#/pr/7"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("markdown body missing %q\n%s", want, body)
 		}
@@ -287,7 +287,7 @@ func TestServer_SummaryMarkdown(t *testing.T) {
 	if strings.Contains(plain, "[!CAUTION]") {
 		t.Errorf("?forge=gitlab should not emit GitHub admonitions:\n%s", plain)
 	}
-	if !strings.Contains(plain, "**⚠ Cautions (1)**") {
+	if !strings.Contains(plain, "**⚠ Caution**") {
 		t.Errorf("plain flavour missing the cautions heading:\n%s", plain)
 	}
 

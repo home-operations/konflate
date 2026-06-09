@@ -20,7 +20,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	// A stable marker so a poster can find-and-edit its own comment in place
 	// instead of adding a new one on every render.
 	fmt.Fprintf(&b, "<!-- konflate:pr-%d -->\n", n)
-	fmt.Fprintf(&b, "### konflate — rendered diff for #%d\n", n)
+	b.WriteString("### konflate — summary\n")
 
 	writeLink := func() {
 		if reviewURL != "" {
@@ -55,14 +55,14 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	b.WriteString("\n")
 
 	if len(d.Warnings) > 0 {
-		title := fmt.Sprintf("%d %s", len(d.Warnings), plural(len(d.Warnings), "caution", "cautions"))
+		label := plural(len(d.Warnings), "Caution", "Cautions")
 		if admonitions {
-			fmt.Fprintf(&b, "\n> [!CAUTION]\n> **%s**\n", title)
+			fmt.Fprintf(&b, "\n> [!CAUTION]\n> **%s**\n", label)
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}
 		} else {
-			fmt.Fprintf(&b, "\n**⚠ Cautions (%d)**\n", len(d.Warnings))
+			fmt.Fprintf(&b, "\n**⚠ %s**\n", label)
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}
