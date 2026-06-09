@@ -10,7 +10,6 @@
     mdiChevronLeft,
     mdiChevronRight,
     mdiSourceMerge,
-    mdiSourcePull,
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
@@ -42,9 +41,8 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        {#if pr}<ForgeLink url={pr.url} size={16} />{/if}
+        {#if pr}<ForgeLink url={pr.url} number={pr.number} size={16} />{/if}
         <div class="rt-meta">
-          <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
             <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             <span class="rt-tag sha-wrap">
