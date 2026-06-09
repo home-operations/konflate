@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/home-operations/konflate/compare/0.2.0...0.2.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* **engine:** don't show phantom removals/cautions when a parent's render times out ([#111](https://github.com/home-operations/konflate/issues/111)) ([c1a6bd6](https://github.com/home-operations/konflate/commit/c1a6bd60e251d28ef1e777c2998b39e111ed7501))
+
 ## [0.2.0](https://github.com/home-operations/konflate/compare/0.1.29...0.2.0) (2026-06-09)
 
 
