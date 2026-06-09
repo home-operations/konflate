@@ -116,6 +116,9 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	if cfg.DiffTimeout != 10*time.Minute {
 		t.Errorf("DiffTimeout default = %v, want 10m", cfg.DiffTimeout)
 	}
+	if cfg.FetchTimeout != 2*time.Minute {
+		t.Errorf("FetchTimeout default = %v, want 2m", cfg.FetchTimeout)
+	}
 	if cfg.CacheTTL != 168*time.Hour {
 		t.Errorf("CacheTTL default = %v, want 168h", cfg.CacheTTL)
 	}

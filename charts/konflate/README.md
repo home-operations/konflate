@@ -51,6 +51,7 @@ Kubernetes: `>=1.25.0-0`
 | config.clusterPath | string | `""` | Directory flate renders from; empty = repo root (correct for the standard root-relative layout). |
 | config.diffTimeout | string | `""` | Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances. |
 | config.extraEnv | list | `[]` | Extra raw env vars merged into the container (advanced). |
+| config.fetchTimeout | string | `""` | Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables. |
 | config.helmRenderCacheMb | string | `""` | Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables. |
 | config.helmTemplateCacheMb | string | `""` | Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables. |
 | config.logFormat | string | `"json"` | Log format: json or text. |

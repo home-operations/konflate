@@ -188,9 +188,15 @@ func (s *Server) refreshLoop(ctx context.Context) {
 // refreshStale re-renders every open PR whose last render is older than the
 // refresh interval — the backstop for an inbound webhook that never arrived.
 func (s *Server) refreshStale(now time.Time) {
-	for _, pr := range s.store.stalePRs(now, s.cfg.RefreshInterval) {
-		s.log.Info("queuing render", "pr", pr.Number, "reason", "stale")
+	stale := s.store.stalePRs(now, s.cfg.RefreshInterval)
+	for _, pr := range stale {
+		s.log.Debug("queuing render", "pr", pr.Number, "reason", "stale")
 		s.queue.enqueue(pr)
+	}
+	// One summary line, not one per PR: the open set goes stale together, so the
+	// per-PR detail would be a periodic burst of near-identical lines.
+	if len(stale) > 0 {
+		s.log.Info("queued stale renders", "count", len(stale))
 	}
 }
 

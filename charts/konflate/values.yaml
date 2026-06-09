@@ -107,6 +107,15 @@ config:
 
   # -- Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances.
   diffTimeout: ""
+  # KONFLATE_FETCH_TIMEOUT — bounds just the git fetch (and the first cold clone)
+  # within a render, separately from diffTimeout. The fetch holds a shared lock,
+  # so a slow or hung forge would otherwise block every render for the whole
+  # diffTimeout; a short bound releases the lock fast and keeps the queue moving.
+  # Default 2m; raise only for a very large repo on a slow link. Empty uses the
+  # default; "0" disables it (the fetch is then bounded only by diffTimeout).
+
+  # -- Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables.
+  fetchTimeout: ""
   # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
   # Their diffs are persisted (see `persistence`), so the shelf survives a
   # restart; with both caps set to 0 and persistence on, merged diffs are kept

@@ -84,7 +84,7 @@ func New(cfg *config.Config) Engine {
 		clusterPath:            cfg.ClusterPath,
 		selfURLs:               []string{cfg.Forge.CloneURL()},
 		cacheDir:               cfg.CacheDir,
-		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token),
+		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,

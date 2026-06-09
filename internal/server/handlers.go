@@ -401,6 +401,7 @@ func (s *Server) refreshList(ctx context.Context) {
 	}
 	s.metrics.prsKnown.Set(float64(len(prs)))
 	open := make(map[int]struct{}, len(prs))
+	var added, advanced int
 	for _, pr := range prs {
 		// Every open PR is tracked. One the filter excludes is kept as hidden —
 		// listed (greyed, under the "hidden" pill) but never enqueued, so a fork's
@@ -412,14 +413,19 @@ func (s *Server) refreshList(ctx context.Context) {
 		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA) {
 			reason := "head advanced"
 			if !known {
-				reason = "new PR"
+				reason, added = "new PR", added+1
+			} else {
+				advanced++
 			}
-			s.log.Info("queuing render", "pr", pr.Number, "reason", reason)
+			s.log.Debug("queuing render", "pr", pr.Number, "reason", reason)
 			s.queue.enqueue(pr) // new PR, or its head advanced → (re)render now
 		}
 	}
 	s.reconcileClosed(ctx, open)
-	s.log.Info("refresh listed", "prs", len(prs))
+	// One summary line per refresh, with counts, instead of one "queuing render"
+	// line per PR: at startup every PR is "new", which would be a burst of
+	// near-identical lines on a busy instance. The per-PR detail stays at debug.
+	s.log.Info("refresh listed", "prs", len(prs), "new", added, "advanced", advanced)
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is

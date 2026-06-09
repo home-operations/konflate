@@ -45,6 +45,12 @@ type queue struct {
 	mu       sync.Mutex
 	inflight map[int]struct{}
 	pending  map[int]api.PR
+	// lastFail records, per PR, the signature of the last render failure logged
+	// at warn/error. A PR that keeps failing the same way (a persistently-broken
+	// source, a forge that's down) logs once, then repeats are demoted to debug —
+	// so a chronic failure doesn't re-warn on every refresh. Cleared on success,
+	// head-gone, or shutdown so the next genuine failure logs afresh.
+	lastFail map[int]string
 }
 
 func newQueue(
@@ -60,6 +66,7 @@ func newQueue(
 		sem:      make(chan struct{}, concurrency),
 		inflight: map[int]struct{}{},
 		pending:  map[int]api.PR{},
+		lastFail: map[int]string{},
 	}
 }
 
@@ -121,28 +128,58 @@ func (q *queue) run(pr api.PR) {
 		res, err := q.renderWithRecover(pr)
 		q.metrics.diffDuration.Observe(time.Since(start).Seconds())
 
-		if errors.Is(err, gitclone.ErrHeadRefGone) {
+		switch {
+		case errors.Is(err, gitclone.ErrHeadRefGone):
 			// The head branch vanished mid-flight: the PR was merged or closed and
 			// its branch deleted between enqueue and render. Not a failure — keep any
 			// diff already rendered and reconcile the PR (→ merged shelf / dropped).
 			q.metrics.diffTotal.WithLabelValues("gone").Inc()
 			q.log.Info("diff skipped: PR head ref gone (merged/closed mid-render)", "pr", pr.Number)
+			q.clearFail(pr.Number)
 			if q.reconcile != nil {
 				q.reconcile(pr.Number)
 			}
-		} else if err != nil {
-			q.metrics.diffTotal.WithLabelValues("error").Inc()
-			if q.store.failRender(pr.Number, err.Error()) {
-				// A previously rendered diff is kept; flag the failed refresh
-				// instead of clobbering it (transient forge/git outage, flaky pull).
-				q.emit(pr.Number, api.JobReady, "")
-				q.log.Warn("diff refresh failed; kept last render", "pr", pr.Number, "error", err)
-			} else {
-				q.emit(pr.Number, api.JobError, err.Error())
-				q.log.Error("diff render failed", "pr", pr.Number, "error", err)
+		case errors.Is(err, context.Canceled):
+			// q.ctx is cancelled only on shutdown, so a cancelled render means we're
+			// draining — not a failure, and nothing to surface. Leave the stored diff
+			// untouched (it re-renders next startup) and stop: don't run a coalesced
+			// pending render whose context is just as dead.
+			q.metrics.diffTotal.WithLabelValues("canceled").Inc()
+			q.log.Debug("diff render canceled (shutting down)", "pr", pr.Number)
+			q.clear(pr.Number) // also forgets lastFail
+			return
+		case err != nil:
+			// A real failure or a timeout (DiffTimeout/fetch deadline). Both are
+			// transient as far as the store is concerned: keep the last good render
+			// if there is one. Log the first occurrence at warn/error, then demote
+			// repeats of the same failure to debug so a chronically-broken PR doesn't
+			// re-warn every refresh (see lastFail).
+			outcome := "error"
+			if errors.Is(err, context.DeadlineExceeded) {
+				outcome = "timeout"
 			}
-		} else {
+			q.metrics.diffTotal.WithLabelValues(outcome).Inc()
+			msg := err.Error()
+			kept := q.store.failRender(pr.Number, msg)
+			fresh := q.failChanged(pr.Number, msg)
+			switch {
+			case kept && fresh:
+				q.log.Warn("diff refresh failed; kept last render", "pr", pr.Number, "outcome", outcome, "error", err)
+			case kept:
+				q.log.Debug("diff refresh still failing; kept last render", "pr", pr.Number, "outcome", outcome, "error", err)
+			case fresh:
+				q.log.Error("diff render failed", "pr", pr.Number, "outcome", outcome, "error", err)
+			default:
+				q.log.Debug("diff render still failing", "pr", pr.Number, "outcome", outcome, "error", err)
+			}
+			if kept {
+				q.emit(pr.Number, api.JobReady, "")
+			} else {
+				q.emit(pr.Number, api.JobError, msg)
+			}
+		default:
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
+			q.clearFail(pr.Number) // recovered (or never failed): next failure logs afresh
 			sig := q.store.setResult(pr.Number, res)
 			if sig == nil {
 				sig = computeSignals(&res) // PR closed mid-render; nothing stored
@@ -171,7 +208,29 @@ func (q *queue) clear(number int) {
 	q.mu.Lock()
 	delete(q.inflight, number)
 	delete(q.pending, number)
+	delete(q.lastFail, number)
 	q.setDepthLocked()
+	q.mu.Unlock()
+}
+
+// failChanged records msg as the PR's latest render-failure signature and
+// reports whether it differs from the one last logged. Repeats of an identical
+// failure return false, so the caller demotes them from warn/error to debug —
+// the de-spam behind a chronically-broken PR that would otherwise re-warn on
+// every refresh.
+func (q *queue) failChanged(number int, msg string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	fresh := q.lastFail[number] != msg
+	q.lastFail[number] = msg
+	return fresh
+}
+
+// clearFail forgets a PR's recorded failure signature (on success or head-gone),
+// so the next genuine failure logs afresh rather than being suppressed as a repeat.
+func (q *queue) clearFail(number int) {
+	q.mu.Lock()
+	delete(q.lastFail, number)
 	q.mu.Unlock()
 }
 
