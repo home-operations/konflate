@@ -102,14 +102,14 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	writeRefreshNote()
 
 	if len(d.Warnings) > 0 {
-		label := plural(len(d.Warnings), "Caution", "Cautions")
 		if admonitions {
-			fmt.Fprintf(&b, "\n> [!CAUTION]\n> **%s**\n", label)
+			// [!CAUTION] renders its own "Caution" heading — no redundant title line.
+			b.WriteString("\n> [!CAUTION]\n")
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}
 		} else {
-			fmt.Fprintf(&b, "\n**⚠ %s**\n", label)
+			fmt.Fprintf(&b, "\n**⚠ %s**\n", plural(len(d.Warnings), "Caution", "Cautions"))
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}

@@ -43,6 +43,10 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
 	}
+	// The [!CAUTION] block is its own heading; don't repeat the word in a title line.
+	if strings.Contains(md, "> **Caution") {
+		t.Errorf("caution admonition should not carry a redundant title:\n%s", md)
+	}
 }
 
 func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
