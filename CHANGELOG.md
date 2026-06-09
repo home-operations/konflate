@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.29](https://github.com/home-operations/konflate/compare/0.1.28...0.1.29) (2026-06-09)
+
+
+### Features
+
+* **mise:** update tool oxfmt (0.53.0 → 0.54.0) ([#94](https://github.com/home-operations/konflate/issues/94)) ([66b583a](https://github.com/home-operations/konflate/commit/66b583abdf2d2f75fce524ca680fdd28ac89b8c6))
+
+
+### Bug Fixes
+
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.36.1 → v2.36.2) ([#105](https://github.com/home-operations/konflate/issues/105)) ([2fec8ed](https://github.com/home-operations/konflate/commit/2fec8ed1c85fedd29fa9ef3a27c016f14ccace62))
+* **server:** polish the summary PR comment ([#103](https://github.com/home-operations/konflate/issues/103)) ([9d4835d](https://github.com/home-operations/konflate/commit/9d4835d474766a140e5c65ad529c1d8de9e12879))
+* **server:** simplify the PR-comment summary heading and caution header ([#101](https://github.com/home-operations/konflate/issues/101)) ([8084d11](https://github.com/home-operations/konflate/commit/8084d11936ae5170c98954fa1018e39174ded79f))
+
+
+### Performance Improvements
+
+* **config:** scale the in-memory Helm template cache by render concurrency ([#104](https://github.com/home-operations/konflate/issues/104)) ([a488c6b](https://github.com/home-operations/konflate/commit/a488c6bf46d3604ac52b2213f22a369cc4b017a6))
+
 ## [0.1.28](https://github.com/home-operations/konflate/compare/0.1.27...0.1.28) (2026-06-09)
 
 
