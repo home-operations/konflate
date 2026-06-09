@@ -231,32 +231,6 @@ func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
 	})
 }
 
-// TestQueue_FailChangedDedupes verifies the failure-log de-spam: the first
-// occurrence of a failure signature is "fresh" (logged at warn/error), an
-// identical repeat is not (demoted to debug), a changed message is fresh again,
-// and clearing — on success or head-gone — resets so the next failure logs afresh.
-func TestQueue_FailChangedDedupes(t *testing.T) {
-	t.Parallel()
-	q := newQueue(context.Background(), nil, newStore(), nil, nil, newMetrics(), discardLog(), 1)
-
-	if !q.failChanged(1, "boom") {
-		t.Error("first occurrence of a failure should be fresh")
-	}
-	if q.failChanged(1, "boom") {
-		t.Error("an identical repeat should be suppressed (not fresh)")
-	}
-	if !q.failChanged(1, "different") {
-		t.Error("a changed failure message should be fresh")
-	}
-	if !q.failChanged(2, "boom") {
-		t.Error("a different PR's first failure should be fresh (tracked independently)")
-	}
-	q.clearFail(1)
-	if !q.failChanged(1, "boom") {
-		t.Error("after clearFail, the next failure should be fresh again")
-	}
-}
-
 // TestQueue_RunsConcurrently verifies that distinct PRs render in parallel up to
 // the concurrency limit: with limit 2, both must start before either finishes
 // (otherwise the second <-started would deadlock the test).

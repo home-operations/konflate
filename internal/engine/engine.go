@@ -222,9 +222,6 @@ func joinPath(dir, sub string) string {
 	return dir + "/" + sub
 }
 
-// childEntry is one rendered resource together with the parent (HelmRelease /
-// Kustomization) that produced it and its helm.sh/chart label (captured before
-// normalize strips it, so a chart-version bump can be flagged).
 // pairChanges diffs two flate render outputs (each keyed by producing
 // parent) into konflate's resource-level changes. The pairing,
 // normalization, byte-equality drop, and chart-label capture are flate's
@@ -374,9 +371,6 @@ func pemToken(pem string) (string, bool) {
 	return "", false
 }
 
-// indexChildren flattens the parent→children map into a key→entry map, keyed by
-// parent + child coordinates so a child is paired only with its counterpart
-// under the same parent. Each manifest is normalized first.
 // renderFailures converts flate's per-parent render failures into the API shape,
 // unioning the base and head sides (a source can time out on either) and
 // deduping a parent that failed on both (first side's message wins). konflate

@@ -37,6 +37,13 @@ type job struct {
 	// earlier diff is still shown; empty after a success. Lets the UI flag
 	// "couldn't refresh" without discarding the last-good diff.
 	refreshErr string
+	// lastFailMsg is the most recent render-failure message, kept solely to
+	// de-duplicate failure logs: the queue logs a new failure once, then demotes
+	// identical repeats to debug so a chronically-broken PR doesn't re-warn every
+	// refresh. Unlike errMsg it survives the setStatus(JobRunning) reset, so the
+	// dedup spans render attempts; it is cleared on a successful render and dies
+	// with the job, so unlike a queue-side map it can't leak across the PR's life.
+	lastFailMsg string
 	// savedDigest is the content hash (timestamps excluded) of what's currently
 	// on disk for this PR. The staleness backstop re-renders open PRs ~every
 	// interval even when nothing changed; comparing against this skips rewriting
@@ -193,6 +200,7 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	j.status = api.JobReady
 	j.errMsg = ""
 	j.refreshErr = ""
+	j.lastFailMsg = "" // recovered: the next failure logs afresh
 	j.updated = s.now()
 	j.renderedAt = j.updated
 	sig := j.signals
@@ -222,24 +230,28 @@ func computeSignals(d *api.DiffResult) *api.Signals {
 // diff, that diff is kept and the failure is flagged via refreshErr instead — so
 // a transient forge/git outage or a flaky source pull doesn't wipe a good render;
 // the UI keeps showing it with a "couldn't refresh" marker. Only a PR that never
-// rendered flips to the error state. Returns whether a prior diff was kept. A PR
-// frozen on the merged shelf is left untouched (see setStatus).
-func (s *store) failRender(number int, msg string) (kept bool) {
+// rendered flips to the error state. It returns whether a prior diff was kept,
+// and whether this failure message differs from the previous one — letting the
+// caller log a new failure prominently but demote identical repeats. A PR frozen
+// on the merged shelf is left untouched (see setStatus).
+func (s *store) failRender(number int, msg string) (kept, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j := s.jobs[number]
 	if j == nil || !j.closedAt.IsZero() {
-		return false
+		return false, false
 	}
+	changed = j.lastFailMsg != msg
+	j.lastFailMsg = msg
 	j.updated = s.now()
 	j.renderedAt = j.updated
 	if j.result != nil {
-		j.refreshErr = msg // keep result/signals and the JobReady status
-		return true
+		j.refreshErr = msg // keep result/signals and the existing status
+		return true, changed
 	}
 	j.status = api.JobError
 	j.errMsg = msg
-	return false
+	return false, changed
 }
 
 // get returns a snapshot of one PR's job, or false if unknown.

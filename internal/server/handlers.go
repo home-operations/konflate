@@ -413,7 +413,8 @@ func (s *Server) refreshList(ctx context.Context) {
 		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA) {
 			reason := "head advanced"
 			if !known {
-				reason, added = "new PR", added+1
+				reason = "new PR"
+				added++
 			} else {
 				advanced++
 			}
