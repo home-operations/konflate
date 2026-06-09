@@ -203,6 +203,19 @@ type Config struct {
 	// public/untrusted instances.
 	DiffTimeout time.Duration `env:"KONFLATE_DIFF_TIMEOUT" envDefault:"10m"`
 
+	// FetchTimeout bounds just the git fetch (and the first cold clone) within a
+	// render, separately from DiffTimeout. The fetch runs under the persistent
+	// mirror's write lock, so every other render blocks behind it — a single
+	// slow or hung forge fetch otherwise holds that lock for the whole
+	// DiffTimeout (10m by default) and starves all render slots at once. A
+	// dedicated, much shorter bound makes a stuck fetch give up and release the
+	// lock fast, so the queue keeps moving. Healthy fetches are seconds — even a
+	// cold single-branch bare clone of a Flux config repo is well under this — so
+	// raise it only for a very large repo on a slow link. It is also clamped by
+	// whatever DiffTimeout budget remains, so it can never exceed the end-to-end
+	// cap. <=0 disables it (the fetch is then bounded only by DiffTimeout).
+	FetchTimeout time.Duration `env:"KONFLATE_FETCH_TIMEOUT" envDefault:"2m"`
+
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and, per open PR, re-renders it if
 	// its last render is older than this. It's the safety net that keeps PRs

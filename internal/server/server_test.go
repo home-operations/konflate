@@ -754,7 +754,7 @@ func TestStore_ClosedJobRejectsLateWrites(t *testing.T) {
 
 	// The stale in-flight render finishes after the PR was shelved.
 	st.setStatus(api.PR{Number: 1}, api.JobRunning)
-	if st.failRender(1, "engine: clone PR #1: gitclone: head ref no longer exists on remote") {
+	if kept, _ := st.failRender(1, "engine: clone PR #1: gitclone: head ref no longer exists on remote"); kept {
 		t.Error("failRender reported keeping a diff for a shelved PR")
 	}
 
@@ -776,7 +776,7 @@ func TestStore_FailRenderKeepsLastGoodDiff(t *testing.T) {
 	st.upsertPR(api.PR{Number: 1, Open: true}, false)
 
 	// Never rendered → a failure flips it to the error state.
-	if st.failRender(1, "boom") {
+	if kept, _ := st.failRender(1, "boom"); kept {
 		t.Error("failRender kept a diff for a never-rendered PR")
 	}
 	if env, _ := st.get(1); env.Status != api.JobError || env.Error == "" {
@@ -786,7 +786,7 @@ func TestStore_FailRenderKeepsLastGoodDiff(t *testing.T) {
 	// After a good render, a failure keeps the diff and flags refreshError
 	// instead of clobbering it (a transient forge/git outage must not wipe it).
 	st.setResult(1, api.DiffResult{PRNumber: 1})
-	if !st.failRender(1, "forge down") {
+	if kept, _ := st.failRender(1, "forge down"); !kept {
 		t.Error("failRender dropped a good diff on a transient failure")
 	}
 	env, _ := st.get(1)
@@ -800,6 +800,33 @@ func TestStore_FailRenderKeepsLastGoodDiff(t *testing.T) {
 	st.setResult(1, api.DiffResult{PRNumber: 1})
 	if env, _ := st.get(1); env.RefreshError != "" {
 		t.Errorf("refreshError = %q after success, want empty", env.RefreshError)
+	}
+}
+
+// TestStore_FailRenderReportsChanged verifies failRender's "changed" return — the
+// failure-log de-spam signal. It must report a new message as changed, an
+// identical repeat as unchanged (even across the setStatus(JobRunning) reset that
+// runs before every render and clears errMsg), and reset after a successful render.
+func TestStore_FailRenderReportsChanged(t *testing.T) {
+	t.Parallel()
+	st := newStore()
+	st.upsertPR(api.PR{Number: 1, Open: true}, false)
+
+	if _, changed := st.failRender(1, "boom"); !changed {
+		t.Error("the first failure should report changed")
+	}
+	st.setStatus(api.PR{Number: 1}, api.JobRunning) // the per-render reset clears errMsg...
+	if _, changed := st.failRender(1, "boom"); changed {
+		t.Error("an identical repeat must report unchanged so its log is demoted")
+	}
+	if _, changed := st.failRender(1, "different"); !changed {
+		t.Error("a changed message should report changed")
+	}
+
+	// A successful render clears the signature, so the next failure logs afresh.
+	st.setResult(1, api.DiffResult{PRNumber: 1})
+	if _, changed := st.failRender(1, "boom"); !changed {
+		t.Error("after a successful render, the next failure should report changed")
 	}
 }
 

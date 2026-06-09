@@ -108,7 +108,7 @@ func TestWithinRoot(t *testing.T) {
 // working trees, pointed at the local source repo src.
 func newTestMirror(t *testing.T, src string) *Mirror {
 	t.Helper()
-	return NewMirror(t.TempDir(), t.TempDir(), src, "")
+	return NewMirror(t.TempDir(), t.TempDir(), src, "", 0) // 0: fetch bounded only by ctx
 }
 
 func read(dir, rel string) (string, bool) {
@@ -133,6 +133,44 @@ func assertMergeBaseTrees(t *testing.T, res *Result) {
 	// main's tip).
 	if _, ok := read(res.BaseDir, "app/other.yaml"); ok {
 		t.Error("base tree contains other.yaml — diff is against main's tip, not the merge-base")
+	}
+}
+
+// TestMirror_FetchScope verifies the per-fetch deadline: fetchTimeout bounds the
+// fetch, but a tighter caller deadline always wins (so a fetch can never outlast
+// the end-to-end DiffTimeout budget). This bound is what stops a slow or hung
+// fetch from holding the write lock — and starving every other render — longer
+// than intended.
+func TestMirror_FetchScope(t *testing.T) {
+	t.Parallel()
+
+	// Disabled (<=0): no deadline imposed when the caller has none.
+	disabled := &Mirror{fetchTimeout: 0}
+	ctx, cancel := disabled.fetchScope(context.Background())
+	defer cancel()
+	if _, ok := ctx.Deadline(); ok {
+		t.Error("fetchTimeout<=0 must not impose a deadline")
+	}
+
+	// Enabled: a deadline of roughly now+fetchTimeout is imposed.
+	enabled := &Mirror{fetchTimeout: time.Hour}
+	ctx, cancel = enabled.fetchScope(context.Background())
+	defer cancel()
+	if dl, ok := ctx.Deadline(); !ok {
+		t.Error("fetchTimeout>0 must impose a deadline")
+	} else if d := time.Until(dl); d <= 0 || d > time.Hour+time.Minute {
+		t.Errorf("fetch deadline %v outside the expected ~1h window", d)
+	}
+
+	// A tighter caller deadline wins: fetchTimeout never loosens it.
+	parent, pcancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer pcancel()
+	ctx, cancel = enabled.fetchScope(parent) // fetchTimeout 1h vs parent 10ms
+	defer cancel()
+	if dl, ok := ctx.Deadline(); !ok {
+		t.Error("expected the tighter parent deadline to carry through")
+	} else if d := time.Until(dl); d > time.Minute {
+		t.Errorf("expected the ~10ms parent deadline to win, got %v", d)
 	}
 }
 

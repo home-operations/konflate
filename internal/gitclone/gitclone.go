@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
@@ -58,6 +59,11 @@ type Mirror struct {
 	url      string
 	auth     *githttp.BasicAuth
 
+	// fetchTimeout bounds a single fetch (and the cold clone) so a slow or hung
+	// forge can't hold the write lock — and thus block every other render — for
+	// longer than this. <=0 leaves the fetch bounded only by the caller's ctx.
+	fetchTimeout time.Duration
+
 	// fetch takes the write lock; merge-base + tree extraction take the read
 	// lock, so several renders extract concurrently but none does so while a
 	// fetch is mutating the shared object store.
@@ -66,18 +72,20 @@ type Mirror struct {
 
 // NewMirror builds a Mirror for cloneURL. The bare repo lives under cacheDir
 // (persistent), per-diff working trees under cloneDir (ephemeral). token may be
-// empty for public repositories (anonymous).
-func NewMirror(cacheDir, cloneDir, cloneURL, token string) *Mirror {
+// empty for public repositories (anonymous). fetchTimeout bounds each fetch
+// under the write lock (<=0 disables it; see Mirror.fetchTimeout).
+func NewMirror(cacheDir, cloneDir, cloneURL, token string, fetchTimeout time.Duration) *Mirror {
 	var auth *githttp.BasicAuth
 	if token != "" {
 		// Any non-empty username works; the token is the password over HTTPS.
 		auth = &githttp.BasicAuth{Username: "x-access-token", Password: token}
 	}
 	return &Mirror{
-		bareDir:  filepath.Join(cacheDir, "git", "mirror.git"),
-		workRoot: cloneDir,
-		url:      cloneURL,
-		auth:     auth,
+		bareDir:      filepath.Join(cacheDir, "git", "mirror.git"),
+		workRoot:     cloneDir,
+		url:          cloneURL,
+		auth:         auth,
+		fetchTimeout: fetchTimeout,
 	}
 }
 
@@ -88,7 +96,12 @@ func NewMirror(cacheDir, cloneDir, cloneURL, token string) *Mirror {
 // PRs alike — and baseRef is the target branch name. Callers must call
 // Result.Cleanup.
 func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result, err error) {
-	head, base, err := m.fetch(ctx, headRef, baseRef)
+	// Bound the fetch on its own — it runs under the write lock, so a slow or hung
+	// fetch would otherwise block every other render for the full caller deadline.
+	// The merge-base walk and tree extraction below are local and stay on ctx.
+	fetchCtx, cancel := m.fetchScope(ctx)
+	defer cancel()
+	head, base, err := m.fetch(fetchCtx, headRef, baseRef)
 	if err != nil {
 		return nil, err
 	}
@@ -139,10 +152,24 @@ func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result,
 	return res, nil
 }
 
+// fetchScope derives the context that bounds a single fetch. With fetchTimeout
+// set it is the tighter of the caller's deadline and now+fetchTimeout (so it can
+// never outlast the end-to-end DiffTimeout budget); otherwise it is the caller's
+// context unchanged. The returned cancel must always be called.
+func (m *Mirror) fetchScope(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.fetchTimeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, m.fetchTimeout)
+}
+
 // fetch ensures the bare mirror exists (cloning it once), fetches the base and
 // head refs into it, and resolves both to commits — all under the write lock so
-// only one render mutates the store at a time. The returned commits carry their
-// own storer reference, so they stay readable after the lock is released.
+// only one render mutates the store at a time. The write lock is why fetch is
+// bounded by its own (short) timeout: a slow or hung fetch holding it blocks
+// every other render's Trees call, so the bound caps that head-of-line blocking
+// instead of letting it run to the full DiffTimeout. The returned commits carry
+// their own storer reference, so they stay readable after the lock is released.
 func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base *object.Commit, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

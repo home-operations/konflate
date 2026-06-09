@@ -9,7 +9,9 @@ import (
 
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
+	"github.com/home-operations/flate/pkg/store"
 
+	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/diff"
 )
 
@@ -295,3 +297,47 @@ func TestImageChanges(t *testing.T) {
 // splitImageRef's behavior now lives in flate's image.Split (tested in
 // flate); konflate's collectImages composes image.Extract + image.Split,
 // exercised end to end by TestImageChanges above.
+
+func TestDropFailedParents(t *testing.T) {
+	t.Parallel()
+	// A HelmRelease whose head render timed out: base produced its resources, head
+	// produced none, so they pair as "removed" — a phantom deletion of every CRD.
+	// Plus a genuine change under a healthy parent.
+	const failed = "HelmRelease kube-system/snapshot-controller"
+	changes := []diff.Change{
+		{Status: "removed", Kind: "CustomResourceDefinition", Name: "volumesnapshots.snapshot.storage.k8s.io", Parent: failed},
+		{Status: "removed", Kind: "ClusterRole", Name: "snapshot-controller", Parent: failed},
+		{Status: "changed", Kind: "Deployment", Namespace: "media", Name: "plex", Parent: "HelmRelease media/plex"},
+	}
+	failures := []api.RenderFailure{{Parent: failed, Message: "chart source OCIRepository/kube-system/snapshot-controller not ready: timeout"}}
+
+	got := dropFailedParents(changes, failures)
+	if len(got) != 1 || got[0].Parent != "HelmRelease media/plex" {
+		t.Fatalf("phantom changes under a failed parent must be dropped; kept %+v", got)
+	}
+	// No failures → every change passes through untouched.
+	if all := dropFailedParents(changes, nil); len(all) != len(changes) {
+		t.Errorf("with no failures, all %d changes should survive; got %d", len(changes), len(all))
+	}
+}
+
+func TestRenderFailures_UnionsBothSidesAndDedups(t *testing.T) {
+	t.Parallel()
+	base := map[manifest.NamedResource]store.StatusInfo{
+		{Kind: "HelmRelease", Namespace: "a", Name: "x"}: {Message: "base failed"},
+	}
+	head := map[manifest.NamedResource]store.StatusInfo{
+		{Kind: "HelmRelease", Namespace: "a", Name: "x"}: {Message: "also failed on head"}, // same parent → deduped
+		{Kind: "HelmRelease", Namespace: "b", Name: "y"}: {Message: "head only"},
+	}
+	got := renderFailures(base, head)
+	if len(got) != 2 {
+		t.Fatalf("failures from both sides should union + dedup by parent; got %+v", got)
+	}
+	if got[0].Parent != "HelmRelease a/x" || got[1].Parent != "HelmRelease b/y" {
+		t.Errorf("expected sort by parent; got %+v", got)
+	}
+	if got[0].Message != "base failed" {
+		t.Errorf("first side's message should win for a parent that failed on both; got %q", got[0].Message)
+	}
+}

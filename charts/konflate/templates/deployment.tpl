@@ -106,6 +106,10 @@ spec:
             - name: KONFLATE_DIFF_TIMEOUT
               value: {{ tpl (toString .Values.config.diffTimeout) $ | quote }}
             {{- end }}
+            {{- if ne (toString .Values.config.fetchTimeout) "" }}
+            - name: KONFLATE_FETCH_TIMEOUT
+              value: {{ tpl (toString .Values.config.fetchTimeout) $ | quote }}
+            {{- end }}
             - name: KONFLATE_CLOSED_PR_MAX
               value: {{ .Values.config.closedPrMax | quote }}
             - name: KONFLATE_CLOSED_PR_TTL

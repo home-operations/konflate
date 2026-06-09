@@ -162,6 +162,75 @@ func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
 	}
 }
 
+// TestQueue_CanceledRenderDoesNotErrorOrClobber verifies that a render that
+// returns context.Canceled — which happens when the run context is cancelled on
+// shutdown — is treated as a drain, not a failure: the PR is not marked errored
+// and a previously rendered diff is left intact.
+func TestQueue_CanceledRenderDoesNotErrorOrClobber(t *testing.T) {
+	t.Parallel()
+	diff := func(context.Context, api.PR) (api.DiffResult, error) {
+		return api.DiffResult{}, fmt.Errorf("engine: render PR #1: %w", context.Canceled)
+	}
+	st := newStore()
+	st.upsertPR(api.PR{Number: 1}, false)
+	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from before shutdown
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+
+	q.enqueue(api.PR{Number: 1})
+	q.wait() // the render goroutine takes the canceled branch and returns
+
+	env, _ := st.get(1)
+	if env.Status == api.JobError {
+		t.Fatalf("a canceled (shutdown) render must not mark the PR errored, got status=%q", env.Status)
+	}
+	if env.Diff == nil {
+		t.Fatal("a canceled render must not clobber the previously rendered diff")
+	}
+}
+
+// TestQueue_TimeoutFlowsThroughKeepLast verifies a render that times out
+// (context.DeadlineExceeded — the DiffTimeout or the fetch deadline) is treated
+// as a transient failure: a prior render is kept (the PR stays ready), and a
+// first-ever render that times out is surfaced as an error.
+func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
+	t.Parallel()
+	diff := func(context.Context, api.PR) (api.DiffResult, error) {
+		return api.DiffResult{}, fmt.Errorf("engine: render PR #1: %w", context.DeadlineExceeded)
+	}
+
+	t.Run("keeps a prior render", func(t *testing.T) {
+		t.Parallel()
+		st := newStore()
+		st.upsertPR(api.PR{Number: 1}, false)
+		st.setResult(1, api.DiffResult{PRNumber: 1})
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+		q.enqueue(api.PR{Number: 1})
+		q.wait() // the single render goroutine finishes after taking the keep-last branch
+		env, _ := st.get(1)
+		if env.Status == api.JobError {
+			t.Fatalf("a timeout with a prior render must not error it, got status=%q", env.Status)
+		}
+		if env.Diff == nil {
+			t.Fatal("a timeout must keep the previously rendered diff")
+		}
+		if env.RefreshError == "" {
+			t.Fatal("a kept-on-timeout render should flag the failed refresh")
+		}
+	})
+
+	t.Run("errors with no prior render", func(t *testing.T) {
+		t.Parallel()
+		st := newStore()
+		st.upsertPR(api.PR{Number: 2}, false)
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+		q.enqueue(api.PR{Number: 2})
+		waitTerminal(t, st, 2)
+		if env, _ := st.get(2); env.Status != api.JobError {
+			t.Fatalf("a first-render timeout with nothing to keep must error, got status=%q", env.Status)
+		}
+	})
+}
+
 // TestQueue_RunsConcurrently verifies that distinct PRs render in parallel up to
 // the concurrency limit: with limit 2, both must start before either finishes
 // (otherwise the second <-started would deadlock the test).

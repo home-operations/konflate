@@ -48,6 +48,12 @@
           "title": "extraEnv",
           "type": "array"
         },
+        "fetchTimeout": {
+          "default": "",
+          "description": "Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); \"0\" disables.",
+          "title": "fetchTimeout",
+          "type": "string"
+        },
         "helmRenderCacheMb": {
           "default": "",
           "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",

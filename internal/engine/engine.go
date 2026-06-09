@@ -84,7 +84,7 @@ func New(cfg *config.Config) Engine {
 		clusterPath:            cfg.ClusterPath,
 		selfURLs:               []string{cfg.Forge.CloneURL()},
 		cacheDir:               cfg.CacheDir,
-		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token),
+		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,
@@ -147,13 +147,20 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
 	}
 
-	changes := pairChanges(base.Result.Manifests, head.Result.Manifests)
+	// A parent (HelmRelease/Kustomization) whose render failed on a side produced
+	// no manifests there, so pairing it against the other side reads as a wholesale
+	// add/remove of all its resources — a transient OCI/source timeout looking like
+	// "deleted every CRD" (with false data-loss cautions). Surface the failure, but
+	// drop those phantom changes (and the cautions/image diffs derived from them) so
+	// a timeout can't masquerade as a deletion.
+	failures := renderFailures(base.Result.Failed, head.Result.Failed)
+	changes := dropFailedParents(pairChanges(base.Result.Manifests, head.Result.Manifests), failures)
 	return diff.Render(diff.RenderInput{
 		PRNumber:     pr.Number,
 		HeadSHA:      pr.HeadSHA,
 		Changes:      changes,
 		Images:       imageChanges(changes),
-		Failures:     renderFailures(head.Result.Failed),
+		Failures:     failures,
 		MaxResources: e.maxDiffResources,
 	})
 }
@@ -215,9 +222,6 @@ func joinPath(dir, sub string) string {
 	return dir + "/" + sub
 }
 
-// childEntry is one rendered resource together with the parent (HelmRelease /
-// Kustomization) that produced it and its helm.sh/chart label (captured before
-// normalize strips it, so a chart-version bump can be flagged).
 // pairChanges diffs two flate render outputs (each keyed by producing
 // parent) into konflate's resource-level changes. The pairing,
 // normalization, byte-equality drop, and chart-label capture are flate's
@@ -367,22 +371,48 @@ func pemToken(pem string) (string, bool) {
 	return "", false
 }
 
-// indexChildren flattens the parent→children map into a key→entry map, keyed by
-// parent + child coordinates so a child is paired only with its counterpart
-// under the same parent. Each manifest is normalized first.
-// renderFailures converts flate's per-parent render failures into the API shape.
-func renderFailures(failed map[manifest.NamedResource]store.StatusInfo) []api.RenderFailure {
-	if len(failed) == 0 {
+// renderFailures converts flate's per-parent render failures into the API shape,
+// unioning the base and head sides (a source can time out on either) and
+// deduping a parent that failed on both (first side's message wins). konflate
+// also drops the failed parents' resources from the diff (see dropFailedParents),
+// so this list is the only place such a parent surfaces.
+func renderFailures(sides ...map[manifest.NamedResource]store.StatusInfo) []api.RenderFailure {
+	msgByParent := map[string]string{}
+	for _, failed := range sides {
+		for nr, info := range failed {
+			if label := parentLabel(nr); msgByParent[label] == "" {
+				msgByParent[label] = info.Message
+			}
+		}
+	}
+	if len(msgByParent) == 0 {
 		return nil
 	}
-	out := make([]api.RenderFailure, 0, len(failed))
-	for nr, info := range failed {
-		out = append(out, api.RenderFailure{Parent: parentLabel(nr), Message: info.Message})
+	out := make([]api.RenderFailure, 0, len(msgByParent))
+	for label, msg := range msgByParent {
+		out = append(out, api.RenderFailure{Parent: label, Message: msg})
 	}
 	slices.SortFunc(out, func(a, b api.RenderFailure) int {
 		return cmp.Or(cmp.Compare(a.Parent, b.Parent), cmp.Compare(a.Message, b.Message))
 	})
 	return out
+}
+
+// dropFailedParents removes changes attributed to a parent that failed to render.
+// That parent produced no manifests on the failed side, so its resources would
+// otherwise pair as phantom adds/removes — e.g. a transient OCI/source timeout
+// showing as "every CRD removed" with false data-loss cautions. The failure is
+// reported on its own (renderFailures); these bogus changes — and the cautions
+// and image diffs computed from them — are dropped.
+func dropFailedParents(changes []diff.Change, failures []api.RenderFailure) []diff.Change {
+	if len(failures) == 0 {
+		return changes
+	}
+	failed := make(map[string]bool, len(failures))
+	for _, f := range failures {
+		failed[f.Parent] = true
+	}
+	return slices.DeleteFunc(changes, func(c diff.Change) bool { return failed[c.Parent] })
 }
 
 func parentLabel(nr manifest.NamedResource) string {

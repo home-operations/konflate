@@ -121,7 +121,8 @@ func (q *queue) run(pr api.PR) {
 		res, err := q.renderWithRecover(pr)
 		q.metrics.diffDuration.Observe(time.Since(start).Seconds())
 
-		if errors.Is(err, gitclone.ErrHeadRefGone) {
+		switch {
+		case errors.Is(err, gitclone.ErrHeadRefGone):
 			// The head branch vanished mid-flight: the PR was merged or closed and
 			// its branch deleted between enqueue and render. Not a failure — keep any
 			// diff already rendered and reconcile the PR (→ merged shelf / dropped).
@@ -130,20 +131,45 @@ func (q *queue) run(pr api.PR) {
 			if q.reconcile != nil {
 				q.reconcile(pr.Number)
 			}
-		} else if err != nil {
-			q.metrics.diffTotal.WithLabelValues("error").Inc()
-			if q.store.failRender(pr.Number, err.Error()) {
-				// A previously rendered diff is kept; flag the failed refresh
-				// instead of clobbering it (transient forge/git outage, flaky pull).
-				q.emit(pr.Number, api.JobReady, "")
-				q.log.Warn("diff refresh failed; kept last render", "pr", pr.Number, "error", err)
-			} else {
-				q.emit(pr.Number, api.JobError, err.Error())
-				q.log.Error("diff render failed", "pr", pr.Number, "error", err)
+		case errors.Is(err, context.Canceled):
+			// q.ctx is cancelled only on shutdown, so a cancelled render means we're
+			// draining — not a failure, and nothing to surface. Leave the stored diff
+			// untouched (it re-renders next startup) and stop: don't run a coalesced
+			// pending render whose context is just as dead.
+			q.metrics.diffTotal.WithLabelValues("canceled").Inc()
+			q.log.Debug("diff render canceled (shutting down)", "pr", pr.Number)
+			q.clear(pr.Number)
+			return
+		case err != nil:
+			// A real failure or a timeout (DiffTimeout/fetch deadline). Both are
+			// transient as far as the store is concerned: failRender keeps the last
+			// good render if there is one. Log a new failure at warn (kept) or error
+			// (nothing to keep), but demote an identical repeat to debug — failRender
+			// reports whether the message changed — so a chronically-broken PR or a
+			// down forge doesn't re-warn on every refresh.
+			outcome := "error"
+			if errors.Is(err, context.DeadlineExceeded) {
+				outcome = "timeout"
 			}
-		} else {
+			q.metrics.diffTotal.WithLabelValues(outcome).Inc()
+			msg := err.Error()
+			kept, changed := q.store.failRender(pr.Number, msg)
+			detail, level := "diff render failed", slog.LevelError
+			if kept {
+				detail, level = "diff refresh failed; kept last render", slog.LevelWarn
+			}
+			if !changed {
+				level = slog.LevelDebug // same failure as last time: don't re-warn
+			}
+			q.log.Log(context.Background(), level, detail, "pr", pr.Number, "outcome", outcome, "error", err)
+			if kept {
+				q.emit(pr.Number, api.JobReady, "")
+			} else {
+				q.emit(pr.Number, api.JobError, msg)
+			}
+		default:
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
-			sig := q.store.setResult(pr.Number, res)
+			sig := q.store.setResult(pr.Number, res) // also clears the failure-dedup signature
 			if sig == nil {
 				sig = computeSignals(&res) // PR closed mid-render; nothing stored
 			}

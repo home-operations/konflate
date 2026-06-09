@@ -150,3 +150,21 @@ tests:
           content:
             name: KONFLATE_CACHE_TTL
             value: "24h"
+
+  - it: omits KONFLATE_FETCH_TIMEOUT when fetchTimeout is empty (binary default)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_FETCH_TIMEOUT
+
+  - it: emits KONFLATE_FETCH_TIMEOUT (incl. "0" to disable) when set
+    set:
+      config.fetchTimeout: "30s"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_FETCH_TIMEOUT
+            value: "30s"
