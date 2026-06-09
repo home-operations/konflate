@@ -40,19 +40,26 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	}
 
 	d := env.Diff
-	fmt.Fprintf(&b, "\n**+%d added · %d changed · −%d removed** — %d %s",
+	// Impact line — "+N added · N changed · −N removed — N resources · …". On the
+	// GitHub flavour it sits inside a [!NOTE] admonition; plain keeps it bare.
+	var impact strings.Builder
+	fmt.Fprintf(&impact, "**+%d added · %d changed · −%d removed** — %d %s",
 		d.Summary.Added, d.Summary.Changed, d.Summary.Removed,
 		d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
 	if d.Impact.Parents > 0 {
-		fmt.Fprintf(&b, " · %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
+		fmt.Fprintf(&impact, " · %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
 	}
 	if d.Impact.CRDs > 0 {
-		fmt.Fprintf(&b, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
+		fmt.Fprintf(&impact, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
 	}
 	if d.Truncated > 0 {
-		fmt.Fprintf(&b, " · %d not shown", d.Truncated)
+		fmt.Fprintf(&impact, " · %d not shown", d.Truncated)
 	}
-	b.WriteString("\n")
+	if admonitions {
+		fmt.Fprintf(&b, "\n> [!NOTE]\n> %s\n", impact.String())
+	} else {
+		fmt.Fprintf(&b, "\n%s\n", impact.String())
+	}
 
 	if len(d.Warnings) > 0 {
 		label := plural(len(d.Warnings), "Caution", "Cautions")

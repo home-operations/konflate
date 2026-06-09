@@ -27,6 +27,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	for _, want := range []string{
 		"<!-- konflate:pr-142 -->",
 		"### konflate — summary",
+		"> [!NOTE]",
 		"+2 added · 3 changed · −1 removed** — 6 resources · 2 apps · 1 CRD",
 		"> [!CAUTION]",
 		"> - `Deployment web/api` — replicas set to 0",
@@ -45,7 +46,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	t.Parallel()
 	md := summaryMarkdown(sampleSummaryEnv(), "", false)
-	if strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
+	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("plain markdown must not use GitHub admonitions:\n%s", md)
 	}
 	for _, want := range []string{"**⚠ Caution**", "**⛔ Render failures (1)**"} {
