@@ -11,6 +11,7 @@
 go = "1.26.4"
 golangci-lint = "2.12.2"
 helm = "4.2.0"
+cosign = "3.0.6"
 helm-docs = "1.14.2"
 lefthook = "2.1.9"
 node = "24.16.0"
