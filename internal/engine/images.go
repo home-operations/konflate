@@ -43,7 +43,9 @@ func imageChanges(changes []diff.Change) []api.ImageChange {
 		oldImgs := collectImages(c.Old)
 		newImgs := collectImages(c.New)
 		for _, repo := range unionKeys(oldImgs, newImgs) {
-			record(repo, oldImgs[repo], newImgs[repo], ref)
+			for _, t := range repoTransitions(oldImgs[repo], newImgs[repo]) {
+				record(repo, t.from, t.to, ref)
+			}
 		}
 	}
 
@@ -62,19 +64,81 @@ func imageChanges(changes []diff.Change) []api.ImageChange {
 	return out
 }
 
-// collectImages returns a map of image repository → tag or digest for every
-// container image referenced in a manifest. The detection is flate's
-// image.Extract — value-based, so it finds references anywhere in the tree
-// (not just under containers[]/initContainers[]: CNPG spec.imageName, a CRD
-// default, a sidecar under an arbitrary field) — and image.Split separates
-// each into (repository, version) robustly (a digest beats a tag; a
-// registry port is not mistaken for the version). nil manifest yields an
-// empty map.
-func collectImages(m map[string]any) map[string]string {
-	out := map[string]string{}
+// repoTransition is one before→after move of a single image repository; an empty
+// from is a pure addition, an empty to a pure removal.
+type repoTransition struct{ from, to string }
+
+// repoTransitions pairs the before/after versions of one image repository into
+// from→to moves. The everyday case — exactly one version on each side — is the
+// familiar tag bump (old → new). When a repository appears at several versions
+// at once (the same image in a main and an init container on different tags),
+// pairing is ambiguous, so the symmetric difference is reported as discrete
+// removals (to == "") and additions (from == "") rather than inventing a
+// transition no container underwent — e.g. deleting an init container that
+// pinned a newer tag must not read as a downgrade of the main container.
+// Versions present on both sides are unchanged and yield nothing.
+func repoTransitions(oldVers, newVers []string) []repoTransition {
+	removed := setDiff(oldVers, newVers)
+	added := setDiff(newVers, oldVers)
+	if len(removed) == 1 && len(added) == 1 {
+		return []repoTransition{{from: removed[0], to: added[0]}}
+	}
+	out := make([]repoTransition, 0, len(removed)+len(added))
+	for _, v := range removed {
+		out = append(out, repoTransition{from: v})
+	}
+	for _, v := range added {
+		out = append(out, repoTransition{to: v})
+	}
+	return out
+}
+
+// setDiff returns the sorted elements of a that are absent from b.
+func setDiff(a, b []string) []string {
+	inB := make(map[string]struct{}, len(b))
+	for _, v := range b {
+		inB[v] = struct{}{}
+	}
+	out := make([]string, 0, len(a))
+	for _, v := range a {
+		if _, ok := inB[v]; !ok {
+			out = append(out, v)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// collectImages returns a map of image repository → the distinct versions (tags
+// or digests) it is referenced at in a manifest. A repository may appear at more
+// than one version at once — the same image used by a main and an init container
+// on different tags — so versions are collected as a set per repository rather
+// than collapsed to a single (arbitrary, last-write-wins) value, which would let
+// imageChanges report a from→to transition no container actually underwent.
+//
+// The detection is flate's image.Extract — value-based, so it finds references
+// anywhere in the tree (not just under containers[]/initContainers[]: CNPG
+// spec.imageName, a CRD default, a sidecar under an arbitrary field) — and
+// image.Split separates each into (repository, version) robustly (a digest beats
+// a tag; a registry port is not mistaken for the version). nil manifest yields
+// an empty map.
+func collectImages(m map[string]any) map[string][]string {
+	seen := map[string]map[string]struct{}{}
 	for _, ref := range image.Extract(m) {
 		repo, ver := image.Split(ref)
-		out[repo] = ver
+		if seen[repo] == nil {
+			seen[repo] = map[string]struct{}{}
+		}
+		seen[repo][ver] = struct{}{}
+	}
+	out := make(map[string][]string, len(seen))
+	for repo, vers := range seen {
+		list := make([]string, 0, len(vers))
+		for v := range vers {
+			list = append(list, v)
+		}
+		slices.Sort(list)
+		out[repo] = list
 	}
 	return out
 }

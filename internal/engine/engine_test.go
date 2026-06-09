@@ -294,6 +294,41 @@ func TestImageChanges(t *testing.T) {
 	}
 }
 
+// deployWithInit builds a Deployment with a main container and (when init != "")
+// an init container, so a single resource can reference one repo at two tags.
+func deployWithInit(ns, name, main, init string) map[string]any {
+	spec := map[string]any{"containers": []any{map[string]any{"name": "c", "image": main}}}
+	if init != "" {
+		spec["initContainers"] = []any{map[string]any{"name": "i", "image": init}}
+	}
+	return res("Deployment", ns, name, map[string]any{
+		"spec": map[string]any{"template": map[string]any{"spec": spec}},
+	})
+}
+
+// TestImageChanges_SameRepoMultipleTags guards against the last-write-wins
+// collapse: a repository referenced at two tags at once (a main and an init
+// container) must not be flattened to one version and reported as a transition
+// no container underwent. Here the PR only deletes the init container (which
+// pinned the newer tag) and leaves the main container's tag untouched, so the
+// one honest change is the removal of the init's tag — never a "1.26 → 1.25"
+// downgrade of the main container.
+func TestImageChanges_SameRepoMultipleTags(t *testing.T) {
+	t.Parallel()
+	changes := []diff.Change{{
+		Status: "changed", Kind: "Deployment", Namespace: "apps", Name: "web",
+		Old: deployWithInit("apps", "web", "ghcr.io/app:1.25", "ghcr.io/app:1.26"),
+		New: deployWithInit("apps", "web", "ghcr.io/app:1.25", ""),
+	}}
+	got := imageChanges(changes)
+	if len(got) != 1 {
+		t.Fatalf("got %d image changes, want 1 (the init tag removed): %+v", len(got), got)
+	}
+	if c := got[0]; c.Name != "ghcr.io/app" || c.From != "1.26" || c.To != "" {
+		t.Errorf("got %+v, want ghcr.io/app 1.26→'' (a removal), not a fabricated downgrade", c)
+	}
+}
+
 // splitImageRef's behavior now lives in flate's image.Split (tested in
 // flate); konflate's collectImages composes image.Extract + image.Split,
 // exercised end to end by TestImageChanges above.
