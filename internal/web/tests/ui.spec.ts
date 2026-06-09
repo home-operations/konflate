@@ -55,6 +55,17 @@ test('list → review → single-page flow', async ({ page }) => {
   // title, so the word itself is dropped), plus a colored label dot.
   await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
   await expect(card142.locator('.label-dot')).toBeVisible();
+  // Signal-icon tooltips spell out the count (images is singular at 1).
+  await expect(card142.locator('.badge.muted')).toHaveAttribute('title', '3 resource changes');
+  await expect(
+    card142.locator('.badge:not(.caution):not(.danger):not(.muted):not(.warn)'),
+  ).toHaveAttribute('title', '1 image change');
+  // A PR-icon link, right of the badges, opens the PR on its forge (named in the
+  // tooltip). It's a sibling of the card button, so scope to the shell.
+  const forge142 = page.locator('.card-shell', { hasText: '#142' }).locator('.forge-link');
+  await expect(forge142).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
+  await expect(forge142).toHaveAttribute('target', '_blank');
+  await expect(forge142).toHaveAttribute('title', 'Open PR on GitHub');
 
   // Open a PR → the single-page review lands on the Summary (impact, warnings,
   // image changes, render failures), with the tree rail alongside it.
@@ -64,6 +75,12 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(page.locator('.warning.caution', { hasText: 'StatefulSet' })).toBeVisible();
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.failure')).toContainText('plex');
+  // The same forge link sits next to the PR title on the review header.
+  await expect(page.locator('.review-title .forge-link')).toHaveAttribute(
+    'href',
+    'https://github.com/acme/home-ops/pull/142',
+  );
+  await expect(page.locator('.review-title .forge-link')).toHaveAttribute('title', 'Open PR on GitHub');
   // The tree: a Summary node (selected by default) + one leaf per changed
   // resource. A caution surfaces a marker on the Summary node.
   await expect(page.locator('.tree .tree-summary')).toHaveClass(/selected/);

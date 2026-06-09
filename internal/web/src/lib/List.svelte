@@ -9,6 +9,7 @@
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import MergeCommand from './MergeCommand.svelte';
+  import ForgeLink from './ForgeLink.svelte';
   import {
     mdiAlert,
     mdiPackageVariantClosed,
@@ -291,12 +292,12 @@
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
             {/if}
             {#if pr.signals.images}
-              <span class="badge" title="image changes"><Icon path={mdiPackageVariantClosed} size={13} /> {pr.signals.images}</span>
+              <span class="badge" title={`${pr.signals.images} image change${pr.signals.images === 1 ? '' : 's'}`}><Icon path={mdiPackageVariantClosed} size={13} /> {pr.signals.images}</span>
             {/if}
             {#if pr.signals.failures}
               <span class="badge danger" title="render failures"><Icon path={mdiAlertCircleOutline} size={13} /> {pr.signals.failures}</span>
             {/if}
-            <span class="badge muted" title="changed resources">
+            <span class="badge muted" title={`${pr.signals.resources} resource change${pr.signals.resources === 1 ? '' : 's'}`}>
               <Icon path={mdiFileDocumentOutline} size={13} /> {pr.signals.resources}
             </span>
           </span>
@@ -309,6 +310,9 @@
         {/if}
       </div>
       </button>
+      <!-- Link out to the PR on its forge. Sibling of the card <button> (it can't
+           nest an anchor), so it sits just right of the resource count. -->
+      <ForgeLink url={pr.url} />
       <!-- Disclosure for the inline summary. Sibling of the card <button> (a
            button can't nest), only shown once the PR has rendered signals. -->
       {#if pr.signals}
@@ -324,6 +328,10 @@
             <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
           {/if}
         </button>
+      {:else}
+        <!-- Reserve the disclosure column's width so the forge link aligns into a
+             column across rows whether or not a PR has rendered a summary yet. -->
+        <span class="card-expand-spacer" aria-hidden="true"></span>
       {/if}
     </div>
     {#if isExpanded(pr.number) && previewReady(pr.number)}
