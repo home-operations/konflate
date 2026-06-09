@@ -105,6 +105,24 @@ tests:
             name: KONFLATE_PR_FILTER_EXPR
             value: '!pr.draft && pr.baseRef == "main"'
 
+  - it: omits KONFLATE_RENDER_FORK_PRS by default (forks not rendered)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_RENDER_FORK_PRS
+
+  - it: emits KONFLATE_RENDER_FORK_PRS when renderForkPrs is true
+    set:
+      config.renderForkPrs: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RENDER_FORK_PRS
+            value: "true"
+
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
       - notContains:

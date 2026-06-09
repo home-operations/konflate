@@ -302,44 +302,28 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 	return nil
 }
 
-// prAllowed reports whether a PR passes the configured CEL filter
-// (KONFLATE_PR_FILTER_EXPR, defaulting to config.DefaultPRFilter — the single
-// gate over which PRs konflate tracks). A nil filter tracks every PR; that only
-// happens when a Config is built without Load (i.e. in tests). A runtime eval
-// error drops the PR (and logs) — but the expression is type-checked at startup
-// against an always-populated field set, so a well-formed filter won't error.
+// prAllowed reports whether a PR should be rendered. Two gates, AND-ed: the fork
+// gate (KONFLATE_RENDER_FORK_PRS, default off) excludes forks regardless of the
+// expression — so editing the filter can't accidentally enable untrusted fork
+// rendering — and the CEL filter (KONFLATE_PR_FILTER_EXPR) decides the rest. A
+// PR that fails either is still tracked, but hidden and never rendered. A nil
+// filter admits every non-fork PR; that only happens when a Config is built
+// without Load (i.e. in tests). A runtime eval error hides the PR (and logs) —
+// but the expression is type-checked at startup, so a well-formed filter won't.
 func (s *Server) prAllowed(pr api.PR) bool {
+	if pr.Fork && !s.cfg.RenderForkPRs {
+		return false // untrusted fork code: never rendered unless explicitly enabled
+	}
 	if s.cfg.PRFilter == nil {
 		return true
 	}
 	ok, err := s.cfg.PRFilter.Eval(prFilterVars(pr))
 	if err != nil {
-		s.log.Error("PR filter evaluation failed; dropping PR",
+		s.log.Error("PR filter evaluation failed; hiding PR",
 			"pr", pr.Number, "expr", s.cfg.PRFilter.Source(), "error", err)
 		return false
 	}
 	return ok
-}
-
-// warnIfFilterAdmitsForks logs a prominent startup warning when the configured
-// filter would track a fork PR — a heads-up that rendering forks runs untrusted
-// external code. It probes the filter with a representative fork; admission can
-// be conditional, so this catches the common footgun (a filter that just omits
-// `!pr.fork`) rather than proving the negative.
-func (s *Server) warnIfFilterAdmitsForks() {
-	if s.cfg.PRFilter == nil {
-		return
-	}
-	sample := api.PR{
-		Number: 0, Title: "sample fork PR", Author: "external-contributor",
-		State: "open", Open: true, Fork: true,
-		HeadRef: "patch", HeadSHA: "0000000", BaseRef: "main", URL: "https://example.invalid/0",
-	}
-	if ok, err := s.cfg.PRFilter.Eval(prFilterVars(sample)); err == nil && ok {
-		s.log.Warn("PR filter admits fork PRs — rendering a fork runs untrusted external code "+
-			"(SSRF / resource-exhaustion surface). Add `&& !pr.fork` to KONFLATE_PR_FILTER_EXPR to exclude them.",
-			"filter", s.cfg.PRFilter.Source())
-	}
 }
 
 // prFilterVars projects a PR into the `pr` variable the CEL filter evaluates

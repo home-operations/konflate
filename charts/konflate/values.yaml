@@ -65,21 +65,21 @@ config:
 
   # -- Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4).
   maxDiffConcurrency: 0
-  # KONFLATE_PR_FILTER_EXPR — CEL expression deciding which PRs konflate tracks.
-  # This is the single PR filter (no separate label allowlist or fork toggle).
+  # KONFLATE_PR_FILTER_EXPR — CEL expression deciding which PRs konflate renders.
   # Evaluated against a `pr` variable (pr.number/title/author/draft/open/merged/
   # state/fork/headRef/headSha/baseRef/url/createdAt, and pr.labels[].name/.color);
   # it must return a bool and is compiled + type-checked at startup, so a bad
-  # expression fails fast. Empty uses the default `!pr.fork`: every open PR
-  # except forks. Rendering a fork runs untrusted external code (SSRF / resource
-  # exhaustion), so forks are excluded unless your expression admits them — and a
-  # tracked PR is rendered, so admitting a fork renders it. Examples:
+  # expression fails fast. Empty uses the default `true` (render every open PR).
+  # It decides *which* PRs — forks are gated separately by `renderForkPrs` below,
+  # so editing this can't accidentally enable fork rendering. A PR it excludes is
+  # listed but hidden (greyed, never rendered). Examples:
   #   one cluster only:     'pr.labels.exists(l, l.name == "cluster/production")'
-  #   non-draft, main base: '!pr.draft && pr.baseRef == "main" && !pr.fork'
-  #   include forks too:    'true'   # ⚠ renders untrusted external code
+  #   non-draft, main base: '!pr.draft && pr.baseRef == "main"'
 
-  # -- CEL expression selecting which PRs to track; must return a bool. Empty uses `!pr.fork` (every open PR except forks — rendering a fork runs untrusted code). e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`. See the README.
+  # -- CEL expression deciding which PRs konflate renders; must return a bool. Empty = `true` (every open PR). Forks are gated separately by `renderForkPrs`, so editing this can't enable forks. A PR it excludes is listed but hidden. e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`. See the README.
   prFilterExpr: ""
+  # -- Render fork PRs. ⚠️ A fork runs untrusted external code through flate (SSRF / resource exhaustion). Off by default — forks are listed but hidden until you flip this. Kept separate from `prFilterExpr` so the filter can't accidentally enable them.
+  renderForkPrs: false
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------

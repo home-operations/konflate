@@ -110,9 +110,6 @@ func (s *Server) Run(ctx context.Context) error {
 		ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
 		s.metrics, s.log, s.cfg.MaxDiffConcurrency,
 	)
-	// The PR filter is the only thing standing between an untrusted fork and a
-	// render now; if it admits forks, say so loudly at startup.
-	s.warnIfFilterAdmitsForks()
 
 	mainSrv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.cfg.Port),

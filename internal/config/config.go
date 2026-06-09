@@ -84,14 +84,22 @@ type Config struct {
 	//
 	// The expression must return a boolean; it is compiled and type-checked at
 	// startup, so a malformed filter fails fast. Empty defaults to
-	// [DefaultPRFilter] ("!pr.fork"): every open PR except forks. Rendering a fork
-	// runs untrusted external code (SSRF via attacker-chosen sources, resource
-	// exhaustion), so forks are excluded unless the expression admits them —
-	// a tracked PR is rendered, so admitting a fork renders it. Examples:
+	// [DefaultPRFilter] ("true") — render every open PR. It decides *which* PRs;
+	// forks are gated separately by [RenderForkPRs] (default off, AND-ed in by the
+	// server), so editing this expression can never accidentally enable fork
+	// rendering. A PR the filter excludes is listed but hidden (greyed, never
+	// rendered). Examples:
 	//	one cluster only:     pr.labels.exists(l, l.name == "cluster/production")
-	//	non-draft, main base: !pr.draft && pr.baseRef == "main" && !pr.fork
-	//	include forks too:    true
+	//	non-draft, main base: !pr.draft && pr.baseRef == "main"
 	PRFilterExpr string `env:"KONFLATE_PR_FILTER_EXPR"`
+
+	// RenderForkPRs gates rendering of fork PRs — an explicit, default-closed
+	// switch AND-ed with PRFilterExpr. Rendering a fork runs untrusted external
+	// code (SSRF via attacker-chosen sources, resource exhaustion), so a fork is
+	// rendered only when this is true AND the filter admits it; otherwise it is
+	// listed but hidden. Kept separate from the filter expression so changing the
+	// expression can't silently enable forks.
+	RenderForkPRs bool `env:"KONFLATE_RENDER_FORK_PRS" envDefault:"false"`
 
 	// PRFilter is the compiled filter — PRFilterExpr, or [DefaultPRFilter] when
 	// that is empty — built in [Load]. A derived field, like Forge; never set it
@@ -238,10 +246,10 @@ func (c *Config) WebhookEnabled() bool { return c.WebhookSecret != "" }
 func (c *Config) PushEnabled() bool { return c.PushToken != "" }
 
 // DefaultPRFilter is the PR filter applied when KONFLATE_PR_FILTER_EXPR is
-// empty: track every open PR except forks. Rendering a fork runs untrusted
-// external code, so forks are excluded by default and an operator opts in by
-// setting an expression that admits them.
-const DefaultPRFilter = "!pr.fork"
+// empty: render every open PR. Forks are gated separately by RenderForkPRs
+// (default off, AND-ed in by the server) rather than by this expression, so the
+// default needn't mention them and editing the filter can't enable forks.
+const DefaultPRFilter = "true"
 
 // Load parses all KONFLATE_* environment variables, validates required fields,
 // and returns a ready-to-use Config. It is the only supported way to construct
