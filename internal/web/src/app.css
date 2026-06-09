@@ -688,15 +688,11 @@ a.repo:focus-visible .repo-ext {
   color: var(--danger);
 }
 .pv-res {
-  font-family: var(--font-mono);
   font-weight: 600;
 }
 .pv-detail,
 .pv-delta {
   color: var(--muted);
-}
-.pv-delta {
-  font-family: var(--font-mono);
 }
 .pv-more {
   color: var(--muted);
@@ -1193,7 +1189,6 @@ button.sum-pill:hover {
   color: var(--caution);
 }
 .warning-res {
-  font-family: var(--font-mono); /* the flagged resource — Kind ns/name */
   font-size: 12px;
   font-weight: 600;
 }
@@ -1224,7 +1219,6 @@ button.sum-pill:hover {
   gap: 4px;
 }
 .img-name {
-  font-family: var(--font-mono);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -1233,7 +1227,6 @@ button.sum-pill:hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  font-family: var(--font-mono);
 }
 .img-ver {
   overflow-wrap: anywhere;
@@ -1248,7 +1241,6 @@ button.sum-pill:hover {
   color: var(--muted);
 }
 .img-refs {
-  font-family: var(--font-mono); /* referencing resources — Kind ns/name */
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -1256,12 +1248,10 @@ button.sum-pill:hover {
   padding: 4px 0;
 }
 .failure-parent {
-  font-family: var(--font-mono);
   font-size: 12px;
 }
 .failure-msg {
   color: var(--danger);
-  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
 }
