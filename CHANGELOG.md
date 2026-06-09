@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/home-operations/konflate/compare/0.1.29...0.2.0) (2026-06-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** KONFLATE_RENDER_FORK_PRS — explicit, default-closed fork gate ([#109](https://github.com/home-operations/konflate/issues/109))
+
+### Features
+
+* **config:** KONFLATE_RENDER_FORK_PRS — explicit, default-closed fork gate ([#109](https://github.com/home-operations/konflate/issues/109)) ([9b06417](https://github.com/home-operations/konflate/commit/9b064174cb7262ff99aba602462bc84f2299e0f0))
+* **server,ui:** track filter-excluded PRs in a "hidden" pill; drop the merged collapsible ([#108](https://github.com/home-operations/konflate/issues/108)) ([e463bdf](https://github.com/home-operations/konflate/commit/e463bdfd31d136bf89bb8a4f7742a71ccc337262))
+* **ui:** forge PR link (with the PR number) + icon-only render state ([#106](https://github.com/home-operations/konflate/issues/106)) ([d85eeab](https://github.com/home-operations/konflate/commit/d85eeab2d5c8e7775aec86375bcba4d26b5f5df3))
+
 ## [0.1.29](https://github.com/home-operations/konflate/compare/0.1.28...0.1.29) (2026-06-09)
 
 
