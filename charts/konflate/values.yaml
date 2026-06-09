@@ -89,7 +89,7 @@ config:
   # sizing that volume matters as much as these caps. Quote values; use "0" to
   # disable a cache.
 
-  # -- Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = flate default (256); "0" disables.
+  # -- Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables.
   helmTemplateCacheMb: ""
   # -- Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables.
   helmRenderCacheMb: ""
