@@ -15,7 +15,11 @@ import (
 
 // job is the stored state of one pull request's diff computation.
 type job struct {
-	pr      api.PR
+	pr api.PR
+	// hidden marks a PR the CEL filter excludes: it is still tracked and listed
+	// (greyed, under the "hidden" pill) but never enqueued for rendering, so a
+	// fork's untrusted code never runs. Re-evaluated on every upsert.
+	hidden  bool
 	status  api.JobStatus
 	result  *api.DiffResult
 	signals *api.Signals
@@ -139,15 +143,16 @@ func (s *store) del(number int) {
 // upsertPR records (or refreshes) a PR's metadata. A PR seen for the first time
 // starts in the pending state; an already-tracked PR keeps its current status
 // but takes the new metadata (title/labels/head may have changed).
-func (s *store) upsertPR(pr api.PR) {
+func (s *store) upsertPR(pr api.PR, hidden bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j := s.jobs[pr.Number]
 	if j == nil {
-		s.jobs[pr.Number] = &job{pr: pr, status: api.JobPending, updated: s.now()}
+		s.jobs[pr.Number] = &job{pr: pr, status: api.JobPending, updated: s.now(), hidden: hidden}
 		return
 	}
 	j.pr = pr
+	j.hidden = hidden
 	j.closedAt = time.Time{} // seen in the open set again (covers reopen)
 	j.updated = s.now()
 }
@@ -245,7 +250,7 @@ func (s *store) get(number int) (api.DiffEnvelope, bool) {
 	if j == nil {
 		return api.DiffEnvelope{}, false
 	}
-	return api.DiffEnvelope{Status: j.status, PR: j.pr, Diff: j.result, Error: j.errMsg, RefreshError: j.refreshErr}, true
+	return api.DiffEnvelope{Status: j.status, PR: j.pr, Diff: j.result, Error: j.errMsg, RefreshError: j.refreshErr, Hidden: j.hidden}, true
 }
 
 // activeNumbers returns the PRs currently treated as open (not yet marked
@@ -279,7 +284,7 @@ func (s *store) stalePRs(now time.Time, interval time.Duration) []api.PR {
 	defer s.mu.RUnlock()
 	var out []api.PR
 	for _, j := range s.jobs {
-		if j.closedAt.IsZero() && !j.renderedAt.IsZero() && now.Sub(j.renderedAt) >= interval+staleJitter(j.pr.Number, interval) {
+		if !j.hidden && j.closedAt.IsZero() && !j.renderedAt.IsZero() && now.Sub(j.renderedAt) >= interval+staleJitter(j.pr.Number, interval) {
 			out = append(out, j.pr)
 		}
 	}
@@ -378,7 +383,7 @@ func (s *store) list() []api.PRStatus {
 		}
 		out = append(out, api.PRStatus{
 			PR: j.pr, Status: j.status, Error: j.errMsg, RefreshError: j.refreshErr,
-			UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals,
+			UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals, Hidden: j.hidden,
 		})
 	}
 	slices.SortFunc(out, func(a, b api.PRStatus) int { return cmp.Compare(b.Number, a.Number) }) // newest first

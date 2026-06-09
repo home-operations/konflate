@@ -180,21 +180,47 @@ func TestServer_PRFilterExpr(t *testing.T) {
 	prov := &fakeProvider{prs: []api.PR{keep, draft, otherBase}}
 	s := newTestServer(t, cfg, prov, okEngine())
 
-	// Only the PR satisfying the expression (main base, not a draft) is tracked.
+	// Every open PR is tracked; the ones the expression rejects (a draft, a
+	// non-main base) are kept hidden — listed but never rendered — while the
+	// admitted one renders.
 	s.refreshList(s.runCtx)
 	waitFor(t, s, 1)
-	if list := s.store.list(); len(list) != 1 || list[0].Number != 1 {
-		t.Fatalf("CEL filter should track only #1; got %+v", list)
+	list := s.store.list()
+	if len(list) != 3 {
+		t.Fatalf("all 3 open PRs should be tracked; got %d: %+v", len(list), list)
+	}
+	byNum := map[int]api.PRStatus{}
+	for _, p := range list {
+		byNum[p.Number] = p
+	}
+	if byNum[1].Hidden {
+		t.Errorf("#1 satisfies the filter — must not be hidden")
+	}
+	if !byNum[2].Hidden || !byNum[3].Hidden {
+		t.Errorf("#2 (draft) and #3 (non-main base) must be hidden; got #2=%v #3=%v", byNum[2].Hidden, byNum[3].Hidden)
+	}
+	// Only the admitted PR renders; hidden PRs are never enqueued.
+	if byNum[1].Signals == nil {
+		t.Errorf("#1 should have rendered (signals present)")
+	}
+	if byNum[2].Signals != nil || byNum[3].Signals != nil {
+		t.Errorf("hidden PRs must not be rendered (no signals): #2=%v #3=%v", byNum[2].Signals, byNum[3].Signals)
 	}
 
-	// #1 becomes a draft (still open) → it now fails the expression and is dropped.
+	// #1 becomes a draft (still open) → it now fails the expression and flips to
+	// hidden, staying in the list rather than being dropped.
 	drafted := keep
 	drafted.Draft = true
 	prov.setPRs(drafted, draft, otherBase)
-	prov.setDetail(drafted) // reconcileClosed re-fetches #1 via GetPR
 	s.refreshList(s.runCtx)
-	if list := s.store.list(); len(list) != 0 {
-		t.Fatalf("a PR that no longer satisfies the filter should be dropped; got %+v", list)
+	list = s.store.list()
+	if len(list) != 3 {
+		t.Fatalf("hidden PRs stay listed; got %d: %+v", len(list), list)
+	}
+	for _, p := range list {
+		if !p.Hidden {
+			t.Errorf("#%d should be hidden now (all three fail the filter)", p.Number)
+		}
 	}
 }
 
@@ -305,7 +331,7 @@ func TestServer_SummaryMarkdownRetryAfter(t *testing.T) {
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, okEngine())
 	h := s.mainHandler()
 	// Record the PR without rendering it → status pending (upsertPR doesn't enqueue).
-	s.store.upsertPR(pr)
+	s.store.upsertPR(pr, false)
 
 	// Markdown while still rendering → 503 + Retry-After, so `curl --retry` retries
 	// (a 202 is a success curl wouldn't retry).
@@ -352,7 +378,7 @@ func TestServer_RenderStatusHeader(t *testing.T) {
 	waitFor(t, s, 2)
 	waitFor(t, s, 3)
 	// #4 is recorded but never rendered → still pending.
-	s.store.upsertPR(api.PR{Number: 4, HeadRef: "d", BaseRef: "main", HeadSHA: "s4", Open: true})
+	s.store.upsertPR(api.PR{Number: 4, HeadRef: "d", BaseRef: "main", HeadSHA: "s4", Open: true}, false)
 
 	// The verdict header lets a CI gate pass/fail off the same request it fetches
 	// the comment with — no second JSON call.
@@ -374,7 +400,7 @@ func TestServer_AvatarProxy(t *testing.T) {
 	h := s.mainHandler()
 
 	// /api/prs rewrites a raw forge avatar URL into a signed same-origin path.
-	s.store.upsertPR(api.PR{Number: 7, Open: true, AuthorAvatar: "https://avatars.example/u/octo.png"})
+	s.store.upsertPR(api.PR{Number: 7, Open: true, AuthorAvatar: "https://avatars.example/u/octo.png"}, false)
 	rec := do(h, "GET", "/api/prs", nil, nil)
 	var list []api.PRStatus
 	mustJSON(t, rec, &list)
@@ -436,7 +462,7 @@ func TestServer_MergeCommandEndpoints(t *testing.T) {
 	cfg := withMerge(ghCfg("tok"), "gh pr merge {{.Number}} --repo {{.Repo}} --squash")
 	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
 	h := s.mainHandler()
-	s.store.upsertPR(api.PR{Number: 7, Open: true})
+	s.store.upsertPR(api.PR{Number: 7, Open: true}, false)
 
 	const want = "gh pr merge 7 --repo acme/web --squash"
 	var list []api.PRStatus
@@ -549,7 +575,7 @@ func TestStore_PruneClosed(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st := newStore()
 	for i := 1; i <= 4; i++ { // #i merged at base+i hours (newer = higher number)
-		st.upsertPR(api.PR{Number: i, Open: true})
+		st.upsertPR(api.PR{Number: i, Open: true}, false)
 		st.markClosed(i, base.Add(time.Duration(i)*time.Hour))
 	}
 	now := base.Add(10 * time.Hour)
@@ -618,7 +644,7 @@ func TestStore_StalePRsAreJittered(t *testing.T) {
 	const n = 40
 	interval := 60 * time.Minute
 	for i := 1; i <= n; i++ { // all rendered at the same instant (the startup batch)
-		st.upsertPR(api.PR{Number: i, Open: true})
+		st.upsertPR(api.PR{Number: i, Open: true}, false)
 		st.setResult(i, api.DiffResult{PRNumber: i})
 	}
 	count := func(d time.Duration) int { return len(st.stalePRs(base.Add(d), interval)) }
@@ -654,7 +680,7 @@ func TestServer_RefreshStaleReRendersOpenOnly(t *testing.T) {
 	s.refreshList(s.runCtx)
 	waitFor(t, s, 1)
 	// A merged PR that has already rendered, then frozen onto the shelf.
-	s.store.upsertPR(api.PR{Number: 2, Open: true})
+	s.store.upsertPR(api.PR{Number: 2, Open: true}, false)
 	s.store.setResult(2, api.DiffResult{PRNumber: 2})
 	s.store.markClosed(2, s.store.now())
 
@@ -690,7 +716,7 @@ func TestServer_RefreshStaleReRendersOpenOnly(t *testing.T) {
 func TestStore_ClosedJobRejectsLateWrites(t *testing.T) {
 	t.Parallel()
 	st := newStore()
-	st.upsertPR(api.PR{Number: 1, Open: true})
+	st.upsertPR(api.PR{Number: 1, Open: true}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1})
 	st.markClosed(1, st.now())
 
@@ -715,7 +741,7 @@ func TestStore_ClosedJobRejectsLateWrites(t *testing.T) {
 func TestStore_FailRenderKeepsLastGoodDiff(t *testing.T) {
 	t.Parallel()
 	st := newStore()
-	st.upsertPR(api.PR{Number: 1, Open: true})
+	st.upsertPR(api.PR{Number: 1, Open: true}, false)
 
 	// Never rendered → a failure flips it to the error state.
 	if st.failRender(1, "boom") {
@@ -759,7 +785,7 @@ func TestServer_HeadGoneMidRenderShelvesNotFails(t *testing.T) {
 	prov.setDetail(api.PR{Number: 7, State: "merged", Merged: true, HeadRef: "renovate/x", BaseRef: "main"})
 	s := newTestServer(t, ghCfg("tok"), prov, eng)
 
-	s.store.upsertPR(api.PR{Number: 7, Open: true, HeadRef: "renovate/x", BaseRef: "main"})
+	s.store.upsertPR(api.PR{Number: 7, Open: true, HeadRef: "renovate/x", BaseRef: "main"}, false)
 	s.queue.enqueue(api.PR{Number: 7, Open: true, HeadRef: "renovate/x", BaseRef: "main"})
 
 	deadline := time.Now().Add(2 * time.Second)

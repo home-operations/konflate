@@ -296,7 +296,7 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 		s.reconcileState(pr)
 		return nil
 	}
-	s.store.upsertPR(pr)
+	s.store.upsertPR(pr, false)
 	s.log.Info("queuing render", "pr", number, "reason", reason)
 	s.queue.enqueue(pr)
 	return nil
@@ -418,14 +418,14 @@ func (s *Server) refreshList(ctx context.Context) {
 	s.metrics.prsKnown.Set(float64(len(prs)))
 	open := make(map[int]struct{}, len(prs))
 	for _, pr := range prs {
-		if !s.prAllowed(pr) {
-			continue // rejected by the PR filter — never tracked (and if it was, it
-			// falls out of `open` below, so reconcileClosed drops it).
-		}
+		// Every open PR is tracked. One the filter excludes is kept as hidden —
+		// listed (greyed, under the "hidden" pill) but never enqueued, so a fork's
+		// untrusted code is never rendered.
+		allowed := s.prAllowed(pr)
 		open[pr.Number] = struct{}{}
 		prev, known := s.store.get(pr.Number)
-		s.store.upsertPR(pr)
-		if !known || prev.PR.HeadSHA != pr.HeadSHA {
+		s.store.upsertPR(pr, !allowed)
+		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA) {
 			reason := "head advanced"
 			if !known {
 				reason = "new PR"
@@ -468,22 +468,20 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 // "recently merged" shelf keeping its last rendered diff, and an abandoned
 // (closed-unmerged) PR is dropped and broadcast so clients remove it live.
 func (s *Server) reconcileState(pr api.PR) {
-	// Rejected by the PR filter (e.g. it became a draft, or lost a label the
-	// expression requires): drop it and tell clients to remove it, whatever its
-	// open/merged state.
-	// remove is a no-op for a PR we weren't tracking, so a webhook for an
-	// unrelated PR is harmless.
-	if !s.prAllowed(pr) {
-		s.store.remove(pr.Number)
-		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: pr.Number})
-		return
-	}
+	allowed := s.prAllowed(pr)
 	switch {
 	case pr.Open:
-		s.store.upsertPR(pr)
-	case pr.Merged:
+		// Open is always tracked. A PR the filter excludes is kept as hidden
+		// (listed, greyed, never rendered); an admitted one is tracked normally and
+		// its render is driven by the caller / the staleness backstop.
+		s.store.upsertPR(pr, !allowed)
+	case pr.Merged && allowed:
+		// Merged and still admitted: freeze its last rendered diff on the shelf.
 		s.store.markClosed(pr.Number, s.store.now())
 	default:
+		// Abandoned, or filtered-out (a hidden PR that merged kept no diff worth
+		// shelving): drop it and tell clients to remove it. remove is a no-op for a
+		// PR we weren't tracking, so a webhook for an unrelated PR is harmless.
 		s.store.remove(pr.Number)
 		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: pr.Number})
 	}

@@ -18,7 +18,7 @@ import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = unfiltered;
 // 'open' narrows to just the open set, hiding the merged shelf).
-export type StatusFilter = '' | 'open' | 'caution' | 'merged';
+export type StatusFilter = '' | 'open' | 'caution' | 'merged' | 'hidden';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -53,6 +53,7 @@ interface Store {
   diffError: string;
   diffRefreshError: string; // last re-render of the shown diff failed (last-good kept)
   diffMergeCommand: string; // "copy to merge" command for the shown PR ('' when off/merged)
+  diffHidden: boolean; // the shown PR is excluded by the filter — listed but never rendered
   loading: boolean; // a diff fetch/render is in flight
   previews: Record<number, RowPreview>; // lazy list-row diff summaries, by PR number
   connected: boolean;
@@ -71,6 +72,7 @@ export const store: Store = $state({
   diffError: '',
   diffRefreshError: '',
   diffMergeCommand: '',
+  diffHidden: false,
   loading: false,
   previews: {},
   connected: false,
@@ -179,14 +181,15 @@ export function filteredPRs(): PRStatus[] {
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
-    case 'open':
-      return p.open;
     case 'caution':
-      return (p.signals?.caution ?? 0) > 0;
+      return p.open && !p.hidden && (p.signals?.caution ?? 0) > 0;
     case 'merged':
       return !p.open;
+    case 'hidden':
+      return !!p.hidden; // excluded by the PR filter — listed but never rendered
+    // '' (the default view) and 'open' both show the open, non-hidden set.
     default:
-      return true;
+      return p.open && !p.hidden;
   }
 }
 
@@ -303,6 +306,7 @@ export function ensureDiff(n: number): void {
   store.diff = null;
   store.diffError = '';
   store.diffMergeCommand = '';
+  store.diffHidden = false;
   store.loading = true;
   void loadDiff(n);
 }
@@ -362,6 +366,7 @@ async function loadPreview(n: number, headSha: string): Promise<void> {
 }
 
 function applyEnvelope(env: DiffEnvelope): void {
+  store.diffHidden = env.hidden ?? false; // excluded by the filter → the review shows a notice, not a spinner
   // Set on every envelope (the command depends only on the PR's open state, not
   // the render), so a reviewer can copy it while the diff is still rendering.
   store.diffMergeCommand = env.mergeCommand ?? '';

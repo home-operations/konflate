@@ -13,6 +13,7 @@
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
+    mdiFilterOutline,
   } from './icons';
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
@@ -73,7 +74,14 @@
     {/if}
 
     <div class="review-body">
-      {#if store.diffError}
+      {#if store.diffHidden}
+        <!-- Excluded by the PR filter: konflate lists this PR but never renders
+             it (so a fork's untrusted code never runs), so there's no diff. -->
+        <div class="loading-center">
+          <Icon path={mdiFilterOutline} size={38} />
+          <p>Excluded by the PR filter — konflate lists this PR but doesn't render it.</p>
+        </div>
+      {:else if store.diffError}
         <p class="error-box">{store.diffError}</p>
       {:else if store.diff}
         <Diffs />
