@@ -1349,7 +1349,6 @@ button.sum-pill:hover {
   font-variant-numeric: tabular-nums;
 }
 .switcher-name {
-  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -1431,7 +1430,6 @@ button.sum-pill:hover {
 }
 .leaf-name {
   flex: 1 1 auto;
-  font-family: var(--font-mono);
   word-break: break-all;
 }
 .tree-item.status-added .leaf-name {
@@ -1462,22 +1460,19 @@ button.sum-pill:hover {
   z-index: 1;
 }
 .res-title {
-  font-family: var(--font-mono); /* a resource identifier — Kind ns/name */
+  /* The diff body (table.diff) carries the only monospace; this header is a
+     resource identifier shown as a label, so it stays in the UI (sans) font —
+     matching the tree, the mobile switcher, and the summary/overview. */
   font-weight: 600;
   flex: 1 1 auto;
   word-break: break-all;
 }
 /* The resource kind reads quieter than the ns/name it qualifies; the Summary
-   header's quiet title shares the treatment (a label, not an identifier). */
+   header's quiet "Overview" title shares the muted treatment (a label). */
 .res-kind,
 .res-title-quiet {
   color: var(--muted);
   font-weight: 500;
-}
-/* The Summary header's "Overview" is a label, not an identifier — keep it in the
-   UI (sans) font rather than inheriting .res-title's mono. */
-.res-title-quiet {
-  font-family: inherit;
 }
 .res-status {
   font-size: 10px;
