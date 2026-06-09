@@ -5,8 +5,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"hash/fnv"
 	"io"
 	"mime"
 	"net/http"
@@ -105,7 +107,69 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	if env.Status == api.JobPending || env.Status == api.JobRunning {
 		code = http.StatusAccepted
 	}
+	// A rendered diff is immutable until the next render, so serve a validator:
+	// the SPA refetches the full diff on every "ready" event and the staleness
+	// backstop re-renders open PRs ~every interval even when nothing changed, so
+	// without this each of those repaints re-marshals the multi-MB body. With an
+	// ETag they collapse to a 304 — no marshal, no transfer. Only for a ready 200
+	// carrying a diff; pending/error responses are transient or bodyless.
+	if code == http.StatusOK {
+		if etag := s.diffETag(env); etag != "" {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "no-cache") // cacheable, but revalidate every use
+			if ifNoneMatch(r, etag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+	}
 	writeJSON(w, code, env)
+}
+
+// diffETag derives a strong validator for a /diff response that carries a
+// rendered diff. It hashes the response's light fields (the whole envelope minus
+// the heavy Diff body) together with the diff's precomputed content digest
+// (env.Digest, the store's savedDigest), so the ETag changes whenever any part
+// of the response would change — without re-marshaling the multi-MB body. The
+// signed avatar path is part of the light fields, so a restart (which re-signs
+// it with a fresh key) yields a different ETag, never a stale 304. Returns ""
+// when there is no rendered diff to validate.
+func (s *Server) diffETag(env api.DiffEnvelope) string {
+	if env.Diff == nil {
+		return ""
+	}
+	light := env
+	light.Diff = nil // env.Digest already stands in for the body
+	meta, err := json.Marshal(light)
+	if err != nil {
+		return "" // never expected; fall back to an unconditional response
+	}
+	h := fnv.New64a()
+	var d [8]byte
+	binary.LittleEndian.PutUint64(d[:], env.Digest)
+	_, _ = h.Write(d[:])
+	_, _ = h.Write(meta)
+	return `"` + strconv.FormatUint(h.Sum64(), 16) + `"`
+}
+
+// ifNoneMatch reports whether the request's If-None-Match matches etag — an
+// exact strong-validator match, or "*". Per RFC 9110 the header is a
+// comma-separated list; konflate only emits strong ETags, so a strong compare is
+// correct.
+func ifNoneMatch(r *http.Request, etag string) bool {
+	inm := r.Header.Get("If-None-Match")
+	if inm == "" {
+		return false
+	}
+	if strings.TrimSpace(inm) == "*" {
+		return true
+	}
+	for _, candidate := range strings.Split(inm, ",") {
+		if strings.TrimSpace(candidate) == etag {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSummary serves the same envelope as handleDiff but with the heavy
@@ -507,7 +571,12 @@ func (s *Server) reconcileHeadGone(number int) {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	enc := json.NewEncoder(w)
+	// These bodies are application/json with X-Content-Type-Options: nosniff, so
+	// they can't be sniffed as HTML — escaping </>/& to \u00xx only bloats the
+	// payload, and the diff is span-dense chroma HTML (~6x on those bytes).
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
 }
 
 // writeError writes a JSON error body ({"error": msg}) with the given status.

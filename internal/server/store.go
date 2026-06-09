@@ -262,7 +262,15 @@ func (s *store) get(number int) (api.DiffEnvelope, bool) {
 	if j == nil {
 		return api.DiffEnvelope{}, false
 	}
-	return api.DiffEnvelope{Status: j.status, PR: j.pr, Diff: j.result, Error: j.errMsg, RefreshError: j.refreshErr, Hidden: j.hidden}, true
+	return api.DiffEnvelope{
+		Status:       j.status,
+		PR:           j.pr,
+		Diff:         j.result,
+		Error:        j.errMsg,
+		RefreshError: j.refreshErr,
+		Hidden:       j.hidden,
+		Digest:       j.savedDigest,
+	}, true
 }
 
 // activeNumbers returns the PRs currently treated as open (not yet marked
