@@ -165,6 +165,62 @@ func TestServer_RefreshListAndDiff(t *testing.T) {
 	}
 }
 
+// TestServer_DiffETagConditional verifies the diff endpoint serves a strong
+// validator and honors If-None-Match: a matching conditional request gets a
+// bodyless 304 (no re-marshal of the diff), and a new render with different
+// content changes the ETag so a stale validator falls back to a full 200.
+func TestServer_DiffETagConditional(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
+	h := s.mainHandler()
+	s.store.upsertPR(api.PR{Number: 7, Open: true}, false)
+	s.store.setResult(7, api.DiffResult{PRNumber: 7, ChromaCSS: ".a{}"})
+
+	rec := do(h, "GET", "/api/prs/7/diff", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first diff: got %d, want 200", rec.Code)
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("a ready diff response must carry an ETag")
+	}
+
+	rec = do(h, "GET", "/api/prs/7/diff", nil, map[string]string{"If-None-Match": etag})
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("matching If-None-Match: got %d, want 304", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("a 304 must have an empty body, got %d bytes", rec.Body.Len())
+	}
+
+	// New render, different content → the validator changes, so the stale one
+	// no longer matches and the client gets a full response.
+	s.store.setResult(7, api.DiffResult{PRNumber: 7, ChromaCSS: ".b{}"})
+	rec = do(h, "GET", "/api/prs/7/diff", nil, map[string]string{"If-None-Match": etag})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("after a content change, a stale validator must get 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("ETag") == etag {
+		t.Error("the ETag must change when the diff content changes")
+	}
+}
+
+// TestServer_DiffJSONNotHTMLEscaped verifies the API encoder leaves </>/&
+// unescaped (the bodies are application/json + nosniff, so escaping only bloats
+// the span-dense diff HTML).
+func TestServer_DiffJSONNotHTMLEscaped(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
+	h := s.mainHandler()
+	s.store.upsertPR(api.PR{Number: 7, Open: true}, false)
+	s.store.setResult(7, api.DiffResult{PRNumber: 7, ChromaCSS: "x < y > z & w"})
+
+	body := do(h, "GET", "/api/prs/7/diff", nil, nil).Body.String()
+	if !strings.Contains(body, "x < y > z & w") {
+		t.Errorf("API JSON should not HTML-escape diff content; body = %s", body)
+	}
+}
+
 func TestServer_PRFilterExpr(t *testing.T) {
 	t.Parallel()
 	cfg := ghCfg("tok")

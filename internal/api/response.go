@@ -69,6 +69,10 @@ type DiffEnvelope struct {
 	// rendered, so the UI shows an "excluded by the filter" notice rather than a
 	// perpetual "rendering" state.
 	Hidden bool `json:"hidden,omitempty"`
+	// Digest is the store's content version for this PR (its savedDigest). It lets
+	// the diff endpoint build an ETag without re-marshaling the body, and is never
+	// serialized — purely a server-internal handle carried alongside the envelope.
+	Digest uint64 `json:"-"`
 }
 
 // Meta is the non-secret identity of this konflate instance, served at
