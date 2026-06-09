@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
+:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -324,6 +324,11 @@ a.repo:focus-visible .repo-ext {
 }
 .dot-merged {
   background: var(--merged);
+}
+/* A filter-excluded (hidden) PR: a neutral grey dot — it isn't rendered, so it
+   carries none of the live status colors. */
+.dot-hidden {
+  background: var(--muted);
 }
 @keyframes pulse {
   50% {
@@ -683,50 +688,15 @@ a.repo:focus-visible .repo-ext {
   color: var(--danger);
 }
 .pv-res {
-  font-family: var(--font-mono);
   font-weight: 600;
 }
 .pv-detail,
 .pv-delta {
   color: var(--muted);
 }
-.pv-delta {
-  font-family: var(--font-mono);
-}
 .pv-more {
   color: var(--muted);
   font-style: italic;
-}
-/* Collapsible "Recently merged" group header. */
-.group-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 960px;
-  margin: 4px auto 0;
-  padding: 6px 14px;
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-}
-.group-head:hover {
-  color: var(--text);
-}
-.group-count {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 7px;
-  font-weight: 600;
-}
-.merged-cards {
-  padding-top: 4px;
 }
 .card-top {
   display: flex;
@@ -851,6 +821,23 @@ button.sum-pill:hover {
 }
 .sum-pill.merged strong {
   color: var(--merged);
+}
+/* The "hidden" pill (filter-excluded PRs) reads neutral — these aren't a
+   problem to flag, just kept out of the default view. */
+.sum-pill.hidden {
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+}
+.sum-pill.hidden strong {
+  color: var(--muted);
+}
+.sum-pill.hidden.active {
+  border-color: var(--muted);
+  background: var(--panel-alt);
+  color: var(--text);
+}
+.sum-pill.hidden:hover {
+  border-color: var(--muted);
 }
 .badges {
   display: flex;
@@ -1202,7 +1189,6 @@ button.sum-pill:hover {
   color: var(--caution);
 }
 .warning-res {
-  font-family: var(--font-mono); /* the flagged resource — Kind ns/name */
   font-size: 12px;
   font-weight: 600;
 }
@@ -1233,7 +1219,6 @@ button.sum-pill:hover {
   gap: 4px;
 }
 .img-name {
-  font-family: var(--font-mono);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -1242,7 +1227,6 @@ button.sum-pill:hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  font-family: var(--font-mono);
 }
 .img-ver {
   overflow-wrap: anywhere;
@@ -1257,7 +1241,6 @@ button.sum-pill:hover {
   color: var(--muted);
 }
 .img-refs {
-  font-family: var(--font-mono); /* referencing resources — Kind ns/name */
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -1265,12 +1248,10 @@ button.sum-pill:hover {
   padding: 4px 0;
 }
 .failure-parent {
-  font-family: var(--font-mono);
   font-size: 12px;
 }
 .failure-msg {
   color: var(--danger);
-  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
 }

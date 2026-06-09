@@ -32,6 +32,11 @@ type PRStatus struct {
 	// PRs when the feature is enabled. konflate never runs it — the reviewer
 	// pastes it into their own shell.
 	MergeCommand string `json:"mergeCommand,omitempty"`
+	// Hidden marks a PR the configured filter (KONFLATE_PR_FILTER_EXPR) excludes:
+	// konflate lists it (the UI greys it and groups it under the "hidden" pill,
+	// out of the default open view) but never renders its diff — so a fork's
+	// untrusted code is never executed. The number/title/author still show.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // Signals is the at-a-glance review summary for one PR's rendered diff.
@@ -60,6 +65,10 @@ type DiffEnvelope struct {
 	// the summary endpoint for external consumers (a PR-comment bot links back to
 	// it); the SPA never needs it. Absent elsewhere.
 	ReviewURL string `json:"reviewUrl,omitempty"`
+	// Hidden marks a PR the filter excludes (see PRStatus.Hidden): it isn't
+	// rendered, so the UI shows an "excluded by the filter" notice rather than a
+	// perpetual "rendering" state.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // Meta is the non-secret identity of this konflate instance, served at

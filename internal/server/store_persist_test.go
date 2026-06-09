@@ -30,9 +30,9 @@ func TestStore_PersistsAcrossRestart(t *testing.T) {
 
 	// First process: render an open PR (#1) and render-then-merge another (#2).
 	s1 := open()
-	s1.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true})
+	s1.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true}, false)
 	s1.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a", Warnings: []api.Warning{{}}})
-	s1.upsertPR(api.PR{Number: 2, HeadSHA: "b", Open: true})
+	s1.upsertPR(api.PR{Number: 2, HeadSHA: "b", Open: true}, false)
 	s1.setResult(2, api.DiffResult{PRNumber: 2, HeadSHA: "b"})
 	s1.markClosed(2, s1.now())
 
@@ -77,7 +77,7 @@ func TestStore_SkipsUnchangedWrites(t *testing.T) {
 	s := newStore()
 	s.loadFrom(p, discardLog())
 
-	s.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true})
+	s.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true}, false)
 	s.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a"})
 
 	file := filepath.Join(dir, "1.json.zst")

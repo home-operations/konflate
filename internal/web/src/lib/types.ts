@@ -40,6 +40,7 @@ export interface PRStatus extends PR {
   closedAt?: string; // set once merged; UI groups these below open PRs
   signals?: Signals;
   mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
+  hidden?: boolean; // excluded by the PR filter — listed (greyed, under the "hidden" pill) but never rendered
 }
 
 export interface DiffSummary {
@@ -152,6 +153,7 @@ export interface DiffEnvelope {
   error?: string;
   refreshError?: string; // last re-render failed; diff is the last-good render
   mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
+  hidden?: boolean; // excluded by the PR filter — not rendered (the review shows a notice)
 }
 
 // Discriminated on `type`: a "status" event always carries a status (and maybe

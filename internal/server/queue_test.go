@@ -93,7 +93,7 @@ func TestQueue_CoalesceUsesLatestMetadata(t *testing.T) {
 	<-started // "old" is rendering
 
 	// A new push lands mid-render: enqueue the newer metadata, which coalesces.
-	st.upsertPR(api.PR{Number: 1, HeadSHA: "new"})
+	st.upsertPR(api.PR{Number: 1, HeadSHA: "new"}, false)
 	q.enqueue(api.PR{Number: 1, HeadSHA: "new"})
 
 	release <- struct{}{} // finish "old"
@@ -120,7 +120,7 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 	st := newStore()
 	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
 
-	st.upsertPR(api.PR{Number: 1})
+	st.upsertPR(api.PR{Number: 1}, false)
 	q.enqueue(api.PR{Number: 1})
 	waitTerminal(t, st, 1)
 
@@ -140,7 +140,7 @@ func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
 	}
 	reconciled := make(chan int, 1)
 	st := newStore()
-	st.upsertPR(api.PR{Number: 1})
+	st.upsertPR(api.PR{Number: 1}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from when the PR was open
 	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1)
 

@@ -139,22 +139,22 @@ test('a failed refresh keeps the diff and flags it (list badge + review strip)',
   await expect(page.locator('.tree .tree-item')).toHaveCount(3);
 });
 
-test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ page }) => {
+test('merged PRs are reached via the merged pill, not shown by default', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
 
-  // Landing: only the 3 open PRs render as cards; the merged one is collapsed.
+  // Landing shows only the 3 open PRs; the merged one isn't in the default view.
   await expect(page.locator('.card')).toHaveCount(3);
-  const group = page.locator('.group-head', { hasText: 'Recently merged' });
-  await expect(group).toContainText('1');
-  await expect(page.locator('.merged-cards')).toHaveCount(0);
+  await expect(page.locator('.card-shell', { hasText: '#128' })).toHaveCount(0);
 
-  // Expand → the merged card appears, de-emphasized and labelled.
-  await group.click();
-  const mergedCard = page.locator('.merged-cards .card-shell.merged', { hasText: '#128' });
+  // The merged pill carries the count; clicking it switches to the merged view.
+  const mergedPill = page.locator('.sum-pill.merged');
+  await expect(mergedPill).toContainText('1');
+  await mergedPill.click();
+  const mergedCard = page.locator('.card-shell.merged', { hasText: '#128' });
   await expect(mergedCard).toBeVisible();
-  // No redundant "merged" tag — the group header, dimmed card, purple dot, and
-  // "merged …" timestamp already convey it.
+  // No redundant "merged" tag — the dimmed card, purple dot, and "merged …"
+  // timestamp already convey it.
   await expect(mergedCard.locator('.ago')).toContainText('merged');
 
   // Opening a merged PR shows the frozen-diff banner.
@@ -164,6 +164,42 @@ test('recently-merged PRs are grouped, collapsed, and marked frozen', async ({ p
   await mergedCard.locator('.card').click();
   await expect(page).toHaveURL(/#\/pr\/128$/);
   await expect(page.locator('.merged-strip')).toContainText('frozen');
+});
+
+test('filter-excluded PRs are hidden: a pill, a grey dot, out of the default view, not rendered', async ({ page }) => {
+  const tracked = {
+    number: 1, title: 'tracked', author: 'x', state: 'open', open: true, draft: false,
+    headRef: 'h', headSha: 'h1', baseRef: 'main', labels: [], url: 'https://github.com/acme/home-ops/pull/1',
+    status: 'ready', updatedAt: '2026-06-04T12:00:00Z', signals: { resources: 1, caution: 0, images: 0, failures: 0 },
+  };
+  const hidden = {
+    number: 9, title: 'external fork', author: 'outsider', state: 'open', open: true, draft: false,
+    headRef: 'patch', headSha: 'f9', baseRef: 'main', labels: [], url: 'https://github.com/outsider/home-ops/pull/9',
+    status: 'pending', updatedAt: '2026-06-04T12:00:00Z', hidden: true,
+  };
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: [tracked, hidden] }));
+  await page.route('**/api/prs/9/diff', (r) => r.fulfill({ json: { status: 'pending', pr: hidden, hidden: true } }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+
+  // Default view shows only the tracked PR; the hidden one is excluded.
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card-shell', { hasText: '#9' })).toHaveCount(0);
+
+  // The hidden pill carries the count; clicking it reveals the hidden PR, greyed.
+  const hiddenPill = page.locator('.sum-pill.hidden');
+  await expect(hiddenPill).toContainText('1');
+  await hiddenPill.click();
+  const hiddenCard = page.locator('.card-shell', { hasText: '#9' });
+  await expect(hiddenCard).toBeVisible();
+  await expect(hiddenCard.locator('.dot-hidden')).toBeVisible();
+  await expect(page.locator('.card')).toHaveCount(1); // only the hidden PR now
+
+  // Opening it explains it isn't rendered, rather than spinning forever.
+  await hiddenCard.locator('.card').click();
+  await expect(page).toHaveURL(/#\/pr\/9$/);
+  await expect(page.locator('.review-body')).toContainText('Excluded by the PR filter');
 });
 
 test('split diff renders two balanced columns (regression)', async ({ page }) => {
@@ -402,10 +438,10 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await caution.click();
   await expect(page.locator('.card')).toHaveCount(3);
 
-  // merged → only the merged shelf, auto-expanded; counts stay visible.
+  // merged → only merged PRs show (the open list is replaced); counts stay visible.
   await page.locator('.sum-pill', { hasText: 'merged' }).click();
-  await expect(page.locator('.merged-cards .card')).toHaveCount(1);
   await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card-shell')).toContainText('#128');
   await expect(page.locator('.list-summary')).toContainText('3 open');
 
   // Status filter + a text query that excludes everything → the no-match state.

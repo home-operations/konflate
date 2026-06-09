@@ -29,9 +29,9 @@ for (const vp of viewports) {
       await page.goto('/');
       await page.locator('.card').first().waitFor();
       await page.screenshot({ path: `screenshots/${vp.tag}-list.png`, fullPage: true });
-      // Expand the "recently merged" shelf for the grouped view.
-      await page.locator('.group-head').click();
-      await page.locator('.merged-cards .card').first().waitFor();
+      // Click the merged pill for the merged-PR view.
+      await page.locator('.sum-pill.merged').click();
+      await page.locator('.card-shell.merged').first().waitFor();
       await page.screenshot({ path: `screenshots/${vp.tag}-list-merged.png`, fullPage: true });
     });
 

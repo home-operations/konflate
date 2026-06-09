@@ -24,7 +24,6 @@
     mdiSortVariant,
     mdiSortAscending,
     mdiSortDescending,
-    mdiChevronRight,
     mdiChevronDown,
     mdiChevronUp,
     mdiCheckCircleOutline,
@@ -38,18 +37,23 @@
   // count, so the counts hold steady while a pill is active), then the active
   // pill narrows and the sort orders what's shown.
   const prs = $derived(filteredPRs());
+  // The active pill (or default = open, non-hidden) selects what's shown, then
+  // the sort orders it. Rendered as one flat list — merged and hidden PRs are
+  // reached via their pills, not a separate group.
   const shown = $derived(sortPRs(prs.filter((p) => matchesStatus(p, store.statusFilter))));
-  const openPrs = $derived(shown.filter((p) => p.open));
-  const mergedPrs = $derived(shown.filter((p) => !p.open));
-  const openAll = $derived(prs.filter((p) => p.open));
+  // The full open, non-hidden set — for the default-base heuristic and the pill
+  // counts (which hold steady while a pill narrows what's shown).
+  const openPrs = $derived(prs.filter((p) => p.open && !p.hidden));
   const filterActive = $derived(store.query.trim() !== '' || store.statusFilter !== '');
 
-  // At-a-glance health of the open set, shown above the list — each pill is
-  // also a toggle that filters the list down to that status.
+  // At-a-glance health, shown above the list — each pill is also a toggle that
+  // filters the list to that status. merged and hidden are pill-only (kept out
+  // of the default open view); hidden = excluded by the PR filter, not rendered.
   const summary = $derived.by(() => ({
-    open: openAll.length,
-    caution: openAll.filter((p) => (p.signals?.caution ?? 0) > 0).length,
-    merged: prs.length - openAll.length,
+    open: openPrs.length,
+    caution: openPrs.filter((p) => (p.signals?.caution ?? 0) > 0).length,
+    merged: prs.filter((p) => !p.open).length,
+    hidden: prs.filter((p) => p.hidden).length,
   }));
 
   function toggleFilter(f: StatusFilter): void {
@@ -84,11 +88,6 @@
     return best;
   });
 
-  // The "recently merged" shelf is collapsed by default; expand on click, or
-  // automatically while a filter is active so a search can reach merged PRs.
-  let mergedExpanded = $state(false);
-  const showMerged = $derived(mergedExpanded || filterActive);
-
   // Per-row inline summary: the chevron toggles it, lazy-loading the PR's diff
   // summary on first open (the row click still opens the full review). Keyed by
   // PR number; the data is cached in the store and keyed by headSha there.
@@ -108,9 +107,8 @@
     return !!p && p.state !== 'loading';
   };
 
-  // The visible rows that have a summary to toggle — open cards plus the merged
-  // shelf when it's showing. Drives the expand/collapse-all control.
-  const expandableRows = $derived([...openPrs, ...(showMerged ? mergedPrs : [])].filter((p) => p.signals));
+  // The visible rows that have a summary to toggle. Drives the expand/collapse-all control.
+  const expandableRows = $derived(shown.filter((p) => p.signals));
   const allExpanded = $derived(expandableRows.length > 0 && expandableRows.every((p) => expanded[p.number]));
   function toggleExpandAll(): void {
     const next = !allExpanded;
@@ -253,7 +251,7 @@
     >
       <button class="card" onclick={() => openPR(pr.number)}>
         <div class="card-top">
-        <span class="dot {pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
+        <span class="dot {pr.hidden ? 'dot-hidden' : pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
         <span class="card-title"><Breakable text={pr.title} /></span>
       </div>
       <div class="card-meta">
@@ -317,7 +315,7 @@
             <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
           {/if}
         </button>
-      {:else if pr.open && (pr.status === 'running' || pr.status === 'pending')}
+      {:else if pr.open && !pr.hidden && (pr.status === 'running' || pr.status === 'pending')}
         <span
           class="card-state"
           title={pr.status === 'running' ? 'Rendering…' : 'Queued to render'}
@@ -325,7 +323,7 @@
         >
           {#if pr.status === 'running'}<Spinner size={16} />{:else}<Icon path={mdiTrayFull} size={16} />{/if}
         </span>
-      {:else if pr.open && pr.status === 'error'}
+      {:else if pr.open && !pr.hidden && pr.status === 'error'}
         <span class="card-state error" title={pr.error ? `Render failed: ${pr.error}` : 'Render failed'} aria-label="Render failed">
           <Icon path={mdiAlertCircleOutline} size={18} />
         </span>
@@ -377,14 +375,17 @@
     </div>
   </div>
 
-  {#if store.loaded && openAll.length}
+  {#if store.loaded && (summary.open || summary.merged || summary.hidden)}
     <div class="list-summary">
-      {@render pill('open', summary.open, '', 'Show all open pull requests')}
+      {@render pill('open', summary.open, '', 'Show open pull requests')}
       {#if showPill(summary.caution, 'caution')}
         {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
       {/if}
       {#if showPill(summary.merged, 'merged')}
         {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}
+      {/if}
+      {#if showPill(summary.hidden, 'hidden')}
+        {@render pill('hidden', summary.hidden, 'hidden', 'PRs excluded by the filter — listed but not rendered')}
       {/if}
       {#if expandableRows.length}
         <button
@@ -409,25 +410,9 @@
       {@render allClear()}
     {/if}
   {:else}
-    {#if openPrs.length}
-      <ul class="cards">
-        {#each openPrs as pr (pr.number)}{@render prCard(pr)}{/each}
-      </ul>
-    {:else if !filterActive}
-      {@render allClear()}
-    {/if}
-
-    {#if mergedPrs.length}
-      <button class="group-head" onclick={() => (mergedExpanded = !mergedExpanded)} aria-expanded={showMerged}>
-        <Icon path={showMerged ? mdiChevronDown : mdiChevronRight} size={16} />
-        Recently merged <span class="group-count">{mergedPrs.length}</span>
-      </button>
-      {#if showMerged}
-        <ul class="cards merged-cards">
-          {#each mergedPrs as pr (pr.number)}{@render prCard(pr)}{/each}
-        </ul>
-      {/if}
-    {/if}
+    <ul class="cards">
+      {#each shown as pr (pr.number)}{@render prCard(pr)}{/each}
+    </ul>
   {/if}
 
   <Footer />
