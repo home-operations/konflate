@@ -136,6 +136,10 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		env.Diff = &lite
 	}
 	rendering := env.Status == api.JobPending || env.Status == api.JobRunning
+	// A render-status header (ok / failures / error / pending) lets a CI gate
+	// decide pass/fail from the very request it fetches the comment body with — no
+	// second JSON call. Set before either branch writes its status line.
+	w.Header().Set(renderStatusHeader, renderStatus(env))
 	// Content negotiation: a caller asking for Markdown gets a paste-ready block
 	// (forge flavour from ?forge=, defaulting to this instance's forge — so a
 	// GitHub-watching konflate emits [!CAUTION] admonitions with no param). Every
@@ -169,6 +173,35 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 // summaryRetryAfterSeconds is the Retry-After hint on a still-rendering Markdown
 // summary response, so a `curl --retry` consumer backs off a beat between tries.
 const summaryRetryAfterSeconds = 3
+
+// renderStatusHeader names the response header carrying the render verdict on
+// the summary endpoint, so a CI gate can pass/fail off one request. Values are
+// from [renderStatus].
+const renderStatusHeader = "X-Konflate-Render-Status"
+
+// renderStatus reduces a PR's envelope to the verdict a CI gate cares about:
+//
+//	ok       — rendered cleanly, no resource failed
+//	failures — rendered, but flate could not render one or more resources
+//	error    — the render itself errored (Error is set, no diff)
+//	pending  — still queued/rendering (the Markdown path 503s here, so a
+//	           `curl --retry` consumer only observes a terminal value)
+//
+// "failures" and "error" are the fail-the-PR cases; a transient RefreshError
+// (last-good diff still shown) is deliberately reported as "ok".
+func renderStatus(env api.DiffEnvelope) string {
+	switch env.Status {
+	case api.JobError:
+		return "error"
+	case api.JobReady:
+		if env.Diff != nil && len(env.Diff.Failures) > 0 {
+			return "failures"
+		}
+		return "ok"
+	default: // pending, running
+		return "pending"
+	}
+}
 
 // avatarClient fetches author avatars with a tight timeout; responses are
 // size-capped and must be images (see handleAvatar).

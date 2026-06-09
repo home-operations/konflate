@@ -327,6 +327,47 @@ func TestServer_SummaryMarkdownRetryAfter(t *testing.T) {
 	}
 }
 
+func TestServer_RenderStatusHeader(t *testing.T) {
+	t.Parallel()
+	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		switch pr.Number {
+		case 2: // rendered, but a resource failed
+			return api.DiffResult{PRNumber: 2, HeadSHA: pr.HeadSHA,
+				Failures: []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values schema"}}}, nil
+		case 3: // the render itself errored
+			return api.DiffResult{}, fmt.Errorf("clone failed")
+		default: // clean
+			return api.DiffResult{PRNumber: pr.Number, HeadSHA: pr.HeadSHA}, nil
+		}
+	}}
+	prs := []api.PR{
+		{Number: 1, HeadRef: "a", BaseRef: "main", HeadSHA: "s1", Open: true},
+		{Number: 2, HeadRef: "b", BaseRef: "main", HeadSHA: "s2", Open: true},
+		{Number: 3, HeadRef: "c", BaseRef: "main", HeadSHA: "s3", Open: true},
+	}
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: prs}, eng)
+	h := s.mainHandler()
+	s.refreshList(s.runCtx)
+	waitFor(t, s, 1)
+	waitFor(t, s, 2)
+	waitFor(t, s, 3)
+	// #4 is recorded but never rendered → still pending.
+	s.store.upsertPR(api.PR{Number: 4, HeadRef: "d", BaseRef: "main", HeadSHA: "s4", Open: true})
+
+	// The verdict header lets a CI gate pass/fail off the same request it fetches
+	// the comment with — no second JSON call.
+	for n, want := range map[int]string{1: "ok", 2: "failures", 3: "error", 4: "pending"} {
+		rec := do(h, "GET", fmt.Sprintf("/api/prs/%d/summary", n), nil, map[string]string{"Accept": "text/markdown"})
+		if got := rec.Header().Get(renderStatusHeader); got != want {
+			t.Errorf("PR #%d: %s = %q, want %q", n, renderStatusHeader, got, want)
+		}
+	}
+	// Present on the JSON path too (not just Markdown).
+	if got := do(h, "GET", "/api/prs/2/summary", nil, nil).Header().Get(renderStatusHeader); got != "failures" {
+		t.Errorf("JSON path: %s = %q, want failures", renderStatusHeader, got)
+	}
+}
+
 func TestServer_AvatarProxy(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())

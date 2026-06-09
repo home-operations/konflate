@@ -185,16 +185,16 @@ re-renders](#triggering-re-renders)).
 
 Main server (`KONFLATE_PORT`):
 
-| Method & path                 | Purpose                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /`                       | The web UI.                                                                                                                                                                                                                                                                                                                                                                         |
-| `GET /api/prs`                | Tracked PRs and each one's diff-job status.                                                                                                                                                                                                                                                                                                                                         |
-| `GET /api/prs/{n}/diff`       | A PR's rendered diff (`200` ready/error, `202` still rendering).                                                                                                                                                                                                                                                                                                                    |
-| `GET /api/prs/{n}/summary`    | The diff's headline facts only — impact, cautions, image bumps, failures — without the per-resource render. JSON by default; `Accept: text/markdown` returns a paste-ready comment body (`?forge=github` for `[!CAUTION]` admonitions, else plain). Ready ⇒ `200`; while rendering, JSON returns `202` and Markdown returns `503` + `Retry-After` (so `curl --retry` waits it out). |
-| `POST /api/prs/{n}/refresh`   | **Auth** (bearer `KONFLATE_PUSH_TOKEN`) — re-render one PR. `501` unless the token is set.                                                                                                                                                                                                                                                                                          |
-| `POST /hooks`                 | Verified forge webhook — re-renders the affected PR. `501` unless the secret is set.                                                                                                                                                                                                                                                                                                |
-| `GET /ws`                     | Websocket stream of diff-job status events.                                                                                                                                                                                                                                                                                                                                         |
-| `GET /healthz`, `GET /readyz` | Liveness / readiness.                                                                                                                                                                                                                                                                                                                                                               |
+| Method & path                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                       | The web UI.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `GET /api/prs`                | Tracked PRs and each one's diff-job status.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `GET /api/prs/{n}/diff`       | A PR's rendered diff (`200` ready/error, `202` still rendering).                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `GET /api/prs/{n}/summary`    | The diff's headline facts only — impact, cautions, image bumps, failures — without the per-resource render. JSON by default; `Accept: text/markdown` returns a paste-ready comment body (`?forge=github` for `[!CAUTION]` admonitions, else plain). Ready ⇒ `200`; while rendering, JSON returns `202` and Markdown returns `503` + `Retry-After` (so `curl --retry` waits it out). Every response carries an `X-Konflate-Render-Status` header (`ok`/`failures`/`error`/`pending`) for CI gating — see below. |
+| `POST /api/prs/{n}/refresh`   | **Auth** (bearer `KONFLATE_PUSH_TOKEN`) — re-render one PR. `501` unless the token is set.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `POST /hooks`                 | Verified forge webhook — re-renders the affected PR. `501` unless the secret is set.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `GET /ws`                     | Websocket stream of diff-job status events.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `GET /healthz`, `GET /readyz` | Liveness / readiness.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Operational server (`KONFLATE_METRICS_ADDR`): `GET /metrics`.
 
@@ -212,6 +212,30 @@ curl -fsS --retry 10 --retry-delay 3 -H 'Accept: text/markdown' \
 The comment carries a `<!-- konflate:pr-N -->` marker so a poster can find and
 update its own comment. konflate keeps PRs rendered on its own (webhook /
 interval), so the diff is normally ready by the time CI asks anyway.
+
+**Gating the workflow on the render.** Every summary response (Markdown or JSON)
+carries an `X-Konflate-Render-Status` header, so the same request that fetches
+the comment also tells CI whether to pass:
+
+| Value      | Meaning                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| `ok`       | Rendered cleanly.                                                                                       |
+| `failures` | Rendered, but one or more resources failed to render (the diff is shown, minus those).                  |
+| `error`    | The render itself errored — no diff produced.                                                           |
+| `pending`  | Still rendering. The Markdown path `503`s until a terminal verdict, so `--retry` never leaves you here. |
+
+```bash
+status=$(curl -fsS --retry 10 --retry-delay 3 -H 'Accept: text/markdown' \
+  -o body.md -w '%header{x-konflate-render-status}' \
+  "https://konflate.example.com/api/prs/${PR_NUMBER}/summary")
+gh pr comment "${PR_NUMBER}" --body-file body.md --edit-last   # always post what rendered
+[ "$status" = ok ] || { echo "::error::konflate render: ${status}"; exit 1; }
+```
+
+The check above blocks on both `error` and `failures`; relax it to
+`case "$status" in ok | failures) ;; *) exit 1 ;; esac` if a partial render
+shouldn't fail the PR. (`%header{}` needs curl ≥ 8.3; older curl can `-D -` and
+grep the header instead.)
 
 ## Triggering re-renders
 
