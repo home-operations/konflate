@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.28](https://github.com/home-operations/konflate/compare/0.1.27...0.1.28) (2026-06-09)
+
+
+### Features
+
+* **server:** X-Konflate-Render-Status header on the summary endpoint ([#99](https://github.com/home-operations/konflate/issues/99)) ([582dd2f](https://github.com/home-operations/konflate/commit/582dd2fafaa4e41a82454a25d3db8a8902330ad0))
+
 ## [0.1.27](https://github.com/home-operations/konflate/compare/0.1.26...0.1.27) (2026-06-08)
 
 
