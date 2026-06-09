@@ -40,29 +40,76 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	}
 
 	d := env.Diff
-	fmt.Fprintf(&b, "\n**+%d added · %d changed · −%d removed** — %d %s",
+
+	// writeFooter closes the comment: the review link, then a subtle provenance
+	// line naming the commit this summary reflects. The comment is edited in place
+	// across pushes, so the rendered SHA is the only cue to which one it shows.
+	writeFooter := func() {
+		writeLink()
+		if sha := shortSHA(d.HeadSHA); sha != "" {
+			fmt.Fprintf(&b, "\n<sub>konflate · rendered `%s` · advisory, not a gate</sub>\n", sha)
+		} else {
+			b.WriteString("\n<sub>konflate · advisory, not a gate</sub>\n")
+		}
+	}
+	// writeRefreshNote flags that the most recent re-render failed and we're showing
+	// the last good diff, so a reviewer doesn't act on a stale render unaware.
+	writeRefreshNote := func() {
+		if env.RefreshError == "" {
+			return
+		}
+		if admonitions {
+			b.WriteString("\n> [!WARNING]\n> Couldn't refresh against the latest push — showing the last good render.\n")
+		} else {
+			b.WriteString("\n**⚠ Stale render** — couldn't refresh against the latest push; showing the last good render.\n")
+		}
+	}
+
+	// Nothing rendered-changed (a docs/CI-only PR, or a Flux edit that nets to
+	// nothing): say so plainly instead of a "+0 · 0 · −0 — 0 resources" line. Any
+	// warning, failure, or image change means there's something worth showing.
+	if d.Summary.Added == 0 && d.Summary.Changed == 0 && d.Summary.Removed == 0 &&
+		len(d.Warnings) == 0 && len(d.Failures) == 0 && len(d.Images) == 0 {
+		if admonitions {
+			b.WriteString("\n> [!NOTE]\n> ✅ No rendered changes.\n")
+		} else {
+			b.WriteString("\n✅ No rendered changes.\n")
+		}
+		writeRefreshNote()
+		writeFooter()
+		return b.String()
+	}
+	// Impact line — "+N added · N changed · −N removed — N resources · …". On the
+	// GitHub flavour it sits inside a [!NOTE] admonition; plain keeps it bare.
+	var impact strings.Builder
+	fmt.Fprintf(&impact, "**+%d added · %d changed · −%d removed** — %d %s",
 		d.Summary.Added, d.Summary.Changed, d.Summary.Removed,
 		d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
 	if d.Impact.Parents > 0 {
-		fmt.Fprintf(&b, " · %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
+		fmt.Fprintf(&impact, " · %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
 	}
 	if d.Impact.CRDs > 0 {
-		fmt.Fprintf(&b, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
+		fmt.Fprintf(&impact, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
 	}
 	if d.Truncated > 0 {
-		fmt.Fprintf(&b, " · %d not shown", d.Truncated)
+		fmt.Fprintf(&impact, " · %d not shown", d.Truncated)
 	}
-	b.WriteString("\n")
+	if admonitions {
+		fmt.Fprintf(&b, "\n> [!NOTE]\n> %s\n", impact.String())
+	} else {
+		fmt.Fprintf(&b, "\n%s\n", impact.String())
+	}
+	writeRefreshNote()
 
 	if len(d.Warnings) > 0 {
-		label := plural(len(d.Warnings), "Caution", "Cautions")
 		if admonitions {
-			fmt.Fprintf(&b, "\n> [!CAUTION]\n> **%s**\n", label)
+			// [!CAUTION] renders its own "Caution" heading — no redundant title line.
+			b.WriteString("\n> [!CAUTION]\n")
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}
 		} else {
-			fmt.Fprintf(&b, "\n**⚠ %s**\n", label)
+			fmt.Fprintf(&b, "\n**⚠ %s**\n", plural(len(d.Warnings), "Caution", "Cautions"))
 			for _, wn := range d.Warnings {
 				fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 			}
@@ -92,8 +139,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 		}
 	}
 
-	writeLink()
-	b.WriteString("\n<sub>konflate · advisory, not a gate</sub>\n")
+	writeFooter()
 	return b.String()
 }
 
@@ -102,6 +148,15 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// shortSHA trims a git commit SHA to its 7-character display prefix; shorter or
+// empty input is returned unchanged.
+func shortSHA(s string) string {
+	if len(s) > 7 {
+		return s[:7]
+	}
+	return s
 }
 
 // mdInline escapes free text (warning details, render messages — possibly
