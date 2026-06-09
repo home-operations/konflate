@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .card-expand, .expand-all, .scroll-top, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
+:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .group-head, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -269,12 +269,6 @@ a.repo:focus-visible .repo-ext {
 /* The PR number, shown first in the meta row (list + review) behind a
    pull-request glyph. Styled like its siblings (author, sha, opened, refreshed)
    — muted and normal weight — so the whole meta row reads uniformly. */
-.pr-id {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex: 0 0 auto;
-}
 .tag {
   display: inline-flex;
   align-items: center;
@@ -569,6 +563,25 @@ a.repo:focus-visible .repo-ext {
   color: var(--text);
   background: var(--panel-alt);
   border-radius: 0 7px 7px 0;
+}
+/* Empty stand-in for the disclosure column on rows without a summary yet, so the
+   forge link to its left stays in a consistent column across rows. */
+.card-expand-spacer {
+  flex: 0 0 38px;
+}
+/* Non-interactive state indicator filling the disclosure column for a PR that
+   hasn't rendered a summary yet: a spinner while queued/rendering, a failed icon
+   on error. The icon (+ its tooltip) carries the state — no row text. */
+.card-state {
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+}
+.card-state.error {
+  color: var(--danger);
 }
 .card-li {
   position: relative;
@@ -873,22 +886,6 @@ button.sum-pill:hover {
   color: var(--muted);
   font-weight: 400;
 }
-.card-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.card-status.running {
-  color: var(--accent);
-}
-.card-status.s-error {
-  color: var(--danger);
-}
-.card-status.s-ready {
-  color: var(--ok);
-}
 
 /* ---- review shell ---------------------------------------------------- */
 .review {
@@ -991,15 +988,27 @@ button.sum-pill:hover {
   opacity: 1;
   color: var(--ok);
 }
-.ext {
+/* PR-icon link out to the change on its forge. Quiet (muted) by default; the
+   tooltip names the forge. Shared by the list rows (right of the resource count)
+   and the review title. align-self:center keeps a list-row instance a compact
+   target instead of a full-height column. */
+.forge-link {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  align-self: center;
   gap: 3px;
-  color: var(--accent);
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
   text-decoration: none;
 }
-.ext:hover {
-  text-decoration: underline;
+.forge-link:hover {
+  color: var(--accent);
+  background: var(--panel-alt);
 }
 .review-nav {
   display: flex;

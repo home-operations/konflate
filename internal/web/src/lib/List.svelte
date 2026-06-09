@@ -9,6 +9,7 @@
   import Footer from './Footer.svelte';
   import Breakable from './Breakable.svelte';
   import MergeCommand from './MergeCommand.svelte';
+  import ForgeLink from './ForgeLink.svelte';
   import {
     mdiAlert,
     mdiPackageVariantClosed,
@@ -18,7 +19,6 @@
     mdiRefresh,
     mdiTagOutline,
     mdiSourceBranch,
-    mdiSourcePull,
     mdiClose,
     mdiFilterOutline,
     mdiSortVariant,
@@ -141,10 +141,6 @@
     return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
   }
 
-  // pending/running render as icons below and ready carries signal badges, so
-  // this fallback only labels the terminal error state.
-  const statusLabel: Record<string, string> = { error: 'failed' };
-
   // A '#'-prefixed color for a label dot, or '' when the forge gave no usable
   // hex (e.g. GitLab) — validated so a stray value can't reach the style binding.
   const labelColor = (l: { color?: string }) =>
@@ -261,7 +257,6 @@
         <span class="card-title"><Breakable text={pr.title} /></span>
       </div>
       <div class="card-meta">
-        <span class="pr-id"><Icon path={mdiSourcePull} size={12} /> #{pr.number}</span>
         <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>
         {#if pr.draft}<span class="tag">draft</span>{/if}
         {#if pr.baseRef && defaultBase && pr.baseRef !== defaultBase}
@@ -291,26 +286,24 @@
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
             {/if}
             {#if pr.signals.images}
-              <span class="badge" title="image changes"><Icon path={mdiPackageVariantClosed} size={13} /> {pr.signals.images}</span>
+              <span class="badge" title={`${pr.signals.images} image change${pr.signals.images === 1 ? '' : 's'}`}><Icon path={mdiPackageVariantClosed} size={13} /> {pr.signals.images}</span>
             {/if}
             {#if pr.signals.failures}
               <span class="badge danger" title="render failures"><Icon path={mdiAlertCircleOutline} size={13} /> {pr.signals.failures}</span>
             {/if}
-            <span class="badge muted" title="changed resources">
+            <span class="badge muted" title={`${pr.signals.resources} resource change${pr.signals.resources === 1 ? '' : 's'}`}>
               <Icon path={mdiFileDocumentOutline} size={13} /> {pr.signals.resources}
             </span>
           </span>
-        {:else if pr.open && pr.status === 'running'}
-          <span class="card-status running"><Spinner size={14} /> rendering</span>
-        {:else if pr.open && pr.status === 'pending'}
-          <span class="card-status"><Icon path={mdiTrayFull} size={13} /> queued</span>
-        {:else if pr.open}
-          <span class="card-status s-{pr.status}">{statusLabel[pr.status] ?? pr.status}</span>
         {/if}
       </div>
       </button>
-      <!-- Disclosure for the inline summary. Sibling of the card <button> (a
-           button can't nest), only shown once the PR has rendered signals. -->
+      <!-- Link out to the PR on its forge. Sibling of the card <button> (it can't
+           nest an anchor), so it sits just right of the resource count. -->
+      <ForgeLink url={pr.url} number={pr.number} />
+      <!-- Right column: the expand chevron once a PR has a rendered summary;
+           otherwise a state icon — rendering / queued / failed — carried by the
+           icon and its tooltip, no text (so the row stays compact, incl. mobile). -->
       {#if pr.signals}
         <button
           class="card-expand"
@@ -324,6 +317,22 @@
             <Icon path={isExpanded(pr.number) ? mdiChevronUp : mdiChevronDown} size={18} />
           {/if}
         </button>
+      {:else if pr.open && (pr.status === 'running' || pr.status === 'pending')}
+        <span
+          class="card-state"
+          title={pr.status === 'running' ? 'Rendering…' : 'Queued to render'}
+          aria-label={pr.status === 'running' ? 'Rendering' : 'Queued to render'}
+        >
+          {#if pr.status === 'running'}<Spinner size={16} />{:else}<Icon path={mdiTrayFull} size={16} />{/if}
+        </span>
+      {:else if pr.open && pr.status === 'error'}
+        <span class="card-state error" title={pr.error ? `Render failed: ${pr.error}` : 'Render failed'} aria-label="Render failed">
+          <Icon path={mdiAlertCircleOutline} size={18} />
+        </span>
+      {:else}
+        <!-- Reserve the disclosure column's width so the forge link aligns into a
+             column across rows whether or not a PR has rendered a summary yet. -->
+        <span class="card-expand-spacer" aria-hidden="true"></span>
       {/if}
     </div>
     {#if isExpanded(pr.number) && previewReady(pr.number)}

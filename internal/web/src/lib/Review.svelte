@@ -9,19 +9,17 @@
     mdiArrowLeft,
     mdiChevronLeft,
     mdiChevronRight,
-    mdiOpenInNew,
     mdiSourceMerge,
-    mdiSourcePull,
     mdiTrayFull,
     mdiClockOutline,
     mdiRefresh,
   } from './icons';
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
+  import ForgeLink from './ForgeLink.svelte';
 
   const route = $derived(router.route.name === 'review' ? router.route : null);
   const pr = $derived(currentPR());
-  const forgeUrl = $derived(pr && /^https?:\/\//i.test(pr.url) ? pr.url : null);
   const merged = $derived(pr ? !pr.open : false);
 </script>
 
@@ -43,8 +41,8 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
+        {#if pr}<ForgeLink url={pr.url} number={pr.number} size={16} />{/if}
         <div class="rt-meta">
-          <span class="rt-tag pr-id"><Icon path={mdiSourcePull} size={13} /> #{route.pr}</span>
           {#if pr}
             <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
             <span class="rt-tag sha-wrap">
@@ -57,11 +55,6 @@
             {#if pr.updatedAt}
               <span class="rt-tag ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={13} /> {timeAgo(pr.updatedAt, clock.now)}</span>
             {/if}
-          {/if}
-          {#if forgeUrl}
-            <a class="rt-tag ext" href={forgeUrl} target="_blank" rel="noopener noreferrer">
-              <Icon path={mdiOpenInNew} size={13} /> open
-            </a>
           {/if}
         </div>
       </div>
