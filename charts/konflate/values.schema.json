@@ -56,7 +56,7 @@
         },
         "helmTemplateCacheMb": {
           "default": "",
-          "description": "Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = flate default (256); \"0\" disables.",
+          "description": "Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); \"0\" disables.",
           "title": "helmTemplateCacheMb",
           "type": "string"
         },

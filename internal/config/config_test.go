@@ -92,7 +92,8 @@ func TestLoad_DiffConcurrency(t *testing.T) {
 
 func TestLoad_FlateTuningDefaults(t *testing.T) {
 	// Unset, the flate render knobs default to flate's own CLI values so the
-	// caching applies out of the box.
+	// caching applies out of the box. (HelmTemplateCacheMB is the exception — it's
+	// concurrency-derived; see TestLoad_HelmTemplateCacheMB.)
 	t.Setenv("KONFLATE_REPO", "github://owner/repo")
 	cfg, err := Load()
 	if err != nil {
@@ -102,7 +103,6 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		name      string
 		got, want int
 	}{
-		{"HelmTemplateCacheMB", cfg.HelmTemplateCacheMB, 256},
 		{"HelmRenderCacheMB", cfg.HelmRenderCacheMB, 1024},
 		{"StageCacheMB", cfg.StageCacheMB, 2048},
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
@@ -118,6 +118,55 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	}
 	if cfg.CacheTTL != 168*time.Hour {
 		t.Errorf("CacheTTL default = %v, want 168h", cfg.CacheTTL)
+	}
+}
+
+func TestDefaultHelmTemplateCacheMB(t *testing.T) {
+	// flate builds one in-memory template cache per orchestrator and runs two per
+	// render, so the budget is divided by the render concurrency to keep the
+	// aggregate (~2*256 MiB) flat instead of scaling with the CPU limit; floored
+	// at 32 so a high operator-set concurrency can't shrink it to nothing.
+	for _, c := range []struct {
+		conc, want int
+	}{
+		{1, 256}, {2, 128}, {4, 64}, {8, 32}, {100, 32}, {0, 256},
+	} {
+		if got := defaultHelmTemplateCacheMB(c.conc); got != c.want {
+			t.Errorf("defaultHelmTemplateCacheMB(%d) = %d, want %d", c.conc, got, c.want)
+		}
+	}
+}
+
+func TestLoad_HelmTemplateCacheMB(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	// Unset: auto — derived from the resolved render concurrency, always positive.
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if want := defaultHelmTemplateCacheMB(cfg.MaxDiffConcurrency); cfg.HelmTemplateCacheMB != want {
+		t.Errorf("auto HelmTemplateCacheMB = %d, want %d (256/concurrency)", cfg.HelmTemplateCacheMB, want)
+	}
+
+	// An explicit positive value is respected verbatim.
+	t.Setenv("KONFLATE_HELM_TEMPLATE_CACHE_MB", "128")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.HelmTemplateCacheMB != 128 {
+		t.Errorf("explicit HelmTemplateCacheMB = %d, want 128", cfg.HelmTemplateCacheMB)
+	}
+
+	// 0 disables the cache and is preserved (not mistaken for unset).
+	t.Setenv("KONFLATE_HELM_TEMPLATE_CACHE_MB", "0")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.HelmTemplateCacheMB != 0 {
+		t.Errorf("explicit 0 HelmTemplateCacheMB = %d, want 0 (disabled)", cfg.HelmTemplateCacheMB)
 	}
 }
 
