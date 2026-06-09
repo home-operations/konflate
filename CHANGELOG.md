@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.2](https://github.com/home-operations/konflate/compare/0.2.1...0.2.2) (2026-06-09)
+
+
+### Features
+
+* **mise:** update tool cosign (3.0.6 → 3.1.1) ([#114](https://github.com/home-operations/konflate/issues/114)) ([7468262](https://github.com/home-operations/konflate/commit/7468262ba082f24e7b0e5c8a4dfffcd8e95ae12c))
+
+
+### Bug Fixes
+
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.36.2 → v2.36.3) ([#113](https://github.com/home-operations/konflate/issues/113)) ([19bcedb](https://github.com/home-operations/konflate/commit/19bcedb95468db309450100db40ac55d390db192))
+* PR-filter data-loss, image-collapse, CronJob lint, and shutdown-lifecycle fixes ([#137](https://github.com/home-operations/konflate/issues/137)) ([5ac45d5](https://github.com/home-operations/konflate/commit/5ac45d546f26509739cc9f7ce7cd88ea7eb48bf7))
+
+
+### Performance Improvements
+
+* **server:** ETag/304 for the diff endpoint and unescaped JSON bodies ([#140](https://github.com/home-operations/konflate/issues/140)) ([de6e0fe](https://github.com/home-operations/konflate/commit/de6e0feb85519671d41d679388fa6b59d82db1d7))
+
 ## [0.2.1](https://github.com/home-operations/konflate/compare/0.2.0...0.2.1) (2026-06-09)
 
 
