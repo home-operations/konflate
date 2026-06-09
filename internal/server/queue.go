@@ -43,6 +43,7 @@ type queue struct {
 	wg  sync.WaitGroup
 
 	mu       sync.Mutex
+	closing  bool // set by wait() during shutdown; a closing queue accepts no new work
 	inflight map[int]struct{}
 	pending  map[int]api.PR
 }
@@ -70,19 +71,26 @@ func (q *queue) enqueue(pr api.PR) {
 	// (config.PRFilterExpr) — forks are excluded by default and only tracked when
 	// an operator's expression admits them. So whatever arrives here renders.
 	q.mu.Lock()
+	if q.closing {
+		// Draining for shutdown: accept no new work. Gating wg.Add(1) here, under
+		// the same lock wait() uses to set closing, is what keeps an Add from
+		// racing wait()'s wg.Wait — a sync.WaitGroup misuse that can panic.
+		q.mu.Unlock()
+		return
+	}
 	if _, ok := q.inflight[pr.Number]; ok {
 		q.pending[pr.Number] = pr // coalesce; remember the freshest metadata
 		q.mu.Unlock()
 		return
 	}
 	q.inflight[pr.Number] = struct{}{}
+	q.wg.Add(1) // under mu and gated by !closing → never concurrent with wait()'s Wait
 	q.setDepthLocked()
 	q.mu.Unlock()
 
 	q.store.setStatus(pr, api.JobPending)
 	q.emit(pr.Number, api.JobPending, "")
 
-	q.wg.Add(1)
 	go q.run(pr)
 }
 
@@ -201,8 +209,19 @@ func (q *queue) clear(number int) {
 	q.mu.Unlock()
 }
 
-// wait blocks until all in-flight jobs finish (call after cancelling ctx).
-func (q *queue) wait() { q.wg.Wait() }
+// wait stops the queue accepting new work, then blocks until all in-flight jobs
+// finish. Setting closing under mu before wg.Wait — paired with enqueue calling
+// wg.Add only while holding mu and not closing — guarantees no Add runs
+// concurrently with this Wait (a refresh tick or webhook goroutine landing
+// mid-drain would otherwise risk Go's "WaitGroup misuse" panic, and any job it
+// enqueued would leak past shutdown). Call after the context is cancelled so
+// in-flight renders observe it and drain promptly.
+func (q *queue) wait() {
+	q.mu.Lock()
+	q.closing = true
+	q.mu.Unlock()
+	q.wg.Wait()
+}
 
 func (q *queue) emit(number int, status api.JobStatus, errMsg string) {
 	if q.notify != nil {

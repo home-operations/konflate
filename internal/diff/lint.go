@@ -252,12 +252,20 @@ func intField(m map[string]any, keys ...string) (int64, bool) {
 	}
 }
 
-// hasPrivilegedContainer reports whether any container in the pod spec — at the
-// pod location (spec) or the workload template location (spec.template.spec) —
-// sets securityContext.privileged: true.
+// hasPrivilegedContainer reports whether any container in the pod spec sets
+// securityContext.privileged: true, at any of the locations a pod template
+// appears: the bare Pod (spec), the workload template most kinds use
+// (spec.template.spec), and the CronJob's nested job template
+// (spec.jobTemplate.spec.template.spec). Without the last, a privileged
+// container in a CronJob would slip past the caution that an identical one in a
+// Deployment raises.
 func hasPrivilegedContainer(m map[string]any) bool {
 	const spec = "spec"
-	for _, base := range [][]string{{spec}, {spec, "template", spec}} {
+	for _, base := range [][]string{
+		{spec},
+		{spec, "template", spec},
+		{spec, "jobTemplate", spec, "template", spec},
+	} {
 		podSpec, ok := nestedMap(m, base...)
 		if !ok {
 			continue

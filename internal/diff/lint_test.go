@@ -48,6 +48,29 @@ func privilegedDeploymentManifest() map[string]any {
 	}
 }
 
+// privilegedCronJobManifest puts a privileged container at the deeper location a
+// CronJob nests its pod template: spec.jobTemplate.spec.template.spec.containers.
+func privilegedCronJobManifest() map[string]any {
+	return map[string]any{
+		"spec": map[string]any{
+			"jobTemplate": map[string]any{
+				"spec": map[string]any{
+					"template": map[string]any{
+						"spec": map[string]any{
+							"containers": []any{
+								map[string]any{
+									"name":            "backup",
+									"securityContext": map[string]any{"privileged": true},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestLint(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +120,14 @@ func TestLint(t *testing.T) {
 				New: privilegedDeploymentManifest(),
 			}},
 			want: []api.Warning{{Level: api.LevelCaution, Rule: "privileged", Resource: "Deployment web/api"}},
+		},
+		{
+			name: "a privileged container in a CronJob is flagged (deeper pod-template nesting)",
+			changes: []Change{{
+				Status: "changed", Kind: "CronJob", Namespace: "ops", Name: "backup",
+				New: privilegedCronJobManifest(),
+			}},
+			want: []api.Warning{{Level: api.LevelCaution, Rule: "privileged", Resource: "CronJob ops/backup"}},
 		},
 		{
 			name:    "added ClusterRoleBinding widens RBAC (caution)",
