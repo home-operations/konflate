@@ -40,6 +40,45 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	}
 
 	d := env.Diff
+
+	// writeFooter closes the comment: the review link, then a subtle provenance
+	// line naming the commit this summary reflects. The comment is edited in place
+	// across pushes, so the rendered SHA is the only cue to which one it shows.
+	writeFooter := func() {
+		writeLink()
+		if sha := shortSHA(d.HeadSHA); sha != "" {
+			fmt.Fprintf(&b, "\n<sub>konflate · rendered `%s` · advisory, not a gate</sub>\n", sha)
+		} else {
+			b.WriteString("\n<sub>konflate · advisory, not a gate</sub>\n")
+		}
+	}
+	// writeRefreshNote flags that the most recent re-render failed and we're showing
+	// the last good diff, so a reviewer doesn't act on a stale render unaware.
+	writeRefreshNote := func() {
+		if env.RefreshError == "" {
+			return
+		}
+		if admonitions {
+			b.WriteString("\n> [!WARNING]\n> Couldn't refresh against the latest push — showing the last good render.\n")
+		} else {
+			b.WriteString("\n**⚠ Stale render** — couldn't refresh against the latest push; showing the last good render.\n")
+		}
+	}
+
+	// Nothing rendered-changed (a docs/CI-only PR, or a Flux edit that nets to
+	// nothing): say so plainly instead of a "+0 · 0 · −0 — 0 resources" line. Any
+	// warning, failure, or image change means there's something worth showing.
+	if d.Summary.Added == 0 && d.Summary.Changed == 0 && d.Summary.Removed == 0 &&
+		len(d.Warnings) == 0 && len(d.Failures) == 0 && len(d.Images) == 0 {
+		if admonitions {
+			b.WriteString("\n> [!NOTE]\n> ✅ No rendered changes.\n")
+		} else {
+			b.WriteString("\n✅ No rendered changes.\n")
+		}
+		writeRefreshNote()
+		writeFooter()
+		return b.String()
+	}
 	// Impact line — "+N added · N changed · −N removed — N resources · …". On the
 	// GitHub flavour it sits inside a [!NOTE] admonition; plain keeps it bare.
 	var impact strings.Builder
@@ -60,6 +99,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	} else {
 		fmt.Fprintf(&b, "\n%s\n", impact.String())
 	}
+	writeRefreshNote()
 
 	if len(d.Warnings) > 0 {
 		label := plural(len(d.Warnings), "Caution", "Cautions")
@@ -99,8 +139,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 		}
 	}
 
-	writeLink()
-	b.WriteString("\n<sub>konflate · advisory, not a gate</sub>\n")
+	writeFooter()
 	return b.String()
 }
 
@@ -109,6 +148,15 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// shortSHA trims a git commit SHA to its 7-character display prefix; shorter or
+// empty input is returned unchanged.
+func shortSHA(s string) string {
+	if len(s) > 7 {
+		return s[:7]
+	}
+	return s
 }
 
 // mdInline escapes free text (warning details, render messages — possibly

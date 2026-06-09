@@ -12,6 +12,7 @@ func sampleSummaryEnv() api.DiffEnvelope {
 		Status: api.JobReady,
 		PR:     api.PR{Number: 142},
 		Diff: &api.DiffResult{
+			HeadSHA:  "1a2b3c4d5e6f78901234567890abcdef12345678",
 			Summary:  api.DiffSummary{Added: 2, Changed: 3, Removed: 1},
 			Impact:   api.Impact{Resources: 6, Parents: 2, CRDs: 1},
 			Warnings: []api.Warning{{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api", Detail: "replicas set to 0"}},
@@ -36,6 +37,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"| image | from | to |",
 		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` |",
 		"[View the full rendered diff →](https://k.example/#/pr/142)",
+		"konflate · rendered `1a2b3c4` · advisory, not a gate",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
@@ -92,6 +94,41 @@ func TestSummaryMarkdown_NotReady(t *testing.T) {
 	}
 	if strings.Contains(md, "[!CAUTION]") {
 		t.Errorf("no diff yet → no caution block:\n%s", md)
+	}
+}
+
+func TestSummaryMarkdown_NoChanges(t *testing.T) {
+	t.Parallel()
+	env := api.DiffEnvelope{
+		Status: api.JobReady,
+		PR:     api.PR{Number: 5},
+		Diff:   &api.DiffResult{HeadSHA: "deadbeefcafef00d"},
+	}
+	for _, admonitions := range []bool{true, false} {
+		md := summaryMarkdown(env, "", admonitions)
+		if !strings.Contains(md, "No rendered changes") {
+			t.Errorf("admonitions=%v: expected a no-changes message:\n%s", admonitions, md)
+		}
+		if strings.Contains(md, "added ·") {
+			t.Errorf("admonitions=%v: no-op summary must omit the impact line:\n%s", admonitions, md)
+		}
+		if !strings.Contains(md, "rendered `deadbee`") {
+			t.Errorf("admonitions=%v: no-op summary should still carry provenance:\n%s", admonitions, md)
+		}
+	}
+}
+
+func TestSummaryMarkdown_RefreshError(t *testing.T) {
+	t.Parallel()
+	env := sampleSummaryEnv()
+	env.RefreshError = "forge timeout"
+	md := summaryMarkdown(env, "", true)
+	if !strings.Contains(md, "showing the last good render") {
+		t.Errorf("a refresh failure should be flagged:\n%s", md)
+	}
+	// The last-good diff is still rendered alongside the stale note.
+	if !strings.Contains(md, "Deployment web/api") {
+		t.Errorf("last-good diff content should still render:\n%s", md)
 	}
 }
 
