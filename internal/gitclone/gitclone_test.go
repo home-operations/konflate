@@ -82,6 +82,71 @@ func buildRepo(t *testing.T) string {
 	return dir
 }
 
+// TestMirror_RepacksWhenPacksAccumulate verifies the mirror folds its packfiles
+// into one once they pile up past the threshold. go-git appends a pack per fetch
+// and never gc's them, so without the repack the bare repo would grow one pack
+// per render forever. Each render here advances the head branch so the fetch
+// actually transfers objects (and thus writes a new pack); after enough renders
+// to cross the lowered threshold, the pack count must collapse — and renders must
+// still resolve correct trees off the consolidated pack.
+func TestMirror_RepacksWhenPacksAccumulate(t *testing.T) {
+	orig := repackPackThreshold
+	repackPackThreshold = 3
+	t.Cleanup(func() { repackPackThreshold = orig })
+
+	src := buildRepo(t)
+	repo, err := git.PlainOpen(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// buildRepo leaves the worktree checked out on "feature"; keep committing
+	// there so each fetch of refs/heads/feature pulls a fresh object set.
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := newTestMirror(t, src)
+	const renders = 6 // > threshold+1, so at least one fetch crosses the bound
+	var last *Result
+	for i := range renders {
+		write(t, src, "app/config.yaml", fmt.Sprintf("replicas: %d\n", 10+i))
+		commit(t, wt, fmt.Sprintf("advance feature %d", i))
+
+		if last != nil {
+			last.Cleanup()
+		}
+		last, err = m.Trees(context.Background(), "refs/heads/feature", "master")
+		if err != nil {
+			t.Fatalf("render %d: %v", i, err)
+		}
+	}
+	t.Cleanup(last.Cleanup)
+
+	// The repack must keep the pack count bounded. Without it, `renders`
+	// object-transferring fetches would leave roughly renders+1 packs.
+	n, err := m.countPacks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n > repackPackThreshold {
+		t.Errorf("pack count = %d after %d renders; repack should keep it ≤ %d", n, renders, repackPackThreshold)
+	}
+
+	// And renders must still resolve correct trees off the consolidated pack:
+	// head is feature's latest tip, base is the merge-base (C0), not main's tip.
+	wantHead := fmt.Sprintf("replicas: %d\n", 10+renders-1)
+	if got, ok := read(last.HeadDir, "app/config.yaml"); !ok || got != wantHead {
+		t.Errorf("head config.yaml = %q (ok=%v) after repack, want %q", got, ok, wantHead)
+	}
+	if got, ok := read(last.BaseDir, "app/config.yaml"); !ok || got != "replicas: 3\n" {
+		t.Errorf("base config.yaml = %q (ok=%v) after repack, want merge-base %q", got, ok, "replicas: 3\n")
+	}
+	if _, ok := read(last.BaseDir, "app/other.yaml"); ok {
+		t.Error("base tree contains other.yaml after repack — merge-base resolution broke")
+	}
+}
+
 func TestWithinRoot(t *testing.T) {
 	t.Parallel()
 	const dir = "/tmp/extract"
