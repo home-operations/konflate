@@ -75,6 +75,54 @@ func TestRender_Changed(t *testing.T) {
 	}
 }
 
+// TestRender_DropsTypeOnlyNoOpChange verifies a "changed" pair whose two sides
+// marshal to identical YAML is dropped, not rendered as an empty panel. flate
+// flags changes by typed inequality (reflect.DeepEqual), so replicas typed int 3
+// vs float64 3.0 arrives as "changed" yet marshals the same — it must not count
+// in the summary, the impact, or the tree, while a genuine change beside it
+// still renders.
+func TestRender_DropsTypeOnlyNoOpChange(t *testing.T) {
+	t.Parallel()
+	// Built directly (not via the YAML doc helper, which would coerce both
+	// numbers to float64) so the no-op pair really differs only by Go type.
+	dep := func(name string, replicas any) map[string]any {
+		return map[string]any{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata":   map[string]any{"name": name},
+			"spec":       map[string]any{"replicas": replicas},
+		}
+	}
+	res, err := Render(RenderInput{
+		PRNumber: 1,
+		Changes: []Change{
+			{Status: "changed", Kind: "Deployment", Name: "noop", Old: dep("noop", 3), New: dep("noop", 3.0)},
+			{Status: "changed", Kind: "Deployment", Name: "real", Old: dep("real", 3), New: dep("real", 5)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if res.Summary.Changed != 1 {
+		t.Errorf("Summary.Changed = %d, want 1 (the type-only no-op must not count)", res.Summary.Changed)
+	}
+	if res.Impact.Resources != 1 {
+		t.Errorf("Impact.Resources = %d, want 1 (no-op excluded from impact too)", res.Impact.Resources)
+	}
+	if len(res.Resources) != 1 {
+		t.Fatalf("Resources = %d, want 1 (only the real change renders — no empty panel)", len(res.Resources))
+	}
+	if res.Resources[0].Name != "real" {
+		t.Errorf("rendered resource = %q, want the real change", res.Resources[0].Name)
+	}
+	if res.Resources[0].Add == 0 && res.Resources[0].Del == 0 {
+		t.Error("the surviving real change must carry non-empty diff rows")
+	}
+	if len(res.Tree) != 1 {
+		t.Errorf("Tree parents = %d, want 1 (the no-op is absent from the tree)", len(res.Tree))
+	}
+}
+
 func TestRender_FoldsContext(t *testing.T) {
 	t.Parallel()
 	// A single change surrounded by many unchanged lines: context beyond 3 lines

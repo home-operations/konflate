@@ -51,24 +51,53 @@ func Render(in RenderInput) (api.DiffResult, error) {
 	}
 	hl := b.hl
 
+	// flate classifies a change by typed inequality (reflect.DeepEqual over the
+	// normalized values), so a difference that is only a type — e.g. replicas: 3
+	// (int) vs 3.0 (float64) — arrives as "changed" yet marshals to identical YAML
+	// through sigs.k8s.io/yaml (both via JSON → "3"). Rendered, that's zero diff
+	// rows: an empty panel, still counted in Summary.Changed and listed in the
+	// tree as +0/−0. Marshal each side once here and drop those no-ops before
+	// anything counts or renders them, so a resource appears only when it has a
+	// real textual difference. (Added/removed always have one populated side, so
+	// only "changed" can collapse to a no-op.)
+	kept := make([]marshaledChange, 0, len(in.Changes))
+	for _, c := range in.Changes {
+		oldYAML, err := marshalYAML(c.Old)
+		if err != nil {
+			return api.DiffResult{}, err
+		}
+		newYAML, err := marshalYAML(c.New)
+		if err != nil {
+			return api.DiffResult{}, err
+		}
+		if c.Status != statusAdded && c.Status != statusRemoved && oldYAML == newYAML {
+			continue
+		}
+		kept = append(kept, marshaledChange{change: c, oldYAML: oldYAML, newYAML: newYAML})
+	}
+	changes := make([]Change, len(kept))
+	for i := range kept {
+		changes[i] = kept[i].change
+	}
+
 	out := api.DiffResult{
 		PRNumber:  in.PRNumber,
 		HeadSHA:   in.HeadSHA,
 		ChromaCSS: b.css,
-		Impact:    Summarize(in.Changes),
+		Impact:    Summarize(changes),
 		Images:    in.Images,
 		Failures:  in.Failures,
-		Warnings:  Lint(in.Changes, in.Images),
+		Warnings:  Lint(changes, in.Images),
 	}
 
-	// Summary reflects the true totals across every change, even when the
+	// Summary reflects the true totals across every (real) change, even when the
 	// per-resource render below is capped — so the topbar counts and the impact
 	// banner agree on the real blast radius regardless of truncation.
-	for _, c := range in.Changes {
+	for _, c := range changes {
 		switch c.Status {
-		case "added":
+		case statusAdded:
 			out.Summary.Added++
-		case "removed":
+		case statusRemoved:
 			out.Summary.Removed++
 		default:
 			out.Summary.Changed++
@@ -80,32 +109,31 @@ func Render(in RenderInput) (api.DiffResult, error) {
 	// or pathological PR is truncated to MaxResources rendered diffs; the counts
 	// above already reflect the full set, and Truncated tells the UI the review
 	// is partial.
-	rendered := in.Changes
+	rendered := kept
 	if in.MaxResources > 0 && len(rendered) > in.MaxResources {
 		out.Truncated = len(rendered) - in.MaxResources
 		rendered = rendered[:in.MaxResources]
 	}
-	for i, c := range rendered {
-		res, err := buildResource(fmt.Sprintf("r%d", i), c, hl)
-		if err != nil {
-			return api.DiffResult{}, err
-		}
-		out.Resources = append(out.Resources, res)
+	for i, mc := range rendered {
+		out.Resources = append(out.Resources, buildResource(fmt.Sprintf("r%d", i), mc, hl))
 	}
 	out.Tree = buildTree(out.Resources)
 	return out, nil
 }
 
-// buildResource diffs one change's old→new YAML and pre-renders both views.
-func buildResource(id string, c Change, hl *highlighter) (api.DiffResource, error) {
-	oldYAML, err := marshalYAML(c.Old)
-	if err != nil {
-		return api.DiffResource{}, err
-	}
-	newYAML, err := marshalYAML(c.New)
-	if err != nil {
-		return api.DiffResource{}, err
-	}
+// marshaledChange is a Change with both sides already rendered to YAML — done
+// once in Render so the type-only no-op filter and buildResource share the work
+// instead of marshaling twice.
+type marshaledChange struct {
+	change           Change
+	oldYAML, newYAML string
+}
+
+// buildResource diffs one change's already-marshaled old→new YAML and
+// pre-renders both views. The sides are marshaled in Render, so this is pure
+// string work and cannot fail.
+func buildResource(id string, mc marshaledChange, hl *highlighter) api.DiffResource {
+	c, oldYAML, newYAML := mc.change, mc.oldYAML, mc.newYAML
 
 	a := difflib.SplitLines(oldYAML)
 	b := difflib.SplitLines(newYAML)
@@ -136,7 +164,7 @@ func buildResource(id string, c Change, hl *highlighter) (api.DiffResource, erro
 			res.Del++
 		}
 	}
-	return res, nil
+	return res
 }
 
 // gap is one collapsed run of unchanged lines — the context GetGroupedOpCodes
