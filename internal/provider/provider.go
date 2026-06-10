@@ -6,6 +6,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,6 +17,11 @@ import (
 // stateOpen is the forge state string for an open PR on GitHub and Forgejo
 // (GitLab uses "opened"). The normalized api.PR.Open flag is derived from it.
 const stateOpen = "open"
+
+// ErrPRNotFound is returned by GetPR when the forge reports the pull/merge
+// request does not exist (HTTP 404) — it was deleted, not merged or closed. The
+// server reaps such a PR instead of retrying the lookup every refresh.
+var ErrPRNotFound = errors.New("provider: pull request not found")
 
 // Provider lists and fetches pull requests for the configured repository.
 type Provider interface {
