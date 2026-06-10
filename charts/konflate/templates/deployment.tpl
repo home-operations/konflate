@@ -36,7 +36,7 @@ spec:
       imagePullSecrets:
         {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "konflate.serviceAccountName" . }}
+      serviceAccountName: {{ include "konflate.serviceAccountName" . | quote }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       securityContext:
         {{- tpl (toYaml .Values.podSecurityContext) $ | nindent 8 }}
@@ -63,7 +63,7 @@ spec:
             {{- end }}
             {{- with .Values.config.prFilterExpr }}
             - name: KONFLATE_PR_FILTER_EXPR
-              value: {{ . | quote }}
+              value: {{ tpl . $ | quote }}
             {{- end }}
             {{- if .Values.config.renderForkPrs }}
             - name: KONFLATE_RENDER_FORK_PRS
@@ -138,7 +138,7 @@ spec:
           {{- with (include "konflate.secretName" .) }}
           envFrom:
             - secretRef:
-                name: {{ . }}
+                name: {{ . | quote }}
           {{- end }}
           ports:
             - name: http
@@ -167,7 +167,7 @@ spec:
         - name: cache
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "konflate.cacheClaimName" . }}
+            claimName: {{ include "konflate.cacheClaimName" . | quote }}
           {{- else }}
           emptyDir: {}
           {{- end }}

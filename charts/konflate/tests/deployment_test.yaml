@@ -168,3 +168,39 @@ tests:
           content:
             name: KONFLATE_FETCH_TIMEOUT
             value: "30s"
+
+  # The values.yaml contract: string values (except mergeCommand) are tpl-rendered.
+  - it: renders config.prFilterExpr through tpl
+    set:
+      config.prFilterExpr: 'pr.baseRef == "{{ .Release.Name }}"'
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PR_FILTER_EXPR
+            value: 'pr.baseRef == "RELEASE-NAME"'
+
+  - it: renders secret.existingSecret through tpl for the envFrom secretRef
+    set:
+      secret.existingSecret: "{{ .Release.Name }}-creds"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].secretRef.name
+          value: RELEASE-NAME-creds
+
+  - it: renders serviceAccount.name through tpl for the pod serviceAccountName
+    set:
+      serviceAccount.name: "{{ .Release.Name }}-sa"
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-sa
+
+  - it: renders persistence.existingClaim through tpl for the cache volume claim
+    set:
+      persistence.enabled: true
+      persistence.existingClaim: "{{ .Release.Name }}-data"
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: RELEASE-NAME-data
