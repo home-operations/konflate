@@ -124,6 +124,39 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_RefreshInterval(t *testing.T) {
+	// <=0 is preserved as the "disable periodic refresh" sentinel (read by the
+	// server's refresh loop); a positive value below the floor is raised so a
+	// tiny interval can't hot-loop the forge API; the default and normal values
+	// pass through unchanged.
+	cases := []struct {
+		name, env string
+		want      time.Duration
+	}{
+		{"unset defaults to 30m", "", 30 * time.Minute},
+		{"zero disables (preserved)", "0", 0},
+		{"negative disables (preserved)", "-5m", -5 * time.Minute},
+		{"tiny positive is floored", "5s", minRefreshInterval},
+		{"at the floor is kept", "1m", time.Minute},
+		{"normal value is kept", "45m", 45 * time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("KONFLATE_REPO", "github://owner/repo")
+			if tc.env != "" {
+				t.Setenv("KONFLATE_REFRESH_INTERVAL", tc.env)
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.RefreshInterval != tc.want {
+				t.Errorf("RefreshInterval = %v, want %v", cfg.RefreshInterval, tc.want)
+			}
+		})
+	}
+}
+
 func TestDefaultHelmTemplateCacheMB(t *testing.T) {
 	// flate builds one in-memory template cache per orchestrator and runs two per
 	// render, so the budget is divided by the render concurrency to keep the

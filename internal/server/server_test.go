@@ -898,6 +898,38 @@ func TestStore_StalePRsAreJittered(t *testing.T) {
 	}
 }
 
+// TestRefreshCadence pins the refresh loop's enable/cadence decision: <=0
+// disables the periodic refresh (so KONFLATE_REFRESH_INTERVAL=0 means "inbound
+// triggers only" rather than the old 1s hot loop), and a positive interval is
+// capped at 2m so a long interval still wakes often enough for per-PR staleness.
+func TestRefreshCadence(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		interval    time.Duration
+		wantCadence time.Duration
+		wantEnabled bool
+	}{
+		{"zero disables", 0, 0, false},
+		{"negative disables", -5 * time.Minute, 0, false},
+		{"short interval used as-is", 90 * time.Second, 90 * time.Second, true},
+		{"at the 2m cap", 2 * time.Minute, 2 * time.Minute, true},
+		{"long interval capped at 2m", 30 * time.Minute, 2 * time.Minute, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cadence, enabled := refreshCadence(tc.interval)
+			if enabled != tc.wantEnabled {
+				t.Errorf("refreshCadence(%v) enabled = %v, want %v", tc.interval, enabled, tc.wantEnabled)
+			}
+			if cadence != tc.wantCadence {
+				t.Errorf("refreshCadence(%v) cadence = %v, want %v", tc.interval, cadence, tc.wantCadence)
+			}
+		})
+	}
+}
+
 func TestServer_RefreshStaleReRendersOpenOnly(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
