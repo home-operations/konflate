@@ -1056,7 +1056,10 @@ button.sum-pill:hover {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 3px 9px;
+  /* 2px vertical (not 3): keeps the chip inside the Summary header's uniform
+     40px bar height instead of stretching that one bar taller than the rest
+     (issue #163). */
+  padding: 2px 9px;
   text-align: left;
   cursor: pointer;
   appearance: none;
@@ -1363,16 +1366,22 @@ button.sum-pill:hover {
 
 /* ---- tree rail ------------------------------------------------------- */
 .tree {
-  padding: 6px 0 24px;
+  /* No top padding: the Summary node is the rail's header bar and sits flush
+     under the review chrome, mirroring the diff pane's .res-header across the
+     rail border (issue #163). */
+  padding: 0 0 24px;
 }
 /* The Summary node — first entry, set apart from the resource leaves by a rule
-   and a document icon. Selecting it shows the impact/warnings/images panel. */
+   and a document icon. Selecting it shows the impact/warnings/images panel.
+   min-height matches .res-header so the two bars' bottom borders meet in one
+   continuous line across the rail border (issue #163). */
 .tree-summary {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
+  min-height: 40px;
   margin-bottom: 4px;
   border: none;
   border-bottom: 1px solid var(--border);
@@ -1453,14 +1462,23 @@ button.sum-pill:hover {
 }
 
 /* ---- diff view ------------------------------------------------------- */
+/* min-height keeps every header bar — Summary (with the taller merge-command
+   chip) and each resource — one uniform 40px height, level with the rail's
+   Summary node across the rail border. Stuck 1px above the scrollport edge
+   (top: -1px): at top: 0, fractional scroll offsets (hi-dpi wheels, browser
+   zoom) round the header to a subpixel below the pane top and a hairline of
+   the diff text scrolling underneath shows above it; overlapping the edge by
+   1px puts the rounding inside the overlap so the seam can never open.
+   (Issue #163.) */
 .res-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 14px;
+  min-height: 40px;
   border-bottom: 1px solid var(--border);
   position: sticky;
-  top: 0;
+  top: -1px;
   background: var(--panel);
   z-index: 1;
 }
