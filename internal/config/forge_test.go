@@ -36,6 +36,41 @@ func TestParseForgeURI(t *testing.T) {
 				WebBase:  "https://github.com",
 			},
 		},
+		{
+			// An explicit cloud host must normalize to the cloud API base, not be
+			// treated as a GHES instance (github.com/api/v3, which 404s).
+			name:  "github explicit cloud host normalizes to the cloud API",
+			input: "github://github.com/owner/repo",
+			want: ForgeURI{
+				Kind:     ForgeGitHub,
+				Host:     "",
+				RepoPath: "owner/repo",
+				APIBase:  "https://api.github.com",
+				WebBase:  "https://github.com",
+			},
+		},
+		{
+			name:  "gitlab explicit cloud host normalizes",
+			input: "gitlab://gitlab.com/group/repo",
+			want: ForgeURI{
+				Kind:     ForgeGitLab,
+				Host:     "",
+				RepoPath: "group/repo",
+				APIBase:  "https://gitlab.com",
+				WebBase:  "https://gitlab.com",
+			},
+		},
+		{
+			name:  "forgejo explicit cloud host normalizes",
+			input: "forgejo://codeberg.org/owner/repo",
+			want: ForgeURI{
+				Kind:     ForgeForgejo,
+				Host:     "",
+				RepoPath: "owner/repo",
+				APIBase:  "https://codeberg.org",
+				WebBase:  "https://codeberg.org",
+			},
+		},
 
 		// ── GitHub Enterprise Server ──────────────────────────────────────
 		{
