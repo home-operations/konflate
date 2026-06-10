@@ -105,6 +105,16 @@ func ParseForgeURI(raw string) (ForgeURI, error) {
 		repoPath = strings.TrimPrefix(u.Host+u.Path, "/")
 	}
 
+	// An explicit cloud host is the same as omitting it. Without this,
+	// github://github.com/owner/repo would be treated as a self-hosted (GHES)
+	// instance and derive https://github.com/api/v3 — but GitHub cloud's REST API
+	// lives at api.github.com, so every call 404s. Normalizing to the cloud
+	// defaults is also harmless and consistent for gitlab.com / codeberg.org,
+	// whose API host already matches their web host.
+	if cloudHost := strings.TrimPrefix(defaults.web, "https://"); strings.EqualFold(host, cloudHost) {
+		host = ""
+	}
+
 	if err := validateRepoPath(repoPath, raw); err != nil {
 		return ForgeURI{}, err
 	}
