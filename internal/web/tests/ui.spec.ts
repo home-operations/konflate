@@ -74,6 +74,11 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(forge142).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
   await expect(forge142).toHaveAttribute('target', '_blank');
   await expect(forge142).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  // Hovering the link recolors the glyph only — no background box (it read as
+  // a floating button beside the inert signal badges).
+  await forge142.hover();
+  const forgeHoverBg = await forge142.evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(forgeHoverBg);
 
   // Open a PR → the single-page review lands on the Summary (impact, warnings,
   // image changes, render failures), with the tree rail alongside it.
