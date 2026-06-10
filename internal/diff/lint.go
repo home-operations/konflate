@@ -49,7 +49,7 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 	for _, c := range changes {
 		if c.Status == statusRemoved {
 			switch c.Kind {
-			case "StatefulSet":
+			case kindStatefulSet:
 				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted", c)
 			case "PersistentVolumeClaim":
 				add("removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed", c)
@@ -77,6 +77,10 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 		if c.Status == statusAdded && c.Kind == "ClusterRoleBinding" {
 			add("rbac-widened", "new ClusterRoleBinding — grants cluster-wide permissions", c)
 		}
+
+		// Immutable-field rules: a changed resource whose diff touches a field
+		// the API server refuses to update in place (see immutable.go).
+		warnings = append(warnings, immutableFieldWarnings(c)...)
 	}
 
 	// Blast-radius / version signals: an unusually large change set, and major
@@ -216,7 +220,7 @@ func resourceLabel(c Change) string {
 // isWorkload reports whether kind carries a replica count worth flagging.
 func isWorkload(kind string) bool {
 	switch kind {
-	case "Deployment", "StatefulSet", "ReplicaSet", "ReplicationController":
+	case "Deployment", kindStatefulSet, "ReplicaSet", "ReplicationController":
 		return true
 	default:
 		return false
@@ -270,8 +274,8 @@ func hasPrivilegedContainer(m map[string]any) bool {
 	const spec = "spec"
 	for _, base := range [][]string{
 		{spec},
-		{spec, "template", spec},
-		{spec, "jobTemplate", spec, "template", spec},
+		{spec, fieldTemplate, spec},
+		{spec, "jobTemplate", spec, fieldTemplate, spec},
 	} {
 		podSpec, ok := nestedMap(m, base...)
 		if !ok {

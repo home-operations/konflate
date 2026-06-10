@@ -18,6 +18,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.37.0
 	golang.org/x/sync v0.21.0
+	k8s.io/apimachinery v0.36.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -192,7 +193,6 @@ require (
 	helm.sh/helm/v4 v4.2.0 // indirect
 	k8s.io/api v0.36.1 // indirect
 	k8s.io/apiextensions-apiserver v0.36.1 // indirect
-	k8s.io/apimachinery v0.36.1 // indirect
 	k8s.io/apiserver v0.36.1 // indirect
 	k8s.io/cli-runtime v0.36.1 // indirect
 	k8s.io/client-go v0.36.1 // indirect
