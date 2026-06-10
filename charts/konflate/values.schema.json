@@ -131,12 +131,6 @@
           "description": "Advanced: tries per source fetch on transient network errors. Empty = default (3); \"1\" disables retry.",
           "title": "sourceRetryAttempts",
           "type": "string"
-        },
-        "stageCacheMb": {
-          "default": "",
-          "description": "Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); \"0\" disables size-based eviction.",
-          "title": "stageCacheMb",
-          "type": "string"
         }
       },
       "required": [],

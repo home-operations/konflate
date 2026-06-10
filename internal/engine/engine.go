@@ -62,9 +62,8 @@ type flateEngine struct {
 	cache *source.Cache
 
 	// flate render tuning, resolved from config once (see internal/config). The
-	// helm/stage caches and source retry default to flate's own CLI values; the
+	// helm caches and source retry default to flate's own CLI values; the
 	// reconcile concurrency is bounded so a fan-out PR can't oversubscribe.
-	stageCacheBytes        int64
 	helmTemplateCacheBytes int64
 	helmRenderCacheBytes   int64
 	concurrency            int
@@ -91,7 +90,6 @@ func New(cfg *config.Config) Engine {
 		mirror:                 gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
-		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,
 		helmTemplateCacheBytes: int64(cfg.HelmTemplateCacheMB) * mib,
 		helmRenderCacheBytes:   int64(cfg.HelmRenderCacheMB) * mib,
 		concurrency:            conc,
@@ -190,11 +188,15 @@ func renderUsable(base, head orchestrator.Rendered, err error) bool {
 // RenderTrees comparison (Path / RepoRoot / PathOrig / SelfURLs are set
 // from the per-side Tree). Two flags harden it for a tool that may be
 // exposed:
-//   - WipeSecrets replaces Secret cleartext with placeholders, so no secret
-//     value can reach the diff (and thus a response) even if a manifest
-//     carries one in cleartext.
+//   - WipeSecrets replaces SOPS ciphertext with per-key placeholders (since
+//     flate 0.3.4 it no longer wipes cleartext Secret values — flate #688).
+//     Cleartext Secret data never reaches a response regardless: konflate's
+//     own redact (see pairChanges) replaces every Secret data/stringData
+//     value on the diff path.
 //   - AllowMissingSecrets lets public/token-less renders proceed without the
-//     cluster's real secrets (missing auth secrets become skips).
+//     cluster's real secrets (missing auth secrets become skips). Since flate
+//     0.3.4 a missing Secret declared by an in-repo ExternalSecret or
+//     SealedSecret is skipped on its own evidence as well.
 //   - GitDepth bounds GitRepository source clones to a shallow single commit.
 //     A PR can declare an arbitrary GitRepository source, and konflate may
 //     watch a repo it doesn't own; without a depth cap a hostile or huge source
@@ -202,8 +204,10 @@ func renderUsable(base, head orchestrator.Rendered, err error) bool {
 //     CLI default; commit-pinned refs still full-clone as flate requires.
 //
 // e.cache is the long-lived source cache reused across every PR; CacheDir
-// roots flate's persistent stage + on-disk Helm render caches on the same
-// (operator-mounted) volume so they survive restarts.
+// roots flate's persistent on-disk Helm caches on the same (operator-mounted)
+// volume so they survive restarts. (flate 0.3.4 renders kustomize stages in
+// memory; the old on-disk stage cache is gone — see RunCacheGC for the
+// leftover-dir cleanup.)
 func (e *flateEngine) renderCfg() orchestrator.Config {
 	return orchestrator.Config{
 		SourceCache:            e.cache,
@@ -211,7 +215,6 @@ func (e *flateEngine) renderCfg() orchestrator.Config {
 		WipeSecrets:            true,
 		AllowMissingSecrets:    true,
 		GitDepth:               1,
-		StageCacheBytes:        e.stageCacheBytes,
 		HelmTemplateCacheBytes: e.helmTemplateCacheBytes,
 		HelmRenderCacheBytes:   e.helmRenderCacheBytes,
 		Concurrency:            e.concurrency,
@@ -290,11 +293,14 @@ func unionKeys[K comparable, V any](ms ...map[K]V) []K {
 // response):
 //
 //   - Secret data/stringData values — opaque and often render-random or
-//     sensitive; whether keys were added/removed still shows.
+//     sensitive; whether keys were added/removed still shows. This is the
+//     load-bearing scrub: since flate 0.3.4 WipeSecrets covers only SOPS
+//     ciphertext, so cleartext Secret values flow through the render and
+//     are redacted here.
 //   - PEM cert/key material anywhere (a chart-minted TLS cert, a CRD/
 //     webhook caBundle injected at render time) — different on every
-//     render; flate only wipes the Secrets it reads for auth, not the ones
-//     a chart renders into output.
+//     render; flate wipes SOPS material, not what a chart renders into
+//     output.
 func redact(m map[string]any) {
 	if manifest.DocKind(m) == manifest.KindSecret {
 		redactSecretValues(m)

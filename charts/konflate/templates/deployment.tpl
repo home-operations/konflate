@@ -96,10 +96,6 @@ spec:
             - name: KONFLATE_HELM_RENDER_CACHE_MB
               value: {{ tpl (toString .Values.config.helmRenderCacheMb) $ | quote }}
             {{- end }}
-            {{- if ne (toString .Values.config.stageCacheMb) "" }}
-            - name: KONFLATE_STAGE_CACHE_MB
-              value: {{ tpl (toString .Values.config.stageCacheMb) $ | quote }}
-            {{- end }}
             {{- if ne (toString .Values.config.cacheTtl) "" }}
             - name: KONFLATE_CACHE_TTL
               value: {{ tpl (toString .Values.config.cacheTtl) $ | quote }}

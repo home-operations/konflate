@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -81,4 +83,47 @@ func TestLogSweep_SurfacesErrorsWithoutRemovals(t *testing.T) {
 	if out := buf.String(); !strings.Contains(out, "completed with errors") {
 		t.Errorf("a sweep with errors but no removals must be logged; got %q", out)
 	}
+}
+
+// TestRemoveLegacyStageCache covers the flate 0.3.4 migration: flate <= 0.3.3
+// kept a kustomize stage cache at <cacheDir>/stage that 0.3.4's in-memory
+// rendering (and its Sweep) no longer knows about, so konflate removes it
+// once at startup. The rest of the cache root must be untouched, and a root
+// without the legacy dir is a silent no-op.
+func TestRemoveLegacyStageCache(t *testing.T) {
+	t.Parallel()
+	log := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	t.Run("removes only the legacy dir", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		for _, p := range []string{"stage/ab/abcd", "sources/slug/hash", "git-mirrors/repo"} {
+			if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, "stage", "ab", "abcd", "f.yaml"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		removeLegacyStageCache(dir, log)
+
+		if _, err := os.Stat(filepath.Join(dir, "stage")); !os.IsNotExist(err) {
+			t.Errorf("legacy stage dir still present (err=%v)", err)
+		}
+		for _, keep := range []string{"sources/slug/hash", "git-mirrors/repo"} {
+			if _, err := os.Stat(filepath.Join(dir, keep)); err != nil {
+				t.Errorf("sibling cache entry %s was disturbed: %v", keep, err)
+			}
+		}
+	})
+
+	t.Run("no-op without the legacy dir", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		removeLegacyStageCache(dir, log) // must not create or fail anything
+		if _, err := os.Stat(filepath.Join(dir, "stage")); !os.IsNotExist(err) {
+			t.Errorf("no-op run materialized a stage dir (err=%v)", err)
+		}
+	})
 }

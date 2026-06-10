@@ -65,7 +65,6 @@ Kubernetes: `>=1.25.0-0`
 | config.renderForkPrs | bool | `false` | Render fork PRs. ⚠️ A fork runs untrusted external code through flate (SSRF / resource exhaustion). Off by default — forks are listed but hidden until you flip this. Kept separate from `prFilterExpr` so the filter can't accidentally enable them. |
 | config.repo | required | `""` | Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo). |
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
-| config.stageCacheMb | string | `""` | Advanced: persistent kustomize stage cache in MiB. Empty = default (2048); "0" disables size-based eviction. |
 | fullnameOverride | string | `""` | Override the full release name. |
 | httpRoute.additionalRules | list | `[]` | Custom rules prepended before the default rule (templated). |
 | httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
