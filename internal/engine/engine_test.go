@@ -240,10 +240,9 @@ func TestPairChanges_SuppressesRenderNoise(t *testing.T) {
 func TestPairChanges_StripsVolatileChurn(t *testing.T) {
 	t.Parallel()
 	parent := manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: "vol"}
-	// A volsync ReplicationSource whose only between-render differences are
-	// volatile noise: rotating checksum/* annotations (incl. the plural
-	// checksum/secrets the old exact-match list missed) and the render-clock
-	// spec.restic.unlock timestamp. Both must be stripped, so no change surfaces.
+	// A volsync ReplicationSource carrying both kinds of formerly-volatile
+	// value: checksum/* annotations (incl. the plural checksum/secrets the old
+	// exact-match list missed) and the spec.restic.unlock render timestamp.
 	src := func(checksum, unlock string) map[manifest.NamedResource][]map[string]any {
 		m := res("ReplicationSource", "apps", "data", map[string]any{
 			"spec": map[string]any{"restic": map[string]any{"repository": "backups", "unlock": unlock}},
@@ -254,8 +253,20 @@ func TestPairChanges_StripsVolatileChurn(t *testing.T) {
 		}
 		return map[manifest.NamedResource][]map[string]any{parent: {m}}
 	}
-	if got := pairChanges(src("aaaa", "20240101000000"), src("bbbb", "20240102000000")); len(got) != 0 {
-		t.Errorf("rotating checksum/* + spec.restic.unlock should be stripped, got %d change(s): %+v", len(got), got)
+
+	// Rotating checksum/* annotations stay duplicate noise (the hashed content
+	// change shows directly) — flate's DefaultStripAttrs still deletes them, so
+	// they alone must not surface a change.
+	if got := pairChanges(src("aaaa", "20240101000000"), src("bbbb", "20240101000000")); len(got) != 0 {
+		t.Errorf("rotating checksum/* should be stripped, got %d change(s): %+v", len(got), got)
+	}
+
+	// Since flate 0.3.4, spec.restic.unlock is NOT stripped: the deterministic
+	// render clock (pkg/helm/deterministic) pins `{{ now }}`, so both sides of a
+	// RenderTrees render the identical timestamp and a difference here is a
+	// genuine change (e.g. the chart altered its date format) that must surface.
+	if got := pairChanges(src("aaaa", "20240101000000"), src("aaaa", "20240102000000")); len(got) != 1 {
+		t.Errorf("a differing spec.restic.unlock is a genuine change under the deterministic clock, got %d change(s): %+v", len(got), got)
 	}
 }
 

@@ -106,7 +106,6 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		got, want int
 	}{
 		{"HelmRenderCacheMB", cfg.HelmRenderCacheMB, 1024},
-		{"StageCacheMB", cfg.StageCacheMB, 2048},
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
 		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
 		{"MaxDiffResources", cfg.MaxDiffResources, 500},

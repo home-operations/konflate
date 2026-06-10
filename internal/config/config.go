@@ -190,11 +190,6 @@ type Config struct {
 	// 0 disables it. In MiB.
 	HelmRenderCacheMB int `env:"KONFLATE_HELM_RENDER_CACHE_MB" envDefault:"1024"`
 
-	// StageCacheMB caps flate's persistent kustomize stage cache (under
-	// CacheDir). 0 disables size-based eviction (the cache grows unbounded). In
-	// MiB.
-	StageCacheMB int `env:"KONFLATE_STAGE_CACHE_MB" envDefault:"2048"`
-
 	// SourceRetryAttempts is the total tries flate makes per source fetch
 	// (Git/OCI/Bucket) before giving up, retrying only transient network
 	// failures with bounded backoff. <=1 disables retry. Hardens renders
