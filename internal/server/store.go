@@ -129,13 +129,17 @@ func contentDigest(rec persist.Record) uint64 {
 // save / del run the persistence I/O. Callers snapshot under s.mu, release it,
 // then call these — the file write/remove never holds the store lock. No-ops
 // when durability is disabled.
-func (s *store) save(rec persist.Record) {
+func (s *store) save(rec persist.Record) error {
 	if s.persist == nil {
-		return
+		return nil
 	}
-	if err := s.persist.Save(rec); err != nil && s.log != nil {
-		s.log.Warn("persist render", "pr", rec.PR.Number, "error", err)
+	if err := s.persist.Save(rec); err != nil {
+		if s.log != nil {
+			s.log.Warn("persist render", "pr", rec.PR.Number, "error", err)
+		}
+		return err
 	}
+	return nil
 }
 
 func (s *store) del(number int) {
@@ -205,15 +209,39 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	j.renderedAt = j.updated
 	sig := j.signals
 	rec := j.record()
-	d := contentDigest(rec)
-	changed := d != j.savedDigest
-	j.savedDigest = d
+	prev := j.savedDigest
 	s.mu.Unlock()
 
-	if changed {
-		s.save(rec) // only persist when the diff actually differs from what's on disk
-	}
+	// Hash and persist outside the lock: contentDigest marshals the whole record
+	// (multi-MB of rendered HTML), and holding s.mu across that stalls every
+	// reader (the list/diff/summary handlers) and every mutator. The snapshot is
+	// safe to read unlocked — j.result is replaced wholesale, never mutated in
+	// place, and per-PR coalescing means no second setResult for this PR runs
+	// concurrently.
+	s.persistRecord(number, rec, prev)
 	return sig
+}
+
+// persistRecord computes rec's content digest and, when it differs from prev,
+// writes rec and commits the new digest as savedDigest — but only after the save
+// succeeds. So a failed persist (a full or read-only volume) leaves savedDigest
+// unchanged, and a later identical re-render retries the write rather than
+// skipping it as "already on disk" (which would strand stale content that a
+// restart then restores). The costly marshal runs off the store lock; the digest
+// is committed under a brief re-lock.
+func (s *store) persistRecord(number int, rec persist.Record, prev uint64) {
+	d := contentDigest(rec)
+	if d == prev {
+		return // unchanged: nothing to write, and savedDigest is already current
+	}
+	if err := s.save(rec); err != nil {
+		return // leave savedDigest as-is so the next render retries the write
+	}
+	s.mu.Lock()
+	if j := s.jobs[number]; j != nil {
+		j.savedDigest = d
+	}
+	s.mu.Unlock()
 }
 
 // computeSignals reduces a diff to its at-a-glance counts for the PR list.
@@ -342,10 +370,12 @@ func (s *store) markClosed(number int, when time.Time) {
 	j.pr.Merged = true
 	j.updated = when
 	rec := j.record()
-	j.savedDigest = contentDigest(rec)
+	prev := j.savedDigest
 	s.mu.Unlock()
 
-	s.save(rec) // re-record with the merge stamp so the shelf survives a restart
+	// Re-record with the merge stamp so the shelf survives a restart — off the
+	// lock; the merge always changes the content, so this writes.
+	s.persistRecord(number, rec, prev)
 }
 
 // remove drops a PR from the store entirely (used for abandoned PRs and by
