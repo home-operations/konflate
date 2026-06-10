@@ -349,6 +349,44 @@ func TestServer_DropFilteredOnLoadKeepsOnEvalError(t *testing.T) {
 	}
 }
 
+// TestServer_HiddenToAllowedRenders verifies a PR that becomes filter-allowed
+// without a head push (draft → ready under !pr.draft) is enqueued on the next
+// re-list — it would otherwise sit pending forever, since nothing else enqueues
+// it in polling mode and the staleness backstop skips never-rendered jobs.
+func TestServer_HiddenToAllowedRenders(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	prg, err := prfilter.Compile(`!pr.draft`)
+	if err != nil {
+		t.Fatalf("compile filter: %v", err)
+	}
+	cfg.PRFilter = prg
+
+	draft := api.PR{Number: 1, Title: "wip", HeadRef: "f", BaseRef: "main", HeadSHA: "s1", Open: true, Draft: true}
+	prov := &fakeProvider{prs: []api.PR{draft}}
+	s := newTestServer(t, cfg, prov, okEngine())
+
+	// First list: the draft is tracked but hidden, never rendered.
+	s.refreshList(s.runCtx)
+	if env, _ := s.store.get(1); !env.Hidden {
+		t.Fatal("a draft under !pr.draft must be tracked as hidden")
+	}
+
+	// Marked ready for review — same head SHA, no push.
+	ready := draft
+	ready.Draft = false
+	prov.setPRs(ready)
+	s.refreshList(s.runCtx)
+
+	env := waitFor(t, s, 1) // before the fix this never reached a terminal status
+	if env.Status != api.JobReady {
+		t.Fatalf("draft→ready (no push) should render; status=%q err=%q", env.Status, env.Error)
+	}
+	if env.Hidden {
+		t.Error("PR 1 should no longer be hidden")
+	}
+}
+
 func TestServer_RenderForkPRs(t *testing.T) {
 	t.Parallel()
 	fork := api.PR{Number: 7, Title: "fork PR", HeadRef: "patch", BaseRef: "main", HeadSHA: "s7", Open: true, Fork: true}

@@ -477,7 +477,7 @@ func (s *Server) refreshList(ctx context.Context) {
 	}
 	s.metrics.prsKnown.Set(float64(len(prs)))
 	open := make(map[int]struct{}, len(prs))
-	var added, advanced int
+	var added, advanced, unhidden int
 	for _, pr := range prs {
 		// Every open PR is tracked. One the filter excludes is kept as hidden —
 		// listed (greyed, under the "hidden" pill) but never enqueued, so a fork's
@@ -486,23 +486,33 @@ func (s *Server) refreshList(ctx context.Context) {
 		open[pr.Number] = struct{}{}
 		prev, known := s.store.get(pr.Number)
 		s.store.upsertPR(pr, !allowed)
-		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA) {
+		// Render a PR that is newly tracked, whose head advanced, or that just
+		// became filter-allowed without a push (e.g. draft → ready under a
+		// !pr.draft filter). That last case is easy to miss: in polling mode
+		// nothing else enqueues it, and the staleness backstop skips never-rendered
+		// jobs, so it would sit pending forever.
+		nowAllowed := known && prev.Hidden && allowed
+		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA || nowAllowed) {
 			reason := "head advanced"
-			if !known {
+			switch {
+			case !known:
 				reason = "new PR"
 				added++
-			} else {
+			case nowAllowed:
+				reason = "filter now admits"
+				unhidden++
+			default:
 				advanced++
 			}
 			s.log.Debug("queuing render", "pr", pr.Number, "reason", reason)
-			s.queue.enqueue(pr) // new PR, or its head advanced → (re)render now
+			s.queue.enqueue(pr)
 		}
 	}
 	s.reconcileClosed(ctx, open)
 	// One summary line per refresh, with counts, instead of one "queuing render"
 	// line per PR: at startup every PR is "new", which would be a burst of
 	// near-identical lines on a busy instance. The per-PR detail stays at debug.
-	s.log.Info("refresh listed", "prs", len(prs), "new", added, "advanced", advanced)
+	s.log.Info("refresh listed", "prs", len(prs), "new", added, "advanced", advanced, "unhidden", unhidden)
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is
