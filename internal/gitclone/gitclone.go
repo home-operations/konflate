@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -353,13 +354,20 @@ var maxFileBytes int64 = 10 << 20 // 10 MiB
 // skipped: entries whose path escapes dir (a maliciously crafted repository —
 // konflate may be pointed at a public repo it does not own — could carry a tree
 // entry like "../../etc/x", and writing it via filepath.Join would land outside
-// dir, a zip-slip), and files larger than maxFileBytes. go-git's File.Contents
+// dir, a zip-slip), and files larger than maxFileBytes. go-git's blob reader
 // yields blob bytes, not symlinks, so regular files are the only thing written.
+//
+// Both trees are extracted under the mirror read lock, so per-file work is kept
+// lean: the blob streams straight to disk (no Contents() buffer→string→[]byte
+// copies), and MkdirAll is skipped when an entry shares the previous one's
+// directory — tree iteration is path-sorted, so same-dir files arrive in a run.
 func extractTree(c *object.Commit, dir string) error {
 	tree, err := c.Tree()
 	if err != nil {
 		return err
 	}
+	var lastDir string
+	var haveDir bool
 	return tree.Files().ForEach(func(f *object.File) error {
 		dst := filepath.Join(dir, filepath.FromSlash(f.Name))
 		if !withinRoot(dir, dst) {
@@ -368,15 +376,42 @@ func extractTree(c *object.Commit, dir string) error {
 		if f.Size > maxFileBytes {
 			return nil // oversized blob; not review-relevant, skip to bound memory/disk
 		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
+		if d := filepath.Dir(dst); !haveDir || d != lastDir {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				return err
+			}
+			lastDir, haveDir = d, true
 		}
-		contents, err := f.Contents()
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dst, []byte(contents), 0o644)
+		return writeBlob(f, dst)
 	})
+}
+
+// writeBlob streams f's blob contents into a new file at dst. Copying through
+// f.Reader() avoids the two full-content copies File.Contents() makes (it reads
+// the blob into a bytes.Buffer, then a string, which extractTree would copy
+// again into a []byte) — wasteful per file across two whole trees under the read
+// lock. The named return lets a deferred Close surface a flush error.
+func writeBlob(f *object.File, dst string) (err error) {
+	r, err := f.Reader()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := r.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	_, err = io.Copy(out, r)
+	return err
 }
 
 // withinRoot reports whether path stays inside dir (no traversal escape).
