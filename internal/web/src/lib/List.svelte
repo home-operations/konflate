@@ -182,9 +182,17 @@
      it shows immediately; the rest waits on the summary fetch. -->
 {#snippet previewBody(pr: PRStatus)}
   {@const pv = store.previews[pr.number]}
-  {#if pr.mergeCommand}
-    <MergeCommand command={pr.mergeCommand} />
-  {/if}
+  <!-- Actions row: the merge command (when enabled) with the forge link at its
+       right. The link lives here in the panel rather than on the row — on the
+       row it was the one hover-affordance control sitting among inert signal
+       badges, which read as noise (see the #163 follow-up feedback). Without a
+       merge command the row is just the link, pinned to the panel's right. -->
+  <div class="pv-actions">
+    {#if pr.mergeCommand}
+      <MergeCommand command={pr.mergeCommand} />
+    {/if}
+    <ForgeLink url={pr.url} number={pr.number} showNumber={false} />
+  </div>
 
   <!-- The sliding panel only mounts once the summary has loaded (see
        previewReady), so there's no in-panel "loading…" height for the slide to
@@ -309,10 +317,6 @@
         {/if}
       </div>
       </button>
-      <!-- Icon-only link out to the PR on its forge (the number would just crowd
-           the row — it stays in the link's tooltip/aria-label). Sibling of the
-           card <button> (it can't nest an anchor), right of the resource count. -->
-      <ForgeLink url={pr.url} number={pr.number} showNumber={false} />
       <!-- Right column: the expand chevron once a PR has a rendered summary;
            otherwise a state icon — rendering / queued / failed — carried by the
            icon and its tooltip, no text (so the row stays compact, incl. mobile). -->

@@ -40,10 +40,10 @@ test('list → review → single-page flow', async ({ page }) => {
   // Landing list: cards with per-PR signal badges.
   await expect(page.locator('.card')).toHaveCount(3);
   const card142 = page.locator('.card-shell[data-pr="142"]');
-  // The forge link in a list row is icon-only — the "#<n>" text is dropped to
-  // keep the row uncluttered; the number lives in its tooltip (asserted below).
-  await expect(card142.locator('.forge-link')).toBeVisible();
-  await expect(card142.locator('.forge-link')).not.toContainText('#142');
+  // The forge link is NOT a row control — it lives in the expanded panel's
+  // action bar (asserted in the expander test). The row keeps only inert
+  // signal badges plus the disclosure chevron.
+  await expect(card142.locator('.forge-link')).toHaveCount(0);
   await expect(card142.locator('.card-title')).toHaveText(
     'feat(rook-ceph): bump the rook-ceph operator and cluster chart to v1.15.0',
   );
@@ -61,13 +61,6 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(
     card142.locator('.badge:not(.caution):not(.danger):not(.muted):not(.warn)'),
   ).toHaveAttribute('title', '1 image change');
-  // A PR-icon link, right of the badges, opens the PR on its forge (named in the
-  // tooltip). It's a sibling of the card button, so scope to the shell.
-  const forge142 = page.locator('.card-shell[data-pr="142"]').locator('.forge-link');
-  await expect(forge142).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
-  await expect(forge142).toHaveAttribute('target', '_blank');
-  await expect(forge142).toHaveAttribute('title', 'Open PR #142 on GitHub');
-
   // Open a PR → the single-page review lands on the Summary (impact, warnings,
   // image changes, render failures), with the tree rail alongside it.
   await card142.click();
@@ -157,6 +150,19 @@ test('merged PRs are reached via the merged pill, not shown by default', async (
   // No redundant "merged" tag — the dimmed card, purple dot, and "merged …"
   // timestamp already convey it.
   await expect(mergedCard.locator('.ago')).toContainText('merged');
+
+  // A merged PR has no merge command, so its expanded panel's action row
+  // degrades to just the forge link, pinned right.
+  await page.route('**/api/prs/128/summary', (route) => route.fulfill({ json: diffEnvelope }));
+  const mergedLi = page.locator('.card-li:has(.card-shell[data-pr="128"])');
+  await mergedLi.locator('.card-expand').click();
+  const mergedActions = mergedLi.locator('.card-preview .pv-actions');
+  await expect(mergedActions.locator('.merge-cmd')).toHaveCount(0);
+  await expect(mergedActions.locator('.forge-link')).toHaveAttribute(
+    'href',
+    'https://github.com/acme/home-ops/pull/128',
+  );
+  await mergedLi.locator('.card-expand').click(); // collapse before navigating
 
   // Opening a merged PR shows the frozen-diff banner.
   await page.route('**/api/prs/128/diff', (route) =>
@@ -744,6 +750,20 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   await expect(preview.locator('.merge-cmd-text')).toHaveText('gh pr merge 142 --repo acme/home-ops');
   // Flags render as distinct (dimmed) tokens so `142 --repo` doesn't read joined.
   await expect(preview.locator('.merge-cmd-text .cmd-flag')).toHaveText('--repo');
+
+  // The forge link rides the panel's action bar, right of the merge command's
+  // copy button — the row itself carries no link (asserted on the landing list).
+  const forge = preview.locator('.pv-actions .forge-link');
+  await expect(forge).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
+  await expect(forge).toHaveAttribute('target', '_blank');
+  await expect(forge).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  await expect(forge).not.toContainText('#142'); // icon-only; the number stays in the tooltip
+  const order = await preview.locator('.pv-actions').evaluate((row) => {
+    const copy = row.querySelector('.copy-btn')!.getBoundingClientRect();
+    const link = row.querySelector('.forge-link')!.getBoundingClientRect();
+    return link.left >= copy.right;
+  });
+  expect(order).toBe(true);
   await expect(preview).toContainText('Resource diffs');
   await expect(preview).toContainText('Cautions');
   await expect(preview).toContainText('Render failures');

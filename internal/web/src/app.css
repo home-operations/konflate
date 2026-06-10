@@ -616,6 +616,32 @@ a.repo:focus-visible .repo-ext {
   flex-direction: column;
   gap: 10px;
 }
+/* The panel's action row: the merge-command chip (when the feature is on)
+   spanning the bar, with the forge link at the far right. justify-content
+   keeps the link pinned right when there is no merge command. */
+.pv-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.pv-actions .merge-cmd {
+  flex: 1 1 auto;
+}
+/* In the panel the link matches the neighbouring copy button's quiet idiom —
+   a muted glyph that colors on hover — instead of the boxy padded hover it
+   had as a standalone row control. */
+.pv-actions .forge-link {
+  padding: 2px;
+  border-radius: 4px;
+  opacity: 0.75;
+}
+.pv-actions .forge-link:hover {
+  opacity: 1;
+  background: transparent;
+  color: var(--accent);
+}
+
 /* One labelled section of the row summary (Copy / Resource diffs / …). */
 .pv-group {
   display: flex;
@@ -976,9 +1002,8 @@ button.sum-pill:hover {
   color: var(--ok);
 }
 /* PR-icon link out to the change on its forge. Quiet (muted) by default; the
-   tooltip names the forge. Shared by the list rows (right of the resource count)
-   and the review title. align-self:center keeps a list-row instance a compact
-   target instead of a full-height column. */
+   tooltip names the forge. Shared by the review title (with the "#<n>" text)
+   and the list row's expanded panel (icon-only, restyled by .pv-actions). */
 .forge-link {
   display: inline-flex;
   align-items: center;
@@ -2020,13 +2045,6 @@ kbd {
   .card-meta {
     flex-wrap: wrap;
     row-gap: 6px;
-  }
-  /* The icon-only forge link becomes a full touch target on a phone, matching
-     the disclosure column's width so the two right-edge controls line up. */
-  .forge-link.icon-only {
-    min-width: 40px;
-    min-height: 40px;
-    padding: 0;
   }
   .card-top {
     align-items: flex-start; /* dot beside the first title line, not the block centre */
