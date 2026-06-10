@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "konflate.cacheClaimName" . }}
+  name: {{ include "konflate.cacheClaimName" . | quote }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "konflate.labels" . | nindent 4 }}

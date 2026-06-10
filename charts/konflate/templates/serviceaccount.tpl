@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "konflate.serviceAccountName" . }}
+  name: {{ include "konflate.serviceAccountName" . | quote }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "konflate.labels" . | nindent 4 }}
