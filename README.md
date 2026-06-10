@@ -34,7 +34,10 @@ front.
    context), a navigation tree (`HelmRelease`/`Kustomization` → kind →
    resource), plus the review signals — **impact** (blast radius), **image
    changes**, **render failures**, and **danger lint** (data-loss, privilege,
-   RBAC, availability).
+   RBAC, availability, and immutable-field changes — a StatefulSet
+   `volumeClaimTemplates` bump, a workload selector edit, a PVC storage-class
+   swap or shrink, a `roleRef` change — that read like ordinary diffs but
+   wedge the apply with "field is immutable" until the resource is recreated).
 
     The **image changes** signal lists the `container` and `initContainer` image
     references that changed across _every rendered workload_ — so it captures
