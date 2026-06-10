@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.7](https://github.com/home-operations/konflate/compare/0.2.6...0.2.7) (2026-06-10)
+
+
+### Features
+
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.37.0 → v2.38.0) ([#172](https://github.com/home-operations/konflate/issues/172)) ([177aa22](https://github.com/home-operations/konflate/commit/177aa226924c8c07ad8b626b8cd4de428e18845d))
+
+
+### Bug Fixes
+
+* **ui:** give the card meta-row pills one explicit height ([#171](https://github.com/home-operations/konflate/issues/171)) ([cc33e6e](https://github.com/home-operations/konflate/commit/cc33e6e1f280e481d5f5cbb9d0aa4c7a22ef338c))
+* **ui:** level the review top bars and close the sticky-header seam ([#168](https://github.com/home-operations/konflate/issues/168)) ([b85e1c6](https://github.com/home-operations/konflate/commit/b85e1c613e59451095e29b5945332e584863bddd))
+
 ## [0.2.6](https://github.com/home-operations/konflate/compare/0.2.5...0.2.6) (2026-06-10)
 
 
