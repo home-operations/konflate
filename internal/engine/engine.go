@@ -81,10 +81,14 @@ func New(cfg *config.Config) Engine {
 		conc = runtime.NumCPU() * 4 // flate's default for I/O-bound reconcile work
 	}
 	return &flateEngine{
-		clusterPath:            cfg.ClusterPath,
-		selfURLs:               []string{cfg.Forge.CloneURL()},
-		cacheDir:               cfg.CacheDir,
-		mirror:                 gitclone.NewMirror(cfg.CacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
+		clusterPath: cfg.ClusterPath,
+		selfURLs:    []string{cfg.Forge.CloneURL()},
+		cacheDir:    cfg.CacheDir,
+		// The bare mirror is repo-specific, so it hangs off the per-repo subtree
+		// (RepoCacheDir), not the shared CacheDir — otherwise a CacheDir volume
+		// shared across different-repo instances would cross-fetch. flate's
+		// content-addressed source cache below stays on CacheDir and is shared.
+		mirror:                 gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		stageCacheBytes:        int64(cfg.StageCacheMB) * mib,

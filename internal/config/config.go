@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -126,10 +128,20 @@ type Config struct {
 	// layers, git objects). Shared across diff jobs; persisted across restarts.
 	CacheDir string `env:"KONFLATE_CACHE_DIR"`
 
+	// RepoCacheDir is the per-repository subtree of CacheDir holding the two
+	// on-disk areas tied to one specific repository: the bare git mirror and the
+	// persisted diff state. It is keyed by a hash of the clone URL (see repoKey)
+	// so several konflate instances tracking different repositories can share a
+	// single CacheDir volume — worthwhile because flate's content-addressed source
+	// cache (which stays directly under CacheDir) is safe to share — without one
+	// instance silently fetching another's repo or colliding on its state files.
+	// Derived in [Load]; not configurable.
+	RepoCacheDir string `env:"-"`
+
 	// StateDir is where konflate persists its rendered diffs (one zstd-compressed
-	// JSON per PR) so the store survives restarts. Derived as <CacheDir>/state in
-	// [Load] — it rides on the same volume as the source cache, so persistence is
-	// automatic once that volume is durable, and there is no separate knob. It
+	// JSON per PR) so the store survives restarts. Derived as <RepoCacheDir>/state
+	// in [Load] — it rides on the same volume as the source cache, so persistence
+	// is automatic once that volume is durable, and there is no separate knob. It
 	// sits beside flate's cache entries, which the cache GC leaves untouched.
 	StateDir string `env:"-"`
 
@@ -297,7 +309,14 @@ func Load() (*Config, error) {
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = filepath.Join(xdgCacheHome(), "konflate")
 	}
-	cfg.StateDir = filepath.Join(cfg.CacheDir, "state")
+	// The bare mirror and persisted state are specific to this repository, so key
+	// their parent directory by the clone URL. Without this, two instances sharing
+	// a CacheDir volume (to share flate's safe content-addressed source cache)
+	// collide: one fetches into the other's mirror — silently rendering the wrong
+	// repo — and overwrites its state files. flate's cache stays directly under
+	// CacheDir and remains shared.
+	cfg.RepoCacheDir = filepath.Join(cfg.CacheDir, "repos", repoKey(cfg.Forge.CloneURL()))
+	cfg.StateDir = filepath.Join(cfg.RepoCacheDir, "state")
 	if cfg.CloneDir == "" {
 		cfg.CloneDir = filepath.Join(os.TempDir(), "konflate")
 	}
@@ -348,4 +367,15 @@ func xdgCacheHome() string {
 		return filepath.Join(os.TempDir(), ".cache")
 	}
 	return filepath.Join(home, ".cache")
+}
+
+// repoKey derives a stable, filesystem-safe directory name from a clone URL so
+// the per-repository cache subtree (RepoCacheDir) is unique per repo. A hash
+// rather than the raw URL keeps the name bounded and free of path separators or
+// other characters that would escape the cache root; the 16-hex-char (64-bit)
+// prefix is collision-resistant for the handful of repos that might ever share
+// one CacheDir volume.
+func repoKey(cloneURL string) string {
+	sum := sha256.Sum256([]byte(cloneURL))
+	return hex.EncodeToString(sum[:])[:16]
 }
