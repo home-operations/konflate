@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.8](https://github.com/home-operations/konflate/compare/0.2.7...0.2.8) (2026-06-10)
+
+
+### Features
+
+* **lint:** caution on immutable-field changes that wedge the apply ([#173](https://github.com/home-operations/konflate/issues/173)) ([18a8c72](https://github.com/home-operations/konflate/commit/18a8c7248142f2558dadc1499d71d2aa376b6562))
+* **lint:** Flux-semantic cautions — suspend awareness and prune semantics ([#176](https://github.com/home-operations/konflate/issues/176)) ([1de1051](https://github.com/home-operations/konflate/commit/1de105162da5b69a1f0b21f537e34de5f3558a92))
+* **ui:** find-in-diff search ('/' on the review) ([#175](https://github.com/home-operations/konflate/issues/175)) ([9e945fe](https://github.com/home-operations/konflate/commit/9e945fe5b9efe5a3d4989fea4341d2c574343b37))
+
 ## [0.2.7](https://github.com/home-operations/konflate/compare/0.2.6...0.2.7) (2026-06-10)
 
 
