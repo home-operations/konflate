@@ -1,3 +1,13 @@
+{{- /*
+  konflate is single-instance: its PR/diff state lives in memory and is served
+  from one pod (strategy: Recreate below). Two replicas wedge on the RWO cache
+  volume's Multi-Attach error with persistence, or round-robin between divergent
+  in-memory stores without it. Reject >1 at render so the misconfiguration is a
+  clear install error rather than a confusing runtime one; 0 is allowed (pause).
+*/ -}}
+{{- if gt (int .Values.replicaCount) 1 -}}
+{{- fail (printf "konflate is single-instance (in-memory PR/diff state); replicaCount must be 0 or 1, got %d" (int .Values.replicaCount)) -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -14,7 +14,14 @@
 # text/template konflate renders per-PR with .Number/.Repo — plus plain numbers and
 # booleans. To emit a literal brace, escape it: write `{{ "{{" }}` for `{{`.
 
-# -- Number of konflate replicas (it's stateless behind the Service).
+# konflate keeps its PR/diff state in memory and serves it from one instance
+# (the Deployment uses strategy: Recreate, never overlapping pods). It does NOT
+# scale horizontally: a second replica wedges on the RWO cache volume's
+# Multi-Attach error, or — without persistence — round-robins behind the Service
+# between two divergent in-memory stores. So this must be 0 or 1; a value >1 is
+# rejected at render. 0 scales it down (pause) without uninstalling.
+
+# -- Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time).
 replicaCount: 1
 
 image:

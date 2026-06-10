@@ -113,7 +113,7 @@ Kubernetes: `>=1.25.0-0`
 | podLabels | object | `{}` | Labels added to the pod. |
 | podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level securityContext (runs as non-root uid/gid 65532 with the RuntimeDefault seccomp profile). |
 | readinessProbe | object | `{"httpGet":{"path":"/readyz","port":"http"},"initialDelaySeconds":5,"periodSeconds":10}` | Readiness probe. |
-| replicaCount | int | `1` | Number of konflate replicas (it's stateless behind the Service). |
+| replicaCount | int | `1` | Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time). |
 | resources | object | `{"limits":{"memory":"1Gi"},"requests":{"cpu":"50m","memory":"256Mi"}}` | Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters. |
 | secret.existingSecret | string | `""` | Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below. |
 | secret.pushToken | string | `""` | Push token; enables POST /api/prs/{n}/refresh (authenticated mode). |
