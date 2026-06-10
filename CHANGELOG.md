@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.4](https://github.com/home-operations/konflate/compare/0.2.3...0.2.4) (2026-06-10)
+
+
+### Bug Fixes
+
+* **chart:** document and enforce konflate's single-instance design ([#157](https://github.com/home-operations/konflate/issues/157)) ([3511971](https://github.com/home-operations/konflate/commit/3511971b32f52f3afbefc05ecaa219a620cd924a))
+* **web:** make status:hidden work in the list filter and palette ([#154](https://github.com/home-operations/konflate/issues/154)) ([0a3382e](https://github.com/home-operations/konflate/commit/0a3382e128044fbd4d179370de7a5b14f0bc9289))
+
+
+### Performance Improvements
+
+* **gitclone:** stream blobs and dedupe MkdirAll in extractTree ([#155](https://github.com/home-operations/konflate/issues/155)) ([42571ec](https://github.com/home-operations/konflate/commit/42571ec284958b357b671e1433e787241d0d377e))
+
 ## [0.2.3](https://github.com/home-operations/konflate/compare/0.2.2...0.2.3) (2026-06-10)
 
 
