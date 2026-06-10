@@ -38,6 +38,12 @@ front.
    `volumeClaimTemplates` bump, a workload selector edit, a PVC storage-class
    swap or shrink, a `roleRef` change — that read like ordinary diffs but
    wedge the apply with "field is immutable" until the resource is recreated).
+   The lint also reasons about what **Flux will actually do** on merge:
+   changes under a suspended Kustomization/HelmRelease (they won't roll out),
+   a PR flipping `spec.suspend` (resuming applies everything accumulated while
+   parked, at once), and removal semantics under `prune` — a pruning
+   Kustomization really deletes the resource in-cluster, a non-pruning one
+   orphans it, silently left running.
 
     The **image changes** signal lists the `container` and `initContainer` image
     references that changed across _every rendered workload_ — so it captures

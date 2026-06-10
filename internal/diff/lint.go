@@ -38,9 +38,11 @@ const (
 
 // Lint runs the danger-lint rules over the changed resources (and the diff's
 // image changes) and returns the warnings, most-severe first (all dangers
-// before all cautions). Advisory only — konflate never blocks on these; they
-// are a reviewer aid.
-func Lint(changes []Change, images []api.ImageChange) []api.Warning {
+// before all cautions). parents carries the Flux-semantic facts about each
+// producing Kustomization/HelmRelease (suspend/prune — see ParentInfo); nil
+// is fine and simply mutes the parent-aware rules. Advisory only — konflate
+// never blocks on these; they are a reviewer aid.
+func Lint(changes []Change, images []api.ImageChange, parents map[string]ParentInfo) []api.Warning {
 	var warnings []api.Warning
 	add := func(rule, detail string, c Change) {
 		warnings = append(warnings, api.Warning{Level: api.LevelCaution, Rule: rule, Resource: resourceLabel(c), Detail: detail})
@@ -48,19 +50,25 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 
 	for _, c := range changes {
 		if c.Status == statusRemoved {
+			// pruneSuffix sharpens each removal with what Flux will actually
+			// do — prune (a real deletion) vs orphan — when the parent
+			// Kustomization's spec is known.
 			switch c.Kind {
 			case kindStatefulSet:
-				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted", c)
+				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted"+pruneSuffix(c, parents), c)
 			case "PersistentVolumeClaim":
-				add("removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed", c)
+				add("removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed"+pruneSuffix(c, parents), c)
 			case "Namespace":
-				add("removed-namespace", "removed Namespace — deletes every resource inside it", c)
+				add("removed-namespace", "removed Namespace — deletes every resource inside it"+pruneSuffix(c, parents), c)
 			case "CustomResourceDefinition":
-				add("removed-crd", "removed CustomResourceDefinition — deletes all of its custom resources", c)
+				add("removed-crd", "removed CustomResourceDefinition — deletes all of its custom resources"+pruneSuffix(c, parents), c)
 			case "NetworkPolicy":
-				add("removed-networkpolicy", "removed NetworkPolicy — traffic it previously denied may now be allowed", c)
+				add("removed-networkpolicy", "removed NetworkPolicy — traffic it previously denied may now be allowed"+pruneSuffix(c, parents), c)
 			}
 		}
+
+		// Flux suspend toggles on the Kustomization/HelmRelease doc itself.
+		warnings = append(warnings, suspendToggleWarnings(c)...)
 
 		// Post-image rules (added or changed): inspect the New manifest.
 		if c.New != nil {
@@ -82,6 +90,11 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 		// the API server refuses to update in place (see immutable.go).
 		warnings = append(warnings, immutableFieldWarnings(c)...)
 	}
+
+	// Flux-semantic aggregates: changes parked under a suspended parent, and
+	// removals a non-pruning Kustomization will orphan rather than delete.
+	warnings = append(warnings, suspendedParentWarnings(changes, parents)...)
+	warnings = append(warnings, notPrunedWarnings(changes, parents)...)
 
 	// Blast-radius / version signals: an unusually large change set, and major
 	// (semver) chart or container-image bumps.

@@ -164,6 +164,9 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		Images:       imageChanges(changes),
 		Failures:     failures,
 		MaxResources: e.maxDiffResources,
+		// Flux-semantic parent facts (suspend/prune) for the lint rules,
+		// looked up across the full rendered sets — see parentInfos.
+		Parents: parentInfos(base.Result.Manifests, head.Result.Manifests),
 	})
 }
 
