@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -36,9 +37,13 @@ type fakeProvider struct {
 	details  map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
 	notFound map[int]bool   // numbers GetPR reports as deleted (provider.ErrPRNotFound)
 	listErr  error
+	listHook func() // optional seam invoked at the start of each ListPRs (set before use)
 }
 
 func (f *fakeProvider) ListPRs(context.Context) ([]api.PR, error) {
+	if f.listHook != nil {
+		f.listHook() // outside the lock so a hook may block without wedging the fake
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.prs, f.listErr
@@ -149,6 +154,51 @@ func waitFor(t *testing.T, s *Server, number int) api.DiffEnvelope {
 }
 
 // --- tests ---------------------------------------------------------------
+
+// TestServer_WebhookRelistCoalesces verifies a burst of relist triggers collapses
+// to one in-flight refreshList plus one trailing run, rather than a ListPRs per
+// event — the forge-API-quota fix for a chatty "send everything" webhook.
+func TestServer_WebhookRelistCoalesces(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	prov := &fakeProvider{}
+	prov.listHook = func() {
+		if calls.Add(1) == 1 {
+			entered <- struct{}{} // the first relist is now in flight
+			<-release             // hold it so a burst can pile up behind it
+		}
+	}
+	s := newTestServer(t, ghCfg("tok"), prov, okEngine())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.relistWorker(ctx)
+
+	// First trigger: the worker enters ListPRs and blocks there.
+	s.requestRelist()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("relist worker never started the first run")
+	}
+
+	// A burst arrives while that run is in flight; it must coalesce, not fan out.
+	for range 5 {
+		s.requestRelist()
+	}
+	close(release) // let the in-flight run finish; the worker then drains one token
+
+	// Exactly two ListPRs calls: the in-flight run + one coalesced trailing run.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && calls.Load() < 2 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond) // let any erroneous extra run surface
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("ListPRs calls = %d, want 2 (one in-flight + one coalesced trailing run)", got)
+	}
+}
 
 func TestServer_RefreshListAndDiff(t *testing.T) {
 	t.Parallel()

@@ -455,7 +455,10 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	} else {
-		go s.refreshList(s.runCtx)
+		// Coalesce: a chatty webhook (every check_run/status/push delivered) would
+		// otherwise spawn a goroutine + full ListPRs per event. requestRelist folds
+		// the burst into at most one in-flight relist plus one trailing run.
+		s.requestRelist()
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{keyStatus: "accepted"})
 }
