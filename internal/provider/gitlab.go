@@ -31,17 +31,24 @@ func newGitLab(cfg *config.Config) (*gitlabProvider, error) {
 func (p *gitlabProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	state := "opened"
 	order := "updated_at"
-	mrs, _, err := p.client.MergeRequests.ListProjectMergeRequests(p.project, &gitlab.ListProjectMergeRequestsOptions{
+	opts := &gitlab.ListProjectMergeRequestsOptions{
 		State:       &state,
 		OrderBy:     &order,
-		ListOptions: gitlab.ListOptions{PerPage: 50},
-	}, gitlab.WithContext(ctx))
-	if err != nil {
-		return nil, fmt.Errorf("gitlab: list MRs: %w", err)
+		ListOptions: gitlab.ListOptions{PerPage: 100},
 	}
-	out := make([]api.PR, 0, len(mrs))
-	for _, mr := range mrs {
-		out = append(out, gitlabToPR(mr))
+	var out []api.PR
+	for {
+		mrs, resp, err := p.client.MergeRequests.ListProjectMergeRequests(p.project, opts, gitlab.WithContext(ctx))
+		if err != nil {
+			return nil, fmt.Errorf("gitlab: list MRs: %w", err)
+		}
+		for _, mr := range mrs {
+			out = append(out, gitlabToPR(mr))
+		}
+		if resp.NextPage == 0 {
+			break // last page: without this loop, projects with >100 open MRs lost the rest
+		}
+		opts.Page = resp.NextPage
 	}
 	return out, nil
 }

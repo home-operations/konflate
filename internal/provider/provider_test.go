@@ -79,6 +79,44 @@ func TestGitHubProvider_ListPRs(t *testing.T) {
 	}
 }
 
+// TestGitHubProvider_ListPRsPaginates verifies ListPRs follows rel="next" across
+// pages — without it, a repo with more open PRs than one page silently lost the
+// rest. (The loop is structurally identical in the gitlab and forgejo providers.)
+func TestGitHubProvider_ListPRsPaginates(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/acme/web/pulls", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			_, _ = w.Write([]byte(`[{"number":2,"state":"open","head":{"ref":"b","sha":"s2"},"base":{"ref":"main"}}]`))
+			return
+		}
+		// Page 1 advertises a next page, so the provider must request page 2.
+		w.Header().Set("Link", `<`+r.URL.Path+`?page=2>; rel="next"`)
+		_, _ = w.Write([]byte(`[{"number":1,"state":"open","head":{"ref":"a","sha":"s1"},"base":{"ref":"main"}}]`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	raw := srv.URL + "/"
+	client, err := github.NewClient(github.WithURLs(&raw, &raw))
+	if err != nil {
+		t.Fatalf("github.NewClient: %v", err)
+	}
+	p := &githubProvider{client: client, owner: "acme", repo: "web"}
+
+	prs, err := p.ListPRs(context.Background())
+	if err != nil {
+		t.Fatalf("ListPRs: %v", err)
+	}
+	if len(prs) != 2 {
+		t.Fatalf("got %d PRs across pages, want 2 (pagination must follow rel=next)", len(prs))
+	}
+	if prs[0].Number != 1 || prs[1].Number != 2 {
+		t.Errorf("paged PR numbers = %d, %d; want 1, 2", prs[0].Number, prs[1].Number)
+	}
+}
+
 func TestNew_DispatchesByForge(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

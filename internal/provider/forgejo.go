@@ -42,17 +42,24 @@ func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	// can't be threaded through; ctx is accepted only to satisfy the Provider
 	// interface and is intentionally unused.
 	_ = ctx
-	prs, _, err := p.client.ListRepoPullRequests(p.owner, p.repo, forgejo.ListPullRequestsOptions{
+	opts := forgejo.ListPullRequestsOptions{
 		State:       forgejo.StateOpen,
 		Sort:        "recentupdate",
-		ListOptions: forgejo.ListOptions{PageSize: 50},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("forgejo: list PRs: %w", err)
+		ListOptions: forgejo.ListOptions{PageSize: 50}, // Gitea/Forgejo caps the page size server-side
 	}
-	out := make([]api.PR, 0, len(prs))
-	for _, pr := range prs {
-		out = append(out, forgejoToPR(pr))
+	var out []api.PR
+	for {
+		prs, resp, err := p.client.ListRepoPullRequests(p.owner, p.repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("forgejo: list PRs: %w", err)
+		}
+		for _, pr := range prs {
+			out = append(out, forgejoToPR(pr))
+		}
+		if resp.NextPage == 0 {
+			break // last page: without this loop, repos with >50 open PRs lost the rest
+		}
+		opts.Page = resp.NextPage
 	}
 	return out, nil
 }
