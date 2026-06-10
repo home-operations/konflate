@@ -1089,3 +1089,37 @@ test('captures diffs screenshot (dark, deep-linked)', async ({ page }) => {
   await expect(page.locator('html.dark')).toBeAttached();
   await page.screenshot({ path: 'screenshots/konflate-diffs-dark.png' });
 });
+
+test('review chrome: rail Summary and section headers form one level bar (regression #163)', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/#/pr/142');
+  await page.locator('.res-header').first().waitFor();
+
+  // The rail's Summary node and the diff pane's summary header sit flush at
+  // the same top (no blank band above the Summary) and share one height, so
+  // their bottom borders form a single continuous line across the rail border.
+  const box = (sel: string) =>
+    page.locator(sel).first().evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return { top: b.top, bottom: b.bottom };
+    });
+  const tree = await box('.tree-summary');
+  const head = await box('.diff-section[data-sel="summary"] .res-header');
+  expect(Math.abs(tree.top - head.top)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(tree.bottom - head.bottom)).toBeLessThanOrEqual(0.5);
+
+  // A stuck section header must overlap the scrollport's top edge (top <= pane
+  // top) so fractional scroll offsets can't open a hairline of the content
+  // scrolling beneath it ("text inside the bar", issue #163).
+  await page.evaluate(() => {
+    const pane = document.querySelector('.diff-pane') as HTMLElement;
+    pane.scrollTop = 150.25; // inside the summary section's body
+  });
+  await page.waitForTimeout(100);
+  const stuck = await page.evaluate(() => {
+    const pane = document.querySelector('.diff-pane') as HTMLElement;
+    const h = document.querySelector('.diff-section[data-sel="summary"] .res-header')!;
+    return h.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+  });
+  expect(stuck).toBeLessThanOrEqual(0);
+});
