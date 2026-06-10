@@ -228,11 +228,17 @@ func joinPath(dir, sub string) string {
 
 // pairChanges diffs two flate render outputs (each keyed by producing
 // parent) into konflate's resource-level changes. The pairing,
-// normalization, byte-equality drop, and chart-label capture are flate's
+// normalization, equality drop, and chart-label capture are flate's
 // diff.Changes; konflate layers only its secret/cert scrub (the redact
 // hook) on top of flate's default strip lists. flate.Change maps 1:1 onto
 // our diff.Change (Parent struct → "Kind ns/name" label), already sorted
 // by parent then identity.
+//
+// flate's equality is typed (reflect.DeepEqual over the normalized values),
+// not byte equality, so a pair differing only by Go type — replicas: 3 (int)
+// vs 3.0 (float64) — survives as "changed" even though it marshals to the same
+// YAML. diff.Render collapses those type-only no-ops after marshaling, so they
+// don't show as empty changed resources.
 func pairChanges(base, head map[manifest.NamedResource][]map[string]any) []diff.Change {
 	fc := flatediff.Changes(
 		flatediff.DocsFromManifests(base, nil),
@@ -279,8 +285,8 @@ func unionKeys[K comparable, V any](ms ...map[K]V) []K {
 // Options.Normalize. flate already strips the chart-bump attributes and
 // render-clock spec fields (via DefaultStripAttrs / DefaultStripFields)
 // and summarizes ConfigMap binaryData; this adds the two scrubs flate
-// leaves to the consumer's policy, run on the deep copy before the
-// byte-equality check so they never read as a change (nor reach a
+// leaves to the consumer's policy, run on the deep copy before flate's
+// equality check so they never read as a change (nor reach a
 // response):
 //
 //   - Secret data/stringData values — opaque and often render-random or

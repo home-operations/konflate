@@ -29,6 +29,13 @@ type Change struct {
 	NewChart string
 }
 
+// Change.Status values — the api status union. ("changed" is the default arm
+// everywhere, so it has no named constant.)
+const (
+	statusAdded   = "added"
+	statusRemoved = "removed"
+)
+
 // Lint runs the danger-lint rules over the changed resources (and the diff's
 // image changes) and returns the warnings, most-severe first (all dangers
 // before all cautions). Advisory only — konflate never blocks on these; they
@@ -40,7 +47,7 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 	}
 
 	for _, c := range changes {
-		if c.Status == "removed" {
+		if c.Status == statusRemoved {
 			switch c.Kind {
 			case "StatefulSet":
 				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted", c)
@@ -67,7 +74,7 @@ func Lint(changes []Change, images []api.ImageChange) []api.Warning {
 			}
 		}
 
-		if c.Status == "added" && c.Kind == "ClusterRoleBinding" {
+		if c.Status == statusAdded && c.Kind == "ClusterRoleBinding" {
 			add("rbac-widened", "new ClusterRoleBinding — grants cluster-wide permissions", c)
 		}
 	}
