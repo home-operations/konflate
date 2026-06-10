@@ -2,6 +2,7 @@
 // modifier keys, so it never fights the browser or the filter box.
 import { router } from './router.svelte';
 import { adjacentPR, adjacentResource, goList, openSel } from './store.svelte';
+import { search, openSearch, closeSearch } from './search.svelte';
 
 // Two overlays: the shortcuts help (toggled by '?' or the topbar button) and the
 // command palette (Cmd/Ctrl+K). They are mutually exclusive, and opening either
@@ -77,6 +78,20 @@ export function initKeyboard(): void {
         document.querySelector<HTMLInputElement>('.pr-search')?.focus();
         e.preventDefault();
       }
+      return;
+    }
+
+    // On the review, '/' opens the find-in-diff bar (the lazy-mounted tables
+    // defeat the browser's own Ctrl+F); Escape closes it before falling back
+    // to "leave the review".
+    if (e.key === '/') {
+      openSearch();
+      e.preventDefault();
+      return;
+    }
+    if (search.open && e.key === 'Escape') {
+      closeSearch();
+      e.preventDefault();
       return;
     }
 

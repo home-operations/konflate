@@ -1290,7 +1290,9 @@ button.sum-pill:hover {
   min-height: 0;
 }
 .diff-main {
-  /* Column wrapper so the mobile switcher bar can sit above the scrolling pane. */
+  /* Column wrapper so the mobile switcher bar can sit above the scrolling pane.
+     position: relative anchors the floating find-in-diff bar (.diff-search). */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1472,6 +1474,53 @@ button.sum-pill:hover {
 }
 .leaf-counts .del {
   margin-left: 4px;
+}
+
+/* Floating find-in-diff bar ('/'): overlays the top-right of the diff pane,
+   above the sticky section headers. Searches the diff data, so lazy-mounted
+   sections the browser's Ctrl+F can't see are still found. */
+.diff-search {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  color: var(--muted);
+}
+.diff-search input {
+  width: 200px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.search-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The jumped-to row: a brief accent flash so the eye lands on the hit. The
+   class is added by search.svelte.ts and removed after the animation. */
+tr.search-hit > td {
+  animation: search-hit-flash 1.6s ease-out;
+}
+@keyframes search-hit-flash {
+  0%,
+  60% {
+    background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 /* ---- diff view ------------------------------------------------------- */

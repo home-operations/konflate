@@ -1135,3 +1135,46 @@ test('review chrome: rail Summary and section headers form one level bar (regres
   });
   expect(stuck).toBeLessThanOrEqual(0);
 });
+
+test("'/' finds text across lazy-mounted diff sections and jumps to hits", async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/#/pr/142');
+  await page.locator('.res-header').first().waitFor();
+
+  // '/' opens the find bar with the input focused.
+  await page.keyboard.press('/');
+  const bar = page.locator('.diff-search');
+  await expect(bar).toBeVisible();
+  await expect(bar.locator('input')).toBeFocused();
+
+  // Typing computes the hit count live (searching the diff DATA — the browser's
+  // Ctrl+F can't see lazy-mounted sections) without jumping yet.
+  await bar.locator('input').fill('apiVersion');
+  await expect(bar.locator('.search-count')).toHaveText('2 hits');
+  await expect(page).toHaveURL(/#\/pr\/142$/);
+
+  // Enter steps through the hits, navigating to each hit's resource and
+  // flashing the matched row.
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/pr\/142\/r0$/);
+  await expect(bar.locator('.search-count')).toHaveText('1/2');
+  await expect(page.locator('[data-sel="r0"] tr.search-hit')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/pr\/142\/r1$/);
+  await expect(bar.locator('.search-count')).toHaveText('2/2');
+
+  // A term that lives only in the LAST resource's diff still hits and jumps —
+  // the whole point versus Ctrl+F.
+  await bar.locator('input').fill('statefulset');
+  await expect(bar.locator('.search-count')).toHaveText('1 hit');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
+  await expect(page.locator('[data-sel="r2"] tr.search-hit')).toBeVisible();
+
+  // Escape closes the bar; a second Escape (outside the input) leaves the
+  // review as before.
+  await page.keyboard.press('Escape');
+  await expect(bar).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page).toHaveURL(/#\/$|\/$/);
+});

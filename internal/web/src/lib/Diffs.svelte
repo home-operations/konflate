@@ -1,6 +1,8 @@
 <script lang="ts">
   import { router, replace } from './router.svelte';
   import { store, adjacentResource, selectables } from './store.svelte';
+  import { search, closeSearch } from './search.svelte';
+  import DiffSearch from './DiffSearch.svelte';
   import Tree from './Tree.svelte';
   import Diff from './Diff.svelte';
   import Overview from './Overview.svelte';
@@ -179,6 +181,10 @@
     };
   });
 
+  // Close the search when the review unmounts (back to the list, or the next
+  // PR remounting Diffs) so a stale query never carries across.
+  $effect(() => closeSearch);
+
   // Action on each resource <section>: register it (so an observer rebuild can
   // re-observe it) and observe it now if the observer already exists.
   function lazy(node: HTMLElement) {
@@ -196,6 +202,9 @@
 <div class="diffs">
   <aside class="rail"><Tree /></aside>
   <div class="diff-main">
+    {#if search.open}
+      <DiffSearch />
+    {/if}
     <!-- The tree rail is hidden on narrow screens; this bar is the navigator
          there, jumping between Summary + every resource. On mobile it's the one
          bar pinned while the header + diff scroll past (see CSS / scroller). -->
