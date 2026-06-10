@@ -56,6 +56,13 @@ test('list → review → single-page flow', async ({ page }) => {
   // title, so the word itself is dropped), plus a colored label dot.
   await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
   await expect(card142.locator('.label-dot')).toBeVisible();
+  // Every pill on the meta row — signal badges and labels — shares one height;
+  // left to line-height/font metrics they drift apart across browsers.
+  const pillHeights = await card142
+    .locator('.badge, .label')
+    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+  expect(pillHeights.length).toBeGreaterThanOrEqual(2);
+  for (const h of pillHeights) expect(Math.abs(h - pillHeights[0])).toBeLessThanOrEqual(0.5);
   // Signal-icon tooltips spell out the count (images is singular at 1).
   await expect(card142.locator('.badge.muted')).toHaveAttribute('title', '3 resource changes');
   await expect(
