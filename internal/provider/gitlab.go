@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
@@ -54,8 +55,11 @@ func (p *gitlabProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 }
 
 func (p *gitlabProvider) GetPR(ctx context.Context, number int) (api.PR, error) {
-	mr, _, err := p.client.MergeRequests.GetMergeRequest(p.project, int64(number), nil, gitlab.WithContext(ctx))
+	mr, resp, err := p.client.MergeRequests.GetMergeRequest(p.project, int64(number), nil, gitlab.WithContext(ctx))
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return api.PR{}, fmt.Errorf("gitlab: get MR !%d: %w", number, ErrPRNotFound)
+		}
 		return api.PR{}, fmt.Errorf("gitlab: get MR !%d: %w", number, err)
 	}
 	return gitlabToPR(&mr.BasicMergeRequest), nil

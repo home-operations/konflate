@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -114,6 +115,30 @@ func TestGitHubProvider_ListPRsPaginates(t *testing.T) {
 	}
 	if prs[0].Number != 1 || prs[1].Number != 2 {
 		t.Errorf("paged PR numbers = %d, %d; want 1, 2", prs[0].Number, prs[1].Number)
+	}
+}
+
+// TestGitHubProvider_GetPRNotFound verifies a 404 maps to ErrPRNotFound (so the
+// server reaps a deleted PR rather than looping). The gitlab/forgejo providers
+// use the same resp.StatusCode == 404 check.
+func TestGitHubProvider_GetPRNotFound(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/acme/web/pulls/9", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	raw := srv.URL + "/"
+	client, err := github.NewClient(github.WithURLs(&raw, &raw))
+	if err != nil {
+		t.Fatalf("github.NewClient: %v", err)
+	}
+	p := &githubProvider{client: client, owner: "acme", repo: "web"}
+
+	if _, err := p.GetPR(context.Background(), 9); !errors.Is(err, ErrPRNotFound) {
+		t.Fatalf("GetPR on a 404 = %v, want ErrPRNotFound", err)
 	}
 }
 

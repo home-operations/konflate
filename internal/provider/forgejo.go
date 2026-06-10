@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
@@ -66,8 +67,11 @@ func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 
 func (p *forgejoProvider) GetPR(ctx context.Context, number int) (api.PR, error) {
 	_ = ctx // see ListPRs: the Forgejo SDK can't take a context.
-	pr, _, err := p.client.GetPullRequest(p.owner, p.repo, int64(number))
+	pr, resp, err := p.client.GetPullRequest(p.owner, p.repo, int64(number))
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return api.PR{}, fmt.Errorf("forgejo: get PR #%d: %w", number, ErrPRNotFound)
+		}
 		return api.PR{}, fmt.Errorf("forgejo: get PR #%d: %w", number, err)
 	}
 	return forgejoToPR(pr), nil

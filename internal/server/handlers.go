@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"hash/fnv"
 	"io"
 	"mime"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/provider"
 	"github.com/home-operations/konflate/internal/webhook"
 )
 
@@ -529,8 +531,14 @@ func (s *Server) reconcileClosed(ctx context.Context, open map[int]struct{}) {
 		}
 		pr, err := s.prov.GetPR(ctx, number)
 		if err != nil {
+			if errors.Is(err, provider.ErrPRNotFound) {
+				// Deleted on the forge (not merged/closed): reap it, rather than
+				// 404ing on this lookup every refresh forever.
+				s.dropPR(number)
+				continue
+			}
 			s.log.Warn("refresh: classify closed PR failed", "pr", number, "error", err)
-			continue // leave as-is; retry on the next refresh
+			continue // transient: leave as-is, retry on the next refresh
 		}
 		s.reconcileState(pr)
 	}
@@ -557,11 +565,17 @@ func (s *Server) reconcileState(pr api.PR) {
 		s.store.markClosed(pr.Number, s.store.now())
 	default:
 		// Abandoned, or filtered-out (a hidden PR that merged kept no diff worth
-		// shelving): drop it and tell clients to remove it. remove is a no-op for a
-		// PR we weren't tracking, so a webhook for an unrelated PR is harmless.
-		s.store.remove(pr.Number)
-		s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: pr.Number})
+		// shelving): drop it and tell clients to remove it.
+		s.dropPR(pr.Number)
 	}
+}
+
+// dropPR removes a PR from the store and tells connected clients to drop it.
+// store.remove is a no-op for an untracked PR, so this is safe to call for a PR
+// we may not be tracking (e.g. a webhook for an unrelated one).
+func (s *Server) dropPR(number int) {
+	s.store.remove(number)
+	s.hub.broadcast(api.Event{Type: eventTypeRemoved, Number: number})
 }
 
 // reconcileHeadGone is called by the queue when a render finds the PR's head
@@ -572,6 +586,10 @@ func (s *Server) reconcileState(pr api.PR) {
 func (s *Server) reconcileHeadGone(number int) {
 	pr, err := s.prov.GetPR(s.runCtx, number)
 	if err != nil {
+		if errors.Is(err, provider.ErrPRNotFound) {
+			s.dropPR(number) // deleted on the forge: reap it rather than loop on the gone head ref
+			return
+		}
 		s.log.Warn("reconcile head-gone PR failed", "pr", number, "error", err)
 		return
 	}

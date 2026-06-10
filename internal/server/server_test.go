@@ -25,15 +25,17 @@ import (
 	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/gitclone"
 	"github.com/home-operations/konflate/internal/prfilter"
+	"github.com/home-operations/konflate/internal/provider"
 )
 
 // --- fakes ---------------------------------------------------------------
 
 type fakeProvider struct {
-	mu      sync.Mutex
-	prs     []api.PR       // the open list ListPRs returns
-	details map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
-	listErr error
+	mu       sync.Mutex
+	prs      []api.PR       // the open list ListPRs returns
+	details  map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
+	notFound map[int]bool   // numbers GetPR reports as deleted (provider.ErrPRNotFound)
+	listErr  error
 }
 
 func (f *fakeProvider) ListPRs(context.Context) ([]api.PR, error) {
@@ -45,6 +47,9 @@ func (f *fakeProvider) ListPRs(context.Context) ([]api.PR, error) {
 func (f *fakeProvider) GetPR(_ context.Context, n int) (api.PR, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.notFound[n] {
+		return api.PR{}, fmt.Errorf("fake: %w", provider.ErrPRNotFound)
+	}
 	if d, ok := f.details[n]; ok {
 		return d, nil
 	}
@@ -54,6 +59,16 @@ func (f *fakeProvider) GetPR(_ context.Context, n int) (api.PR, error) {
 		}
 	}
 	return api.PR{}, io.EOF
+}
+
+// setNotFound makes GetPR(n) report the PR as deleted (provider.ErrPRNotFound).
+func (f *fakeProvider) setNotFound(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.notFound == nil {
+		f.notFound = map[int]bool{}
+	}
+	f.notFound[n] = true
 }
 
 // setPRs swaps the open-PR set the forge reports (simulates a PR opening or
@@ -708,6 +723,34 @@ func TestUIHandler_CacheControl(t *testing.T) {
 		if got := rec.Header().Get("Cache-Control"); got != tc.want {
 			t.Errorf("%s: Cache-Control = %q, want %q", tc.path, got, tc.want)
 		}
+	}
+}
+
+// TestServer_DeletedPRReaped verifies a PR deleted on the forge (GetPR →
+// ErrPRNotFound) is removed rather than retried forever — via both the periodic
+// reconcileClosed and the queue's reconcileHeadGone.
+func TestServer_DeletedPRReaped(t *testing.T) {
+	t.Parallel()
+	a := api.PR{Number: 1, Open: true, HeadSHA: "s1", BaseRef: "main"}
+	b := api.PR{Number: 2, Open: true, HeadSHA: "s2", BaseRef: "main"}
+	prov := &fakeProvider{prs: []api.PR{a, b}}
+	s := newTestServer(t, ghCfg("tok"), prov, okEngine())
+	s.store.upsertPR(a, false)
+	s.store.upsertPR(b, false)
+
+	// #1 is deleted: gone from the open list and GetPR now 404s.
+	prov.setPRs(b)
+	prov.setNotFound(1)
+	s.refreshList(s.runCtx) // reconcileClosed must reap #1, not loop on it
+	if _, ok := s.store.get(1); ok {
+		t.Fatal("reconcileClosed must reap a deleted PR (GetPR not-found)")
+	}
+
+	// #2 is then deleted while still tracked; the head-gone path must reap it too.
+	prov.setNotFound(2)
+	s.reconcileHeadGone(2)
+	if _, ok := s.store.get(2); ok {
+		t.Fatal("reconcileHeadGone must reap a deleted PR, not loop on the gone head ref")
 	}
 }
 

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/google/go-github/v88/github"
 
@@ -57,8 +58,11 @@ func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 }
 
 func (p *githubProvider) GetPR(ctx context.Context, number int) (api.PR, error) {
-	pr, _, err := p.client.PullRequests.Get(ctx, p.owner, p.repo, number)
+	pr, resp, err := p.client.PullRequests.Get(ctx, p.owner, p.repo, number)
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return api.PR{}, fmt.Errorf("github: get PR #%d: %w", number, ErrPRNotFound)
+		}
 		return api.PR{}, fmt.Errorf("github: get PR #%d: %w", number, err)
 	}
 	return githubToPR(pr), nil
