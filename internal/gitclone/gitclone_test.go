@@ -405,10 +405,59 @@ func TestMirror_SkipsOversizedFiles(t *testing.T) {
 	}
 }
 
+// TestMirror_ExtractsNestedDirectories guards the per-directory MkdirAll dedupe
+// in extractTree: files spread across several directories (two in the same dir,
+// plus a deeper nesting) must all materialize with their contents. A MkdirAll
+// wrongly skipped for a genuinely new directory would drop that directory's
+// files, so this exercises directory transitions, not just same-dir runs.
+func TestMirror_ExtractsNestedDirectories(t *testing.T) {
+	src := t.TempDir()
+	repo, err := git.PlainInit(src, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"root.yaml":       "r: 0\n",
+		"app/one.yaml":    "a: 1\n",
+		"app/two.yaml":    "a: 2\n", // second file in app/ — the dedupe's common case
+		"infra/net.yaml":  "i: 1\n", // a new directory after app/
+		"app/deep/x.yaml": "d: 1\n", // a deeper nesting
+	}
+	for rel, content := range files {
+		write(t, src, rel, content)
+	}
+	commit(t, wt, "C0")
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Storer.SetReference(
+		plumbing.NewHashReference(plumbing.NewBranchReferenceName("feature"), head.Hash()),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("Trees: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+
+	for rel, want := range files {
+		if got, ok := read(res.HeadDir, rel); !ok || got != want {
+			t.Errorf("%s = %q (ok=%v), want %q", rel, got, ok, want)
+		}
+	}
+}
+
 // TestMirror_ExtractsSymlinkAsRegularFile verifies a symlink committed to the
 // repo is materialized as a regular file whose contents are the link target
-// string — never a live symlink. go-git's File.Contents yields the blob (the
-// target path), and extractTree writes it with os.WriteFile, so flate later
+// string — never a live symlink. go-git's blob reader yields the blob (the
+// target path), and extractTree streams it to a regular file, so flate later
 // reads inert text instead of following a link out of the tree. A hostile repo
 // konflate doesn't own could otherwise smuggle host files (e.g. a link to
 // /etc/passwd, or one escaping the extraction root) into a render.
