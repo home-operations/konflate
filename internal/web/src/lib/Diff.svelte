@@ -131,7 +131,9 @@
                 </tr>
               {/if}
             {:else}
-              <tr class="row-{row.kind ?? 'ctx'}">
+              <!-- data-old/data-new let the diff search (search.svelte.ts)
+                   locate a hit's row in whichever view mode is mounted. -->
+              <tr class="row-{row.kind ?? 'ctx'}" data-old={row.oldNo} data-new={row.newNo}>
                 <td class="gutter num">{row.oldNo || ''}</td>
                 <td class="gutter num">{row.newNo || ''}</td>
                 <td class="gutter sign">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</td>
@@ -174,7 +176,7 @@
                 </tr>
               {/if}
             {:else}
-              <tr>
+              <tr data-old={row.left.no} data-new={row.right.no}>
                 <td class="gutter num">{row.left.no || ''}</td>
                 <td class="code {cellClass(row.left)}"
                   >{#if row.left.kind !== 'blank'}{@html row.left.html ?? ''}{/if}</td

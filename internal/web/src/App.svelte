@@ -140,7 +140,7 @@
           <dt><kbd>u</kbd> or <kbd>Esc</kbd></dt>
           <dd>back to the list</dd>
           <dt><kbd>/</kbd></dt>
-          <dd>filter the list</dd>
+          <dd>filter the list · find in the diff</dd>
           <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>k</kbd></dt>
           <dd>search pull requests</dd>
           <dt><kbd>?</kbd></dt>
