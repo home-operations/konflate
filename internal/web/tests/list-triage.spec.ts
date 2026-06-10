@@ -4,8 +4,9 @@ import type { Meta, PRStatus } from '../src/lib/types';
 const meta: Meta = { forge: 'github', repo: 'acme/home-ops', refreshIntervalSeconds: 1800 };
 
 // A self-contained PR set covering the triage axes: a caution-free bump, a PR
-// carrying cautions, and one still rendering. Kept separate from the shared
-// fixture so the existing card-count assertions there stay valid.
+// carrying cautions, one still rendering, and one filter-excluded (hidden). Kept
+// separate from the shared fixture so the existing card-count assertions there
+// stay valid.
 function pr(over: Partial<PRStatus> & { number: number; title: string }): PRStatus {
   return {
     author: 'renovate[bot]',
@@ -36,6 +37,13 @@ const prs: PRStatus[] = [
     signals: { resources: 5, caution: 2, images: 0, failures: 0 },
   }),
   pr({ number: 3, title: 'still rendering', status: 'running' }),
+  pr({
+    number: 4,
+    title: 'excluded by filter',
+    hidden: true,
+    status: 'pending',
+    signals: { resources: 0, caution: 0, images: 0, failures: 0 },
+  }),
 ];
 
 async function stubApi(page: Page) {
@@ -70,4 +78,18 @@ test('status:caution query facet matches the pill filter', async ({ page }) => {
   await page.locator('input.pr-search').fill('status:caution');
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page).first()).toContainText('risky rbac change');
+});
+
+test('status:hidden query facet reveals the filter-excluded PRs', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // The default view excludes hidden PRs — only the three rendered ones show.
+  await expect(cards(page)).toHaveCount(3);
+
+  // Typing the facet (not clicking the pill) must narrow to the hidden PR.
+  // STATUS_VALUES omitted 'hidden', so this previously matched nothing.
+  await page.locator('input.pr-search').fill('status:hidden');
+  await expect(cards(page)).toHaveCount(1);
+  await expect(cards(page).first()).toContainText('excluded by filter');
 });
