@@ -168,7 +168,7 @@ func TestLint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Lint(tt.changes, nil)
+			got := Lint(tt.changes, nil, nil)
 
 			if len(got) != len(tt.want) {
 				t.Fatalf("Lint() = %d warnings, want %d\n got: %+v\nwant: %+v", len(got), len(tt.want), got, tt.want)
@@ -198,12 +198,12 @@ func TestLint_LargeChangeSet(t *testing.T) {
 			Old:    map[string]any{}, New: map[string]any{},
 		})
 	}
-	if !hasRule(Lint(many, nil), "large-changeset") {
+	if !hasRule(Lint(many, nil, nil), "large-changeset") {
 		t.Errorf("%d apps should trip the large-changeset caution", largeParentCount)
 	}
 	// A one-app change does not.
 	few := []Change{{Status: "changed", Kind: "ConfigMap", Name: "c", Parent: "HelmRelease app", Old: map[string]any{}, New: map[string]any{}}}
-	if hasRule(Lint(few, nil), "large-changeset") {
+	if hasRule(Lint(few, nil, nil), "large-changeset") {
 		t.Error("a one-app change must not be flagged as large")
 	}
 }
@@ -214,7 +214,7 @@ func TestLint_MajorImageBump(t *testing.T) {
 		{Name: "ghcr.io/app", From: "v1.9.0", To: "v2.0.0"}, // major → caution
 		{Name: "ghcr.io/lib", From: "1.2.3", To: "1.3.0"},   // minor → none
 	}
-	n, w := countRule(Lint(nil, images), "major-image-bump")
+	n, w := countRule(Lint(nil, images, nil), "major-image-bump")
 	if n != 1 {
 		t.Fatalf("major-image-bump count = %d, want 1", n)
 	}
@@ -232,7 +232,7 @@ func TestLint_MajorChartBump(t *testing.T) {
 		// A minor chart bump → none.
 		{Status: "changed", Kind: "ConfigMap", Name: "c", Parent: "HelmRelease other", OldChart: "other-1.2.0", NewChart: "other-1.3.0", Old: map[string]any{}, New: map[string]any{}},
 	}
-	n, w := countRule(Lint(changes, nil), "major-chart-bump")
+	n, w := countRule(Lint(changes, nil, nil), "major-chart-bump")
 	if n != 1 {
 		t.Fatalf("major-chart-bump count = %d, want 1 (deduped by chart)", n)
 	}

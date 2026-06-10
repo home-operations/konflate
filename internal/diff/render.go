@@ -31,6 +31,10 @@ type RenderInput struct {
 	// the rendered set and counted in DiffResult.Truncated; the summary and
 	// impact still reflect the full change set. <=0 means no cap.
 	MaxResources int
+	// Parents carries the Flux-semantic facts (suspend/prune) about each
+	// producing Kustomization/HelmRelease, keyed by the Change.Parent label —
+	// see ParentInfo. Optional; nil mutes the parent-aware lint rules.
+	Parents map[string]ParentInfo
 }
 
 // Row and cell kinds, matching the api string-literal unions.
@@ -87,7 +91,7 @@ func Render(in RenderInput) (api.DiffResult, error) {
 		Impact:    Summarize(changes),
 		Images:    in.Images,
 		Failures:  in.Failures,
-		Warnings:  Lint(changes, in.Images),
+		Warnings:  Lint(changes, in.Images, in.Parents),
 	}
 
 	// Summary reflects the true totals across every (real) change, even when the

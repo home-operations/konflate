@@ -17,7 +17,7 @@ func changed(kind string, oldSpec, newSpec map[string]any) Change {
 	}
 }
 
-func lintOne(c Change) []api.Warning { return Lint([]Change{c}, nil) }
+func lintOne(c Change) []api.Warning { return Lint([]Change{c}, nil, nil) }
 
 func TestImmutable_StatefulSetSpecOutsideAllowlist(t *testing.T) {
 	t.Parallel()
