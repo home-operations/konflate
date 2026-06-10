@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.3](https://github.com/home-operations/konflate/compare/0.2.2...0.2.3) (2026-06-10)
+
+
+### Bug Fixes
+
+* **chart:** tpl-render existingSecret/existingClaim/serviceAccount.name/prFilterExpr ([#142](https://github.com/home-operations/konflate/issues/142)) ([f79c9f0](https://github.com/home-operations/konflate/commit/f79c9f0e29bcf338e4f7a2e95c905ed398b85599))
+* **config,engine:** key the bare mirror and persisted state by repository ([#150](https://github.com/home-operations/konflate/issues/150)) ([137448b](https://github.com/home-operations/konflate/commit/137448bec2e79ebb17f7580fa7f2039618f1a4fa))
+* **config,server:** make KONFLATE_REFRESH_INTERVAL=0 disable polling, not hot-loop ([#151](https://github.com/home-operations/konflate/issues/151)) ([f462d6e](https://github.com/home-operations/konflate/commit/f462d6ec29fe25fbc4ad7e4e1287d9d835b747f0))
+* **config:** normalize an explicit cloud host (github://github.com/... → api.github.com) ([#146](https://github.com/home-operations/konflate/issues/146)) ([f808896](https://github.com/home-operations/konflate/commit/f8088968af27e361dcd5ce3de9dd3c970a01d552))
+* **diff:** drop type-only "changed" resources that render an empty panel ([#152](https://github.com/home-operations/konflate/issues/152)) ([a4c559f](https://github.com/home-operations/konflate/commit/a4c559f8b98c97327f59e5e2269415703762a72d))
+* **engine:** sweep the source cache at startup and surface silent sweep errors ([#141](https://github.com/home-operations/konflate/issues/141)) ([0f2298a](https://github.com/home-operations/konflate/commit/0f2298ac5cfd6940dd90a02246605e5083ba9a1e))
+* **gitclone:** repack the bare mirror once packfiles accumulate ([#149](https://github.com/home-operations/konflate/issues/149)) ([4e6ec03](https://github.com/home-operations/konflate/commit/4e6ec03f1327ffb816fa19f5c4fc7f76c30dbd1c))
+* **provider:** paginate ListPRs across all pages (github/gitlab/forgejo) ([#147](https://github.com/home-operations/konflate/issues/147)) ([462e64d](https://github.com/home-operations/konflate/commit/462e64df42e5f0d4019289a230c5df98f4ec7f90))
+* **server,provider:** reap a deleted PR/MR instead of looping on a 404 forever ([#148](https://github.com/home-operations/konflate/issues/148)) ([beeec59](https://github.com/home-operations/konflate/commit/beeec599ce6a5fa29435db9d6e9afaef9bec87ea))
+* **server:** coalesce webhook-triggered relists into a single worker ([#153](https://github.com/home-operations/konflate/issues/153)) ([77357f1](https://github.com/home-operations/konflate/commit/77357f1b794b8fb90cf65fd34ac8d5f4ad0563b7))
+* **server:** render a PR that becomes filter-allowed without a new push ([#143](https://github.com/home-operations/konflate/issues/143)) ([1b83911](https://github.com/home-operations/konflate/commit/1b8391113043a41bbfffca85526d877ceeb5e029))
+
+
+### Performance Improvements
+
+* **server:** marshal the diff off the store write lock; commit the digest after save ([#144](https://github.com/home-operations/konflate/issues/144)) ([c37084c](https://github.com/home-operations/konflate/commit/c37084ca4cc00c626db7432dbf1f4d846bd73ec9))
+
 ## [0.2.2](https://github.com/home-operations/konflate/compare/0.2.1...0.2.2) (2026-06-09)
 
 
