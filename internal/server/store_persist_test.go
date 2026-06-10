@@ -153,3 +153,46 @@ func prStatus(s *store, number int) api.PRStatus {
 	}
 	return api.PRStatus{}
 }
+
+// TestStore_FailedPersistRetriesNextRender verifies savedDigest is committed only
+// after a successful save: a render whose persist fails must not advance the
+// digest, so a later identical re-render actually writes — rather than skipping
+// it as "already on disk" and stranding stale content for a restart to restore.
+func TestStore_FailedPersistRetriesNextRender(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	reopen := func() *store {
+		p, err := persist.New(dir, discardLog())
+		if err != nil {
+			t.Fatalf("persist.New: %v", err)
+		}
+		s := newStore()
+		s.loadFrom(p, discardLog())
+		return s
+	}
+
+	s := reopen()
+	s.upsertPR(api.PR{Number: 1, Open: true}, false)
+	s.setResult(1, api.DiffResult{PRNumber: 1, ChromaCSS: ".v1{}"}) // persisted
+
+	// Make the next persist fail by removing the state dir out from under it.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	s.setResult(1, api.DiffResult{PRNumber: 1, ChromaCSS: ".v2{}"}) // save fails; digest must not advance
+
+	// Persistence works again; the identical re-render must now actually write v2
+	// (it would be wrongly skipped if savedDigest had advanced before the failed save).
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.setResult(1, api.DiffResult{PRNumber: 1, ChromaCSS: ".v2{}"})
+
+	env, ok := reopen().get(1)
+	if !ok || env.Diff == nil {
+		t.Fatalf("PR 1 not restored from disk after the retry: ok=%v", ok)
+	}
+	if env.Diff.ChromaCSS != ".v2{}" {
+		t.Fatalf("disk holds %q, want .v2{} — the failed persist must be retried, not skipped", env.Diff.ChromaCSS)
+	}
+}
