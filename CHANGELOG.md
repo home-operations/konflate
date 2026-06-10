@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.6](https://github.com/home-operations/konflate/compare/0.2.5...0.2.6) (2026-06-10)
+
+
+### Features
+
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.36.3 → v2.37.0) ([#165](https://github.com/home-operations/konflate/issues/165)) ([57e10fb](https://github.com/home-operations/konflate/commit/57e10fba22cf5bc8cb8f7d87e86e5901980b83dc))
+* **engine:** adopt flate v0.3.4 — in-memory stages, deterministic renders ([#166](https://github.com/home-operations/konflate/issues/166)) ([9219dcd](https://github.com/home-operations/konflate/commit/9219dcd63e9027827b86db19e06731488648f77f))
+
 ## [0.2.5](https://github.com/home-operations/konflate/compare/0.2.4...0.2.5) (2026-06-10)
 
 
