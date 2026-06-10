@@ -855,6 +855,18 @@ button.sum-pill:hover {
   font-size: 11px;
   font-weight: 600;
 }
+/* Every one-line pill in the card meta row family (signal badges, draft/base
+   tags, PR labels) shares one explicit height. Left emergent (padding 0 +
+   inline content), each pill's height rides on line-height and font metrics,
+   which differ between the icon-bearing badges and the dot+text labels across
+   browsers — the label pill rendered visibly taller than the signal badges.
+   line-height: 1 keeps the UA's computed line box from re-inflating them. */
+.badge,
+.tag,
+.label {
+  height: 20px;
+  line-height: 1;
+}
 .badge.danger {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
@@ -993,9 +1005,10 @@ button.sum-pill:hover {
   cursor: pointer;
   text-decoration: none;
 }
+/* Hover recolors the glyph only — no background box. The filled square read
+   as a floating button beside the inert signal badges on the list rows. */
 .forge-link:hover {
   color: var(--accent);
-  background: var(--panel-alt);
 }
 /* Icon-only variant (the PR list rows): no "#<n>" text, so make the glyph a tidy
    square sitting just left of the disclosure column. */

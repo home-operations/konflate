@@ -56,6 +56,13 @@ test('list → review → single-page flow', async ({ page }) => {
   // title, so the word itself is dropped), plus a colored label dot.
   await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
   await expect(card142.locator('.label-dot')).toBeVisible();
+  // Every pill on the meta row — signal badges and labels — shares one height;
+  // left to line-height/font metrics they drift apart across browsers.
+  const pillHeights = await card142
+    .locator('.badge, .label')
+    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+  expect(pillHeights.length).toBeGreaterThanOrEqual(2);
+  for (const h of pillHeights) expect(Math.abs(h - pillHeights[0])).toBeLessThanOrEqual(0.5);
   // Signal-icon tooltips spell out the count (images is singular at 1).
   await expect(card142.locator('.badge.muted')).toHaveAttribute('title', '3 resource changes');
   await expect(
@@ -67,6 +74,11 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(forge142).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
   await expect(forge142).toHaveAttribute('target', '_blank');
   await expect(forge142).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  // Hovering the link recolors the glyph only — no background box (it read as
+  // a floating button beside the inert signal badges).
+  await forge142.hover();
+  const forgeHoverBg = await forge142.evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(forgeHoverBg);
 
   // Open a PR → the single-page review lands on the Summary (impact, warnings,
   // image changes, render failures), with the tree rail alongside it.
