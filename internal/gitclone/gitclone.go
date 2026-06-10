@@ -197,6 +197,23 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 		return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, err)
 	}
 
+	// Each fetch above appends a packfile, and go-git never consolidates them on
+	// its own (it has no `git gc`), so the mirror's pack count climbs by one per
+	// render and its object store grows without bound. Once the packs pile up
+	// past the threshold, fold them into one. The repack deletes the old packs,
+	// which invalidates this handle's cached pack set, so re-open before resolving
+	// commits off it.
+	repacked, err := m.maybeRepack(repo)
+	if err != nil {
+		return nil, nil, err
+	}
+	if repacked {
+		repo, err = git.PlainOpen(m.bareDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("gitclone: reopen mirror after repack: %w", err)
+		}
+	}
+
 	head, err = resolveCommit(repo, localHeadRef)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gitclone: head %q: %w", headRef, err)
@@ -206,6 +223,56 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 		return nil, nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
 	}
 	return head, base, nil
+}
+
+// repackPackThreshold is the packfile count at which a fetch consolidates the
+// mirror into a single pack. go-git appends one pack per fetch and never runs
+// the equivalent of `git gc`, so without an occasional repack the pack directory
+// would grow one file per render forever — slowing every object lookup and
+// bloating the cache volume. 50 matches git's gc.autoPackLimit default. A var,
+// not a const, so tests can lower it.
+var repackPackThreshold = 50
+
+// maybeRepack folds the mirror's packfiles into one when they have piled up past
+// repackPackThreshold, reporting whether it did. go-git's RepackObjects writes a
+// single new pack holding every object reachable from the mirror's refs — so the
+// unreachable objects a force-push leaves behind are reclaimed too — then deletes
+// the superseded packs. That deletion invalidates the open handle's cached pack
+// set, so the caller must re-open the mirror before reading objects through it.
+// Caller holds the write lock.
+func (m *Mirror) maybeRepack(repo *git.Repository) (bool, error) {
+	n, err := m.countPacks()
+	if err != nil {
+		return false, err
+	}
+	if n < repackPackThreshold {
+		return false, nil
+	}
+	// The zero RepackConfig uses OFS deltas and a zero OnlyDeletePacksOlderThan,
+	// which imposes no age floor — every superseded pack is removed.
+	if err := repo.RepackObjects(&git.RepackConfig{}); err != nil {
+		return false, fmt.Errorf("gitclone: repack mirror: %w", err)
+	}
+	return true, nil
+}
+
+// countPacks returns the number of *.pack files in the mirror's object store. A
+// missing pack directory (objects still loose, or none fetched yet) counts as zero.
+func (m *Mirror) countPacks() (int, error) {
+	entries, err := os.ReadDir(filepath.Join(m.bareDir, "objects", "pack"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("gitclone: read pack dir: %w", err)
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".pack") {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // openOrClone opens the bare mirror, seeding it with a single-branch bare clone
