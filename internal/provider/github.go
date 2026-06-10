@@ -37,15 +37,21 @@ func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 		State:       stateOpen,
 		Sort:        "updated",
 		Direction:   "desc",
-		ListOptions: github.ListOptions{PerPage: 50},
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	prs, _, err := p.client.PullRequests.List(ctx, p.owner, p.repo, opts)
-	if err != nil {
-		return nil, fmt.Errorf("github: list PRs: %w", err)
-	}
-	out := make([]api.PR, 0, len(prs))
-	for _, pr := range prs {
-		out = append(out, githubToPR(pr))
+	var out []api.PR
+	for {
+		prs, resp, err := p.client.PullRequests.List(ctx, p.owner, p.repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("github: list PRs: %w", err)
+		}
+		for _, pr := range prs {
+			out = append(out, githubToPR(pr))
+		}
+		if resp.NextPage == 0 {
+			break // last page: without this loop, repos with >100 open PRs lost the rest
+		}
+		opts.Page = resp.NextPage
 	}
 	return out, nil
 }
