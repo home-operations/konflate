@@ -1,6 +1,15 @@
 <script lang="ts">
   import type { PRStatus } from './types';
-  import { store, filteredPRs, matchesStatus, sortPRs, openPR, ensurePreview, type StatusFilter } from './store.svelte';
+  import {
+    store,
+    filteredPRs,
+    matchesStatus,
+    statusFromQuery,
+    sortPRs,
+    openPR,
+    ensurePreview,
+    type StatusFilter,
+  } from './store.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import { slide } from 'svelte/transition';
   import Icon from './Icon.svelte';
@@ -39,8 +48,11 @@
   const prs = $derived(filteredPRs());
   // The active pill (or default = open, non-hidden) selects what's shown, then
   // the sort orders it. Rendered as one flat list — merged and hidden PRs are
-  // reached via their pills, not a separate group.
-  const shown = $derived(sortPRs(prs.filter((p) => matchesStatus(p, store.statusFilter))));
+  // reached via their pills, not a separate group. A typed `status:` facet acts
+  // like the matching pill, so `status:hidden` / `status:merged` in the search
+  // box reveal those sections instead of being re-hidden by the default pill.
+  const effectiveStatus = $derived(statusFromQuery(store.query) ?? store.statusFilter);
+  const shown = $derived(sortPRs(prs.filter((p) => matchesStatus(p, effectiveStatus))));
   // The full open, non-hidden set — for the default-base heuristic and the pill
   // counts (which hold steady while a pill narrows what's shown).
   const openPrs = $derived(prs.filter((p) => p.open && !p.hidden));

@@ -120,7 +120,13 @@ export interface ParsedQuery {
 }
 
 const FACETS = ['status', 'author', 'base', 'label'];
-const STATUS_VALUES = ['caution', 'merged', 'open'];
+// Every queryable status:<v> value — i.e. StatusFilter minus the unfiltered ''.
+// `satisfies readonly StatusFilter[]` makes the compiler reject a typo or a value
+// that isn't a real StatusFilter, so this list can't silently drift out of sync
+// with matchesStatus again. ('hidden' was missing here, so `status:hidden` typed
+// in the filter or palette matched nothing — the pill worked only because it sets
+// statusFilter directly, bypassing this grammar.)
+const STATUS_VALUES = ['open', 'caution', 'merged', 'hidden'] as const satisfies readonly StatusFilter[];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -140,9 +146,10 @@ export function matchesQuery(p: PRStatus, q: ParsedQuery): boolean {
   for (const t of q.tokens) {
     switch (t.key) {
       case 'status': {
-        // Prefix-match the canonical names so "status:cau" works.
+        // Prefix-match the canonical names so "status:cau" works. want is already
+        // a StatusFilter (STATUS_VALUES is typed), so no cast is needed.
         const want = STATUS_VALUES.find((v) => v.startsWith(t.value));
-        if (!want || !matchesStatus(p, want as StatusFilter)) return false;
+        if (!want || !matchesStatus(p, want)) return false;
         break;
       }
       case 'author':
@@ -176,6 +183,22 @@ export function filteredPRs(): PRStatus[] {
   if (!raw) return store.prs;
   const q = parseQuery(raw);
   return store.prs.filter((p) => matchesQuery(p, q));
+}
+
+// statusFromQuery resolves a status: facet in the raw query to its StatusFilter,
+// or null when the query carries none. The List uses it so a typed
+// `status:hidden` / `status:merged` selects that section like the matching pill
+// would; without it the default pill ('' = open, non-hidden) re-hides exactly the
+// PRs the query asked for. Prefix-matched like matchesQuery, so `status:mer`
+// resolves too; the first status token wins if several are present.
+export function statusFromQuery(raw: string): StatusFilter | null {
+  for (const t of parseQuery(raw).tokens) {
+    if (t.key === 'status') {
+      const want = STATUS_VALUES.find((v) => v.startsWith(t.value));
+      if (want) return want;
+    }
+  }
+  return null;
 }
 
 // matchesStatus is the per-PR predicate for a summary-pill filter.
