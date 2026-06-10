@@ -145,6 +145,44 @@ KONFLATE_PR_FILTER_EXPR='!pr.fork || pr.author == "trusted-contributor"'
 
 Keep the fork gate off on any public or shared instance.
 
+### Multi-cluster monorepos
+
+A konflate instance tracks **one repository and renders one cluster** — the Flux
+entry point at `KONFLATE_CLUSTER_PATH` (the repo root by default). It has no
+built-in notion of several clusters living in one repo.
+
+So for a monorepo that holds more than one cluster, run **one konflate per
+cluster** and scope each with the PR filter (and, for a folder-per-cluster
+layout, its cluster path). The usual convention is a per-cluster PR label:
+
+```bash
+# the production instance
+KONFLATE_CLUSTER_PATH='kubernetes/clusters/production'   # render this cluster (folder-per-cluster)
+KONFLATE_PR_FILTER_EXPR='pr.labels.exists(l, l.name == "cluster/production")'
+```
+
+```bash
+# the staging instance
+KONFLATE_CLUSTER_PATH='kubernetes/clusters/staging'
+KONFLATE_PR_FILTER_EXPR='pr.labels.exists(l, l.name == "cluster/staging")'
+```
+
+The filter is what keeps each instance's list to its own cluster — without it
+every instance would list every PR and render an empty diff for the clusters a
+PR doesn't touch. (Branch-per-cluster instead? Filter on the target branch, e.g.
+`pr.baseRef == "production"`.) With the Helm chart these are `config.clusterPath`
+and `config.prFilterExpr` — one release per cluster.
+
+Give each instance its **own `KONFLATE_CACHE_DIR`** — don't point two at the same
+volume. Even for the same repo, konflate guards the bare mirror and the persisted
+diff state with in-process locks only, so two processes sharing them would race
+(the same reason konflate runs as a single instance). A separate PVC per release,
+or a distinct `subPath` of one, keeps them isolated.
+
+First-class multi-cluster support — one instance spanning a folder- or
+branch-per-cluster monorepo — is tracked in
+[#54](https://github.com/home-operations/konflate/issues/54).
+
 ## The forge URI
 
 `KONFLATE_REPO` encodes the forge type, the (optional) self-hosted host, and the
