@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -264,7 +266,38 @@ func TestLoad_StateDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if want := "/var/cache/konflate/state"; cfg.StateDir != want {
-		t.Errorf("StateDir = %q, want %q (derived from CacheDir)", cfg.StateDir, want)
+	// The mirror and state live under a per-repo subtree (CacheDir/repos/<key>),
+	// not directly under CacheDir, so a CacheDir volume shared across
+	// different-repo instances can't cross-fetch or collide on state files.
+	reposRoot := filepath.Join("/var/cache/konflate", "repos")
+	if filepath.Dir(cfg.RepoCacheDir) != reposRoot {
+		t.Errorf("RepoCacheDir = %q, want a per-repo child of %q", cfg.RepoCacheDir, reposRoot)
+	}
+	if want := filepath.Join(cfg.RepoCacheDir, "state"); cfg.StateDir != want {
+		t.Errorf("StateDir = %q, want %q (under the repo-keyed dir)", cfg.StateDir, want)
+	}
+}
+
+// TestRepoKey verifies the per-repo cache key: distinct clone URLs must map to
+// distinct directory names (else two repos collide on one mirror/state dir —
+// the bug this fixes), the same URL maps stably (so the cache survives
+// restarts), and the name is filesystem-safe (no separators that escape the
+// cache root).
+func TestRepoKey(t *testing.T) {
+	t.Parallel()
+	const urlA = "https://github.com/owner/repo-a.git"
+	const urlB = "https://github.com/owner/repo-b.git"
+	a, b := repoKey(urlA), repoKey(urlB)
+	if a == b {
+		t.Errorf("distinct clone URLs must yield distinct keys; both = %q", a)
+	}
+	if a != repoKey(urlA) {
+		t.Error("repoKey must be deterministic for the same clone URL")
+	}
+	if a == "" {
+		t.Error("repoKey must not be empty")
+	}
+	if strings.ContainsAny(a, `/\.`) {
+		t.Errorf("key %q contains path-unsafe characters", a)
 	}
 }
