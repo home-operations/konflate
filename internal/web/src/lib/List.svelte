@@ -258,6 +258,7 @@
   <li class="card-li" class:expanded={isExpanded(pr.number) && previewReady(pr.number)}>
     <div
       class="card-shell"
+      data-pr={pr.number}
       class:merged={!pr.open}
       class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
     >
@@ -308,9 +309,10 @@
         {/if}
       </div>
       </button>
-      <!-- Link out to the PR on its forge. Sibling of the card <button> (it can't
-           nest an anchor), so it sits just right of the resource count. -->
-      <ForgeLink url={pr.url} number={pr.number} />
+      <!-- Icon-only link out to the PR on its forge (the number would just crowd
+           the row — it stays in the link's tooltip/aria-label). Sibling of the
+           card <button> (it can't nest an anchor), right of the resource count. -->
+      <ForgeLink url={pr.url} number={pr.number} showNumber={false} />
       <!-- Right column: the expand chevron once a PR has a rendered summary;
            otherwise a state icon — rendering / queued / failed — carried by the
            icon and its tooltip, no text (so the row stays compact, incl. mobile). -->

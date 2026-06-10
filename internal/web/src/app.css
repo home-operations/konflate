@@ -997,6 +997,11 @@ button.sum-pill:hover {
   color: var(--accent);
   background: var(--panel-alt);
 }
+/* Icon-only variant (the PR list rows): no "#<n>" text, so make the glyph a tidy
+   square sitting just left of the disclosure column. */
+.forge-link.icon-only {
+  padding: 8px;
+}
 .review-nav {
   display: flex;
   align-items: center;
@@ -1997,6 +2002,13 @@ kbd {
   .card-meta {
     flex-wrap: wrap;
     row-gap: 6px;
+  }
+  /* The icon-only forge link becomes a full touch target on a phone, matching
+     the disclosure column's width so the two right-edge controls line up. */
+  .forge-link.icon-only {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
   }
   .card-top {
     align-items: flex-start; /* dot beside the first title line, not the block centre */
