@@ -52,9 +52,11 @@ config:
   clusterPath: ""
   # KONFLATE_REFRESH_INTERVAL — how often each open PR re-renders if no webhook
   # refreshed it sooner, and how often the open-PR list is reconciled (Go
-  # duration, e.g. "15m"). The missed-webhook backstop.
+  # duration, e.g. "15m"). The missed-webhook backstop. "0" disables periodic
+  # refresh entirely (inbound webhooks/pushes only); a positive value is floored
+  # to 1m so a tiny interval can't hot-loop the forge API.
 
-  # -- How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).
+  # -- How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). "0" disables periodic refresh (webhooks only); positive values are floored to 1m.
   refreshInterval: 30m
   # -- Log level: debug, info, warn, or error.
   logLevel: info

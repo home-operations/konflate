@@ -233,7 +233,11 @@ type Config struct {
 	// its last render is older than this. It's the safety net that keeps PRs
 	// current even if an inbound webhook misfires; webhooks/pushes still update
 	// PRs immediately and reset their per-PR clock. Merged/closed PRs are frozen
-	// and never auto-refresh.
+	// and never auto-refresh. <=0 disables the periodic refresh entirely (inbound
+	// webhooks/pushes become the only triggers), like every sibling duration knob.
+	// A positive value is floored to [minRefreshInterval] in [Load] so a tiny
+	// interval can't turn the refresh into a forge-API hot loop — use webhooks for
+	// near-real-time updates instead.
 	RefreshInterval time.Duration `env:"KONFLATE_REFRESH_INTERVAL" envDefault:"30m"`
 
 	// ClosedRetention bounds how long a merged PR stays on the "recently merged"
@@ -326,9 +330,22 @@ func Load() (*Config, error) {
 	if cfg.HelmTemplateCacheMB < 0 {
 		cfg.HelmTemplateCacheMB = defaultHelmTemplateCacheMB(cfg.MaxDiffConcurrency)
 	}
+	// Floor a positive refresh interval so a tiny value can't hot-loop the forge
+	// API (re-listing and re-rendering the whole open set every tick). <=0 is left
+	// as-is: the refresh loop reads it as "disabled" (inbound triggers only).
+	if cfg.RefreshInterval > 0 && cfg.RefreshInterval < minRefreshInterval {
+		cfg.RefreshInterval = minRefreshInterval
+	}
 
 	return cfg, nil
 }
+
+// minRefreshInterval is the smallest positive [Config.RefreshInterval] honored;
+// a smaller value is raised to it in [Load]. It bounds how often the periodic
+// refresh can re-list PRs and re-render the open set, so a misconfigured tiny
+// interval can't exhaust the forge's API rate limit. (To disable polling
+// entirely, set the interval to 0; for near-real-time updates use webhooks.)
+const minRefreshInterval = time.Minute
 
 // defaultDiffConcurrency derives the diff-render concurrency from the CPU budget
 // (GOMAXPROCS is cgroup-aware on Go 1.25+, so it tracks a container's CPU

@@ -104,7 +104,7 @@
         },
         "refreshInterval": {
           "default": "30m",
-          "description": "How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration).",
+          "description": "How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). \"0\" disables periodic refresh (webhooks only); positive values are floored to 1m.",
           "title": "refreshInterval",
           "type": "string"
         },

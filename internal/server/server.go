@@ -216,9 +216,19 @@ func serve(srv *http.Server, name string, log *slog.Logger) error {
 // stale. Staleness deadlines are jittered per PR (see staleJitter) so the open
 // set — all rendered together at startup — doesn't re-render as one synchronized
 // batch every interval. A PR a webhook just refreshed isn't re-rendered until it
-// is genuinely stale. Returns when ctx is cancelled.
+// is genuinely stale. A RefreshInterval <=0 disables the loop entirely (inbound
+// triggers only). Returns when ctx is cancelled.
 func (s *Server) refreshLoop(ctx context.Context) {
-	cadence := max(min(s.cfg.RefreshInterval, 2*time.Minute), time.Second)
+	cadence, enabled := refreshCadence(s.cfg.RefreshInterval)
+	if !enabled {
+		// <=0 disables the periodic refresh: inbound webhooks/pushes are the only
+		// triggers (the contract every sibling duration knob follows). Block until
+		// shutdown so this errgroup goroutine still exits cleanly — without this we
+		// would fall through and NewTicker(0) panics.
+		s.log.Info("periodic refresh disabled (KONFLATE_REFRESH_INTERVAL<=0); relying on inbound triggers")
+		<-ctx.Done()
+		return
+	}
 	ticker := time.NewTicker(cadence)
 	defer ticker.Stop()
 
@@ -236,6 +246,19 @@ func (s *Server) refreshLoop(ctx context.Context) {
 			s.refreshStale(now)
 		}
 	}
+}
+
+// refreshCadence resolves a refresh interval into the loop's ticker cadence and
+// whether the periodic refresh runs at all. <=0 disables it (inbound triggers
+// only). Otherwise the cadence is the interval capped at 2m, so the loop still
+// wakes often enough to honor mid-interval per-PR staleness on a long interval;
+// the interval itself is floored in config (minRefreshInterval), so this capped
+// cadence can never hot-loop.
+func refreshCadence(interval time.Duration) (cadence time.Duration, enabled bool) {
+	if interval <= 0 {
+		return 0, false
+	}
+	return min(interval, 2*time.Minute), true
 }
 
 // refreshStale re-renders every open PR whose last render is older than the
