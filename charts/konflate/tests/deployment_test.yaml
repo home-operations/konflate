@@ -204,3 +204,24 @@ tests:
       - equal:
           path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
           value: RELEASE-NAME-data
+
+  - it: defaults to a single replica
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: allows scaling to zero (pause) without uninstalling
+    set:
+      replicaCount: 0
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+
+  - it: rejects more than one replica (konflate is single-instance)
+    set:
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorMessage: konflate is single-instance (in-memory PR/diff state); replicaCount must be 0 or 1, got 2

@@ -674,7 +674,7 @@
     },
     "replicaCount": {
       "default": 1,
-      "description": "Number of konflate replicas (it's stateless behind the Service).",
+      "description": "Replica count; konflate is single-instance, so 0 or 1 only (a value \u003e1 is rejected at render time).",
       "title": "replicaCount",
       "type": "integer"
     },
