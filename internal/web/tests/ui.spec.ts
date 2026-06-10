@@ -39,10 +39,11 @@ test('list → review → single-page flow', async ({ page }) => {
 
   // Landing list: cards with per-PR signal badges.
   await expect(page.locator('.card')).toHaveCount(3);
-  const card142 = page.locator('.card-shell', { hasText: '#142' });
-  // The PR number now lives in the forge link (right of the badges), clickable
-  // out to the forge — the only place it's shown.
-  await expect(card142.locator('.forge-link')).toContainText('#142');
+  const card142 = page.locator('.card-shell[data-pr="142"]');
+  // The forge link in a list row is icon-only — the "#<n>" text is dropped to
+  // keep the row uncluttered; the number lives in its tooltip (asserted below).
+  await expect(card142.locator('.forge-link')).toBeVisible();
+  await expect(card142.locator('.forge-link')).not.toContainText('#142');
   await expect(card142.locator('.card-title')).toHaveText(
     'feat(rook-ceph): bump the rook-ceph operator and cluster chart to v1.15.0',
   );
@@ -50,7 +51,7 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(card142.locator('.ago').first()).toHaveText(/ago|just now/); // humanized timestamps
   // Author avatar renders when present; a PR without one falls back to the icon.
   await expect(card142.locator('img.avatar')).toBeVisible();
-  await expect(page.locator('.card-shell', { hasText: '#138' }).locator('img.avatar')).toHaveCount(0);
+  await expect(page.locator('.card-shell[data-pr="138"]').locator('img.avatar')).toHaveCount(0);
   // PR age: a clock icon + relative time (the full "Opened …" date is in the
   // title, so the word itself is dropped), plus a colored label dot.
   await expect(card142.locator('.ago[title^="Opened"]')).toBeVisible();
@@ -62,7 +63,7 @@ test('list → review → single-page flow', async ({ page }) => {
   ).toHaveAttribute('title', '1 image change');
   // A PR-icon link, right of the badges, opens the PR on its forge (named in the
   // tooltip). It's a sibling of the card button, so scope to the shell.
-  const forge142 = page.locator('.card-shell', { hasText: '#142' }).locator('.forge-link');
+  const forge142 = page.locator('.card-shell[data-pr="142"]').locator('.forge-link');
   await expect(forge142).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
   await expect(forge142).toHaveAttribute('target', '_blank');
   await expect(forge142).toHaveAttribute('title', 'Open PR #142 on GitHub');
@@ -113,8 +114,8 @@ test('landing health summary + non-default base branch tag', async ({ page }) =>
   await expect(summary.locator('.sum-pill.merged')).toContainText('1 merged');
 
   // Most PRs target main, so only #138 (→ staging) is flagged with a base tag.
-  await expect(page.locator('.card-shell', { hasText: '#138' }).locator('.base-tag')).toContainText('staging');
-  await expect(page.locator('.card-shell', { hasText: '#142' }).locator('.base-tag')).toHaveCount(0);
+  await expect(page.locator('.card-shell[data-pr="138"]').locator('.base-tag')).toContainText('staging');
+  await expect(page.locator('.card-shell[data-pr="142"]').locator('.base-tag')).toHaveCount(0);
 });
 
 test('a failed refresh keeps the diff and flags it (list badge + review strip)', async ({ page }) => {
@@ -129,7 +130,7 @@ test('a failed refresh keeps the diff and flags it (list badge + review strip)',
   await page.goto('/');
 
   // The card flags the failed refresh but still shows the last-good signal badges.
-  const card = page.locator('.card-shell', { hasText: '#142' });
+  const card = page.locator('.card-shell[data-pr="142"]');
   await expect(card.locator('.badge[title*="refresh"]')).toBeVisible();
   await expect(card.locator('.badge.danger').first()).toBeVisible();
 
@@ -145,13 +146,13 @@ test('merged PRs are reached via the merged pill, not shown by default', async (
 
   // Landing shows only the 3 open PRs; the merged one isn't in the default view.
   await expect(page.locator('.card')).toHaveCount(3);
-  await expect(page.locator('.card-shell', { hasText: '#128' })).toHaveCount(0);
+  await expect(page.locator('.card-shell[data-pr="128"]')).toHaveCount(0);
 
   // The merged pill carries the count; clicking it switches to the merged view.
   const mergedPill = page.locator('.sum-pill.merged');
   await expect(mergedPill).toContainText('1');
   await mergedPill.click();
-  const mergedCard = page.locator('.card-shell.merged', { hasText: '#128' });
+  const mergedCard = page.locator('.card-shell.merged[data-pr="128"]');
   await expect(mergedCard).toBeVisible();
   // No redundant "merged" tag — the dimmed card, purple dot, and "merged …"
   // timestamp already convey it.
@@ -185,13 +186,13 @@ test('filter-excluded PRs are hidden: a pill, a grey dot, out of the default vie
 
   // Default view shows only the tracked PR; the hidden one is excluded.
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell', { hasText: '#9' })).toHaveCount(0);
+  await expect(page.locator('.card-shell[data-pr="9"]')).toHaveCount(0);
 
   // The hidden pill carries the count; clicking it reveals the hidden PR, greyed.
   const hiddenPill = page.locator('.sum-pill.hidden');
   await expect(hiddenPill).toContainText('1');
   await hiddenPill.click();
-  const hiddenCard = page.locator('.card-shell', { hasText: '#9' });
+  const hiddenCard = page.locator('.card-shell[data-pr="9"]');
   await expect(hiddenCard).toBeVisible();
   await expect(hiddenCard.locator('.dot-hidden')).toBeVisible();
   await expect(page.locator('.card')).toHaveCount(1); // only the hidden PR now
@@ -333,7 +334,7 @@ test('filter narrows the PR list', async ({ page }) => {
   await page.goto('/');
   await page.getByPlaceholder('Filter pull requests…').fill('plex');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#131');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '131');
 });
 
 test('the filter understands facet tokens (status:/author:/base:/label:)', async ({ page }) => {
@@ -343,16 +344,16 @@ test('the filter understands facet tokens (status:/author:/base:/label:)', async
 
   await input.fill('status:caution');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#142');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '142');
 
   // Tokens AND together, and with free text.
   await input.fill('author:octocat base:staging');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#138');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '138');
 
   await input.fill('label:media plex');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#131');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '131');
 
   // The clear button empties the query and restores the list.
   await page.locator('.search-box .clear-btn').click();
@@ -418,15 +419,15 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await page.goto('/');
 
   // Default sort: created desc → #138 (06-03) > #142 (06-01) > #131 (05-30).
-  const ids = page.locator('.cards .forge-link');
-  await expect(ids.nth(0)).toContainText('#138');
-  await expect(ids.nth(1)).toContainText('#142');
-  await expect(ids.nth(2)).toContainText('#131');
+  const ids = page.locator('.cards .card-shell');
+  await expect(ids.nth(0)).toHaveAttribute('data-pr', '138');
+  await expect(ids.nth(1)).toHaveAttribute('data-pr', '142');
+  await expect(ids.nth(2)).toHaveAttribute('data-pr', '131');
 
   // Refreshed sort: last render desc → #142 (12:00) > #138 (11:30) > #131 (10:00).
   await page.locator('.sort select').selectOption('refreshed');
-  await expect(ids.nth(0)).toContainText('#142');
-  await expect(ids.nth(1)).toContainText('#138');
+  await expect(ids.nth(0)).toHaveAttribute('data-pr', '142');
+  await expect(ids.nth(1)).toHaveAttribute('data-pr', '138');
 
   // The caution pill narrows to the one PR carrying cautions; clicking again
   // clears it.
@@ -434,14 +435,14 @@ test('summary pills filter by status; the sort selector reorders', async ({ page
   await caution.click();
   await expect(caution).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#142');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '142');
   await caution.click();
   await expect(page.locator('.card')).toHaveCount(3);
 
   // merged → only merged PRs show (the open list is replaced); counts stay visible.
   await page.locator('.sum-pill', { hasText: 'merged' }).click();
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-shell')).toContainText('#128');
+  await expect(page.locator('.card-shell')).toHaveAttribute('data-pr', '128');
   await expect(page.locator('.list-summary')).toContainText('3 open');
 
   // Status filter + a text query that excludes everything → the no-match state.
@@ -473,25 +474,25 @@ test('the open pill filters back to all open and hides the merged shelf', async 
 test('list sort: direction toggle, and changing field resets to its natural order', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
-  const ids = page.locator('.cards .forge-link');
+  const ids = page.locator('.cards .card-shell');
   const dir = page.locator('.sort-dir');
 
   // created desc (default) → newest first.
-  await expect(ids.nth(0)).toContainText('#138');
+  await expect(ids.nth(0)).toHaveAttribute('data-pr', '138');
   await expect(dir).toHaveAttribute('aria-label', 'Sort: newest first');
 
   // Toggle → ascending (oldest first) → the order reverses.
   await dir.click();
   await expect(dir).toHaveAttribute('aria-label', 'Sort: oldest first');
-  await expect(ids.nth(0)).toContainText('#131');
-  await expect(ids.nth(2)).toContainText('#138');
+  await expect(ids.nth(0)).toHaveAttribute('data-pr', '131');
+  await expect(ids.nth(2)).toHaveAttribute('data-pr', '138');
 
   // Switching field resets to that field's natural direction: name → A→Z.
   await page.locator('.sort select').selectOption('name');
   await expect(dir).toHaveAttribute('aria-label', 'Sort: A → Z');
   // A→Z by title: "chore…"(#138) < "feat…"(#142) < "fix…"(#131).
-  await expect(ids.nth(0)).toContainText('#138');
-  await expect(ids.nth(2)).toContainText('#131');
+  await expect(ids.nth(0)).toHaveAttribute('data-pr', '138');
+  await expect(ids.nth(2)).toHaveAttribute('data-pr', '131');
 });
 
 test('opening an already-rendered PR does not flash the loading spinner', async ({ page }) => {
@@ -590,7 +591,7 @@ test('mobile: a long PR title wraps to two lines instead of truncating', async (
   await page.setViewportSize({ width: 390, height: 844 });
   await stubApi(page);
   await page.goto('/');
-  const title = page.locator('.card-shell', { hasText: '#142' }).locator('.card-title');
+  const title = page.locator('.card-shell[data-pr="142"]').locator('.card-title');
   await title.waitFor();
   // Two-line clamp is engaged on mobile (single-line truncation uses nowrap).
   await expect(title).toHaveCSS('white-space', 'normal');
@@ -728,7 +729,7 @@ test('a list row expands to a brief diff summary; the row still opens the PR', a
   await stubApi(page);
   await page.goto('/');
 
-  const card = page.locator('.card-li', { hasText: '#142' });
+  const card = page.locator('.card-li:has(.card-shell[data-pr="142"])');
   await expect(card.locator('.card-preview')).toHaveCount(0); // collapsed by default
 
   // The chevron expands the row and lazy-loads the summary — without navigating.
@@ -772,7 +773,7 @@ test('the row summary waits for its fetch before sliding open (no first-open jum
     await route.fulfill({ json: diffEnvelope });
   });
   await page.goto('/');
-  const card = page.locator('.card-li', { hasText: '#142' });
+  const card = page.locator('.card-li:has(.card-shell[data-pr="142"])');
 
   await card.locator('.card-expand').click();
   // Toggled open, but the panel is deferred until the summary lands: the chevron
@@ -917,8 +918,8 @@ test('an open PR with cautions carries a red card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
   // #142 carries a caution signal; #138 doesn't. The merged #128 never does.
-  await expect(page.locator('.card-shell', { hasText: '#142' })).toHaveClass(/caution/);
-  await expect(page.locator('.card-shell', { hasText: '#138' })).not.toHaveClass(/caution/);
+  await expect(page.locator('.card-shell[data-pr="142"]')).toHaveClass(/caution/);
+  await expect(page.locator('.card-shell[data-pr="138"]')).not.toHaveClass(/caution/);
 });
 
 test('keyboard help: ? toggles the overlay, Esc closes it, / focuses the filter', async ({ page }) => {
@@ -1011,7 +1012,7 @@ test('list footer: project links, version, license, year — and no topbar GitHu
   await expect(page.locator('.actions a')).toHaveCount(0);
 
   // The review screen stays footer-free (its panes own the space).
-  await page.locator('.card-shell', { hasText: '#142' }).click();
+  await page.locator('.card-shell[data-pr="142"]').click();
   await expect(page.locator('.impact')).toBeVisible();
   await expect(page.locator('.footer')).toHaveCount(0);
 });
@@ -1075,7 +1076,7 @@ test('captures list + overview screenshots (light)', async ({ page }) => {
   await expect(page.locator('.card')).toHaveCount(3);
   await page.screenshot({ path: 'screenshots/konflate-list.png' });
 
-  await page.locator('.card-shell', { hasText: '#142' }).click();
+  await page.locator('.card-shell[data-pr="142"]').click();
   await expect(page.locator('.impact')).toBeVisible();
   await page.screenshot({ path: 'screenshots/konflate-overview.png' });
 });
