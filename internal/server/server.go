@@ -51,6 +51,12 @@ type Server struct {
 	queue   *queue
 	runCtx  context.Context
 
+	// relist is the coalescing signal for webhook-triggered re-lists. It holds a
+	// single token, so a burst of inbound events collapses to one in-flight
+	// refreshList plus at most one trailing run (see requestRelist/relistWorker)
+	// rather than a goroutine + forge ListPRs per event. Buffered, created in New.
+	relist chan struct{}
+
 	avatarKey []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
 	mergeTmpl *template.Template // renders the "copy to merge" command; nil disables it
 }
@@ -67,6 +73,7 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 		store: newStore(), hub: newHub(log), metrics: newMetrics(),
 		avatarKey: avatarKey,
 		mergeTmpl: newMergeTemplate(cfg, log),
+		relist:    make(chan struct{}, 1),
 	}
 
 	// Durability: persist rendered diffs under the (operator-persisted) cache
@@ -183,6 +190,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// failures are logged inside.
 	go s.refreshList(gctx)
 	go s.refreshLoop(gctx)
+	go s.relistWorker(gctx)
 
 	g.Go(func() error { return serve(mainSrv, "main", s.log) })
 	g.Go(func() error { return serve(metricsSrv, "metrics", s.log) })
@@ -208,6 +216,34 @@ func serve(srv *http.Server, name string, log *slog.Logger) error {
 		return fmt.Errorf("%s server: %w", name, err)
 	}
 	return nil
+}
+
+// requestRelist asks the relist worker to re-list open PRs, coalescing a burst
+// of triggers into at most one in-flight run plus one trailing run. The signal
+// channel holds a single token, so concurrent inbound webhooks collapse onto it
+// instead of each spawning a goroutine + forge ListPRs call. Never blocks.
+func (s *Server) requestRelist() {
+	select {
+	case s.relist <- struct{}{}:
+	default: // a relist is already queued; fold this trigger into it
+	}
+}
+
+// relistWorker serializes webhook-triggered relists: it runs refreshList at most
+// once at a time, and a trigger that arrives mid-run schedules exactly one more
+// run (the buffered signal). This caps the forge-API cost of a chatty
+// "send everything" webhook — where one push's CI activity can fan out into
+// dozens of relist-class deliveries — at one relist in flight plus one pending,
+// instead of a full ListPRs per delivered event. Returns when ctx is cancelled.
+func (s *Server) relistWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.relist:
+			s.refreshList(ctx)
+		}
+	}
 }
 
 // refreshLoop is the background refresh. It wakes on a cadence and, once per
