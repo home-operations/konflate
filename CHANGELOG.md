@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.5](https://github.com/home-operations/konflate/compare/0.2.4...0.2.5) (2026-06-10)
+
+
+### Features
+
+* **web:** drop the #&lt;number&gt; text from PR-list rows, keep the forge icon ([#158](https://github.com/home-operations/konflate/issues/158)) ([ab9ebb4](https://github.com/home-operations/konflate/commit/ab9ebb4ddd5dc5c3f9174d27b2d3324ed55e9f50))
+
+
+### Documentation
+
+* **readme:** document the multi-cluster-monorepo workaround ([#159](https://github.com/home-operations/konflate/issues/159)) ([83f3367](https://github.com/home-operations/konflate/commit/83f336789ff762eac7f172ebb371cb7eadff6486))
+
 ## [0.2.4](https://github.com/home-operations/konflate/compare/0.2.3...0.2.4) (2026-06-10)
 
 
