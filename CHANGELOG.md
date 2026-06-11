@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.9](https://github.com/home-operations/konflate/compare/0.2.8...0.2.9) (2026-06-11)
+
+
+### Features
+
+* **blast-radius:** rank dependsOn blast radius + flag dangling deps ([#177](https://github.com/home-operations/konflate/issues/177)) ([7cbdaf0](https://github.com/home-operations/konflate/commit/7cbdaf02d34f95e3d4ad9cae98d611bf59717636))
+
 ## [0.2.8](https://github.com/home-operations/konflate/compare/0.2.7...0.2.8) (2026-06-10)
 
 
