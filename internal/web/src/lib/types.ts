@@ -75,6 +75,12 @@ export interface Warning {
   detail: string;
 }
 
+export interface BlastRadiusEntry {
+  parent: string; // the changed/failed app, "Kind ns/name"
+  direct: string[]; // direct dependents, "Kind ns/name", sorted
+  transitive: number; // total dependents reachable via spec.dependsOn (direct + indirect)
+}
+
 export interface DiffTreeItem {
   id: string;
   name: string;
@@ -137,6 +143,7 @@ export interface DiffResult {
   headSha: string;
   summary: DiffSummary;
   impact: Impact;
+  blastRadius?: BlastRadiusEntry[]; // omitempty on the wire; absent when nothing changed depends-on anything
   images: ImageChange[] | null;
   failures: RenderFailure[] | null;
   warnings: Warning[] | null;

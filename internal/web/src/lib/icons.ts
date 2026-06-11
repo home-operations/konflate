@@ -8,6 +8,7 @@ export {
   mdiAlert,
   mdiPackageVariantClosed,
   mdiAlertCircleOutline,
+  mdiSitemapOutline,
   mdiOpenInNew,
   mdiArrowLeft,
   mdiChevronLeft,

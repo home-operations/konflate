@@ -3,7 +3,7 @@
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline } from './icons';
+  import { mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline, mdiSitemapOutline } from './icons';
 
   const d = $derived(store.diff);
 
@@ -67,6 +67,25 @@
       >
     {/if}
   </div>
+
+  <!-- Blast radius: for each changed/failed app, how many downstream apps
+       declare a transitive spec.dependsOn on it — the reconciliation reach a
+       raw file diff can't show. Direct dependents are named; the count is the
+       full transitive closure. Absent when nothing changed depends-on anything. -->
+  {#if d.blastRadius?.length}
+    <section class="ov-section">
+      <h3><Icon path={mdiSitemapOutline} size={15} /> Blast radius</h3>
+      {#each d.blastRadius as br}
+        <div class="blast">
+          <span class="blast-parent">{br.parent}</span>
+          <span class="blast-count">{br.transitive} {br.transitive === 1 ? 'dependent' : 'dependents'}</span>
+          {#if br.direct?.length}
+            <div class="blast-deps">{br.direct.join(', ')}</div>
+          {/if}
+        </div>
+      {/each}
+    </section>
+  {/if}
 
   {#if d.warnings?.length}
     <section class="ov-section">

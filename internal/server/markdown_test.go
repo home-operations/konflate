@@ -18,6 +18,14 @@ func sampleSummaryEnv() api.DiffEnvelope {
 			Warnings: []api.Warning{{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api", Detail: "replicas set to 0"}},
 			Failures: []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}},
 			Images:   []api.ImageChange{{Name: "ghcr.io/rook/ceph", From: "v1.14.9", To: "v1.15.0"}},
+			BlastRadius: []api.BlastRadiusEntry{
+				{Parent: "Kustomization flux-system/cluster-apps", Transitive: 12, Direct: []string{
+					"Kustomization flux-system/app-a", "Kustomization flux-system/app-b",
+					"Kustomization flux-system/app-c", "Kustomization flux-system/app-d",
+					"Kustomization flux-system/app-e",
+				}},
+				{Parent: "Kustomization flux-system/db", Transitive: 1, Direct: []string{"Kustomization flux-system/cache"}},
+			},
 		},
 	}
 }
@@ -34,6 +42,11 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"> - `Deployment web/api` — replicas set to 0",
 		"> [!WARNING]",
 		"> - `HelmRelease media/plex` — values don't meet the schema",
+		"**Blast radius**",
+		// Sample capped at 3 direct names; count + sample reconcile to the headline.
+		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
+		// Singular, no "+more" when the sample already covers the whole radius.
+		"- `Kustomization flux-system/db` — 1 dependent (`Kustomization flux-system/cache`)",
 		"| image | from | to |",
 		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` |",
 		"[View the full rendered diff →](https://k.example/#/pr/142)",
