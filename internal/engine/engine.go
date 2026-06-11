@@ -157,7 +157,7 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	// a timeout can't masquerade as a deletion.
 	failures := renderFailures(base.Result.Failed, head.Result.Failed)
 	changes := dropFailedParents(pairChanges(base.Result.Manifests, head.Result.Manifests), failures)
-	return diff.Render(diff.RenderInput{
+	result, err := diff.Render(diff.RenderInput{
 		PRNumber:     pr.Number,
 		HeadSHA:      pr.HeadSHA,
 		Changes:      changes,
@@ -168,6 +168,21 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		// looked up across the full rendered sets — see parentInfos.
 		Parents: parentInfos(base.Result.Manifests, head.Result.Manifests),
 	})
+	if err != nil {
+		return api.DiffResult{}, err
+	}
+
+	// Attach the dependsOn-graph signals flate exposes on Result.DependsOn: the
+	// blast radius of each changed/failed parent, and a caution for any parent
+	// this PR removes that surviving resources still dependOn. Both are derived
+	// here (not in diff.Render) because only the engine holds the two flate
+	// Results and their dependency graphs.
+	labelToParent := parentLabels(base.Result.Manifests, head.Result.Manifests)
+	seeds := blastSeeds(changes, labelToParent, base.Result.Failed, head.Result.Failed)
+	result.BlastRadius = blastRadius(seeds, head.Result.DependsOn)
+	result.Warnings = append(result.Warnings, danglingDependsOn(
+		parentSet(base.Result.Manifests), parentSet(head.Result.Manifests), head.Result.DependsOn)...)
+	return result, nil
 }
 
 // renderUsable reports whether a RenderTrees outcome yields a diff worth

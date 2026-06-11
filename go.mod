@@ -12,7 +12,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-github/v88 v88.0.0
-	github.com/home-operations/flate v0.3.4
+	github.com/home-operations/flate v0.4.1
 	github.com/klauspost/compress v1.18.6
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.23.2
@@ -42,7 +42,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
-	github.com/controlplaneio-fluxcd/flux-operator v0.51.0 // indirect
+	github.com/controlplaneio-fluxcd/flux-operator v0.52.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
@@ -172,6 +172,7 @@ require (
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.5 // indirect

@@ -1217,6 +1217,39 @@ button.sum-pill:hover {
   color: var(--muted);
   font-size: 12px;
 }
+/* One row per changed app: the app, a neutral "N dependents" count, then the
+   named direct dependents wrapping below. Baseline-aligned like a warning row
+   but untinted — blast radius is informational, not a flag. */
+.blast {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.blast:last-child {
+  margin-bottom: 0;
+}
+.blast-parent {
+  font-size: 12px;
+  font-weight: 600;
+}
+.blast-count {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.blast-deps {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .img-list {
   list-style: none;
   margin: 0;

@@ -38,6 +38,14 @@ type DiffResult struct {
 	// 50 resources).
 	Impact Impact `json:"impact"`
 
+	// BlastRadius ranks the changed/failed parents by how many downstream
+	// parents declare a transitive spec.dependsOn on them — the reconciliation
+	// blast radius a raw file diff can't show (a storage layer with 20
+	// dependents vs a leaf app with none). Declared dependsOn only, same-kind
+	// per the Flux spec; sorted by transitive count, top entries only. Empty
+	// when nothing changed depends-on anything.
+	BlastRadius []BlastRadiusEntry `json:"blastRadius,omitempty"`
+
 	// Images lists container-image tag/digest changes across the rendered
 	// workloads (flate's `diff images`) — usually the single most useful line
 	// in a GitOps review: what actually gets deployed.
@@ -92,6 +100,17 @@ type Impact struct {
 	Parents    int      `json:"parents"`    // distinct HelmReleases/Kustomizations touched
 	Namespaces []string `json:"namespaces"` // namespaces with any change, sorted
 	CRDs       int      `json:"crds"`       // CustomResourceDefinitions added/removed/changed
+}
+
+// BlastRadiusEntry is one changed (or failed) parent and its downstream
+// dependents via declared spec.dependsOn. Direct lists the parents that depend
+// on it directly ("Kind ns/name"); Transitive is the total number of dependents
+// reachable through the dependsOn graph (direct + indirect). Only parents with
+// at least one dependent appear, sorted by Transitive descending.
+type BlastRadiusEntry struct {
+	Parent     string   `json:"parent"`     // the changed/failed parent, "Kind ns/name"
+	Direct     []string `json:"direct"`     // direct dependents, "Kind ns/name", sorted
+	Transitive int      `json:"transitive"` // total dependents (direct + indirect)
 }
 
 // ImageChange is one container-image reference that changed between the

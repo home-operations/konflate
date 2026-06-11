@@ -100,6 +100,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 		fmt.Fprintf(&b, "\n%s\n", impact.String())
 	}
 	writeRefreshNote()
+	writeBlastRadius(&b, d.BlastRadius)
 
 	if len(d.Warnings) > 0 {
 		if admonitions {
@@ -141,6 +142,40 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 
 	writeFooter()
 	return b.String()
+}
+
+// writeBlastRadius renders the blast-radius block: for each changed/failed app,
+// how many downstream apps declare a transitive spec.dependsOn on it — the
+// headline number a raw file diff can't show. Informational (like the image
+// table), so plain bold in both flavours. It names a sample of direct
+// dependents; the count and the sample add up to the headline
+// ("12 dependents (a, b, c +9 more)"). No-op when nothing depends on anything.
+func writeBlastRadius(b *strings.Builder, entries []api.BlastRadiusEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	b.WriteString("\n**Blast radius**\n")
+	for _, br := range entries {
+		fmt.Fprintf(b, "- `%s` — %d %s", mdCode(br.Parent), br.Transitive, plural(br.Transitive, "dependent", "dependents"))
+		shown := br.Direct
+		if len(shown) == 0 {
+			b.WriteString("\n")
+			continue
+		}
+		const sample = 3
+		if len(shown) > sample {
+			shown = shown[:sample]
+		}
+		quoted := make([]string, len(shown))
+		for i, s := range shown {
+			quoted[i] = "`" + mdCode(s) + "`"
+		}
+		fmt.Fprintf(b, " (%s", strings.Join(quoted, ", "))
+		if more := br.Transitive - len(shown); more > 0 {
+			fmt.Fprintf(b, " +%d more", more)
+		}
+		b.WriteString(")\n")
+	}
 }
 
 func plural(n int, one, many string) string {
