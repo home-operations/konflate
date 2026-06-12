@@ -1200,6 +1200,16 @@ button.sum-pill:hover {
   align-items: start;
   max-width: 860px;
 }
+/* Each grid track stacks its sections vertically: action items (failures +
+   cautions) in the left column, the informational blast radius + image list in
+   the right. The gap matches the grid's row gap so a wrapped single column on a
+   narrow pane reads evenly. */
+.ov-col {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
 /* Overview sections sit flat on the pane — headed lists, not boxed cards. The
    grid gap spaces them now, so no per-section margin. */
 .ov-section {
@@ -1338,7 +1348,7 @@ button.sum-pill:hover {
   font-size: 12px;
 }
 /* Name, from → to and the copy button share one baseline row; long digests
-   wrap rather than overflow. The refs trail muted below. */
+   wrap rather than overflow. */
 .img-top {
   display: flex;
   align-items: baseline;
@@ -1368,12 +1378,6 @@ button.sum-pill:hover {
 }
 .img-arrow {
   color: var(--muted);
-}
-.img-refs {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 11px;
-  overflow-wrap: anywhere;
 }
 /* ---- diffs (rail + diff) --------------------------------------------- */
 .diffs {
