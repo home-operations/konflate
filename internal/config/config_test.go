@@ -45,6 +45,35 @@ func TestConfig_InboundGating(t *testing.T) {
 	}
 }
 
+func TestWriteAccessors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name              string
+		statusChecks      bool
+		writeToken        string
+		appKey            string
+		wantWrite, wantSC bool
+	}{
+		{"off by default (read-only)", false, "", "", false, false},
+		{"toggle on but no credential → still read-only", true, "", "", false, false},
+		{"write PAT enables write; status still needs the toggle", false, "pat", "", true, false},
+		{"write PAT + toggle → status checks on", true, "pat", "", true, true},
+		{"GitHub App key enables write", true, "", "-----BEGIN KEY-----", true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Config{StatusChecks: tt.statusChecks, WriteToken: tt.writeToken, AppPrivateKey: tt.appKey}
+			if got := c.WriteEnabled(); got != tt.wantWrite {
+				t.Errorf("WriteEnabled() = %v, want %v", got, tt.wantWrite)
+			}
+			if got := c.StatusChecksEnabled(); got != tt.wantSC {
+				t.Errorf("StatusChecksEnabled() = %v, want %v", got, tt.wantSC)
+			}
+		})
+	}
+}
+
 func TestLoad_NoTokenIsValid(t *testing.T) {
 	// Only KONFLATE_REPO is required; absence of KONFLATE_TOKEN yields a valid
 	// (unauthenticated) config, not an error.
