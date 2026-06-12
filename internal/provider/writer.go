@@ -3,8 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	"github.com/bradleyfalzon/ghinstallation/v2"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/go-github/v88/github"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
@@ -73,22 +76,92 @@ type githubWriter struct {
 }
 
 func newGitHubWriter(cfg *config.Config) (*githubWriter, error) {
-	if cfg.WriteToken == "" {
-		// GitHub App auth (mint an installation token from the client id + key) is
-		// wired in a follow-up; until then a write PAT is required.
-		return nil, fmt.Errorf("github: write-back needs KONFLATE_WRITE_TOKEN (App auth not yet wired)")
-	}
-	opts := []github.ClientOptionsFunc{github.WithAuthToken(cfg.WriteToken)}
-	if host := cfg.Forge.Host; host != "" {
-		base := "https://" + host + "/"
-		opts = append(opts, github.WithEnterpriseURLs(base, base))
-	}
-	client, err := github.NewClient(opts...)
+	client, err := newGitHubWriteClient(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("github: new write client: %w", err)
+		return nil, err
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
 	return &githubWriter{client: client, owner: owner, repo: repo}, nil
+}
+
+// newGitHubWriteClient builds the authenticated write client. A fully-configured
+// GitHub App takes precedence — it's the preferred GitHub identity, minting
+// short-lived installation tokens rather than carrying a standing PAT — and a
+// write PAT is the fallback (and the only option on Forgejo/GitLab). A partial
+// App config is an explicit error so it can't silently mask a typo'd key.
+func newGitHubWriteClient(cfg *config.Config) (*github.Client, error) {
+	switch {
+	case cfg.AppConfigured():
+		return newGitHubAppClient(cfg)
+	case cfg.WriteToken != "":
+		opts := []github.ClientOptionsFunc{github.WithAuthToken(cfg.WriteToken)}
+		if host := cfg.Forge.Host; host != "" {
+			base := "https://" + host + "/"
+			opts = append(opts, github.WithEnterpriseURLs(base, base))
+		}
+		client, err := github.NewClient(opts...)
+		if err != nil {
+			return nil, fmt.Errorf("github: new write client: %w", err)
+		}
+		return client, nil
+	case cfg.AppClientID != "" || cfg.AppPrivateKey != "" || cfg.AppInstallationID != 0:
+		return nil, fmt.Errorf("github: App write-back needs all of KONFLATE_APP_CLIENT_ID, " +
+			"KONFLATE_APP_PRIVATE_KEY and KONFLATE_APP_INSTALLATION_ID")
+	default:
+		return nil, fmt.Errorf("github: write-back needs KONFLATE_WRITE_TOKEN or GitHub App credentials")
+	}
+}
+
+// newGitHubAppClient authenticates as a GitHub App installation, minting
+// short-lived installation tokens (auto-refreshed by the transport). ghinstallation
+// issues the App JWT with a numeric app id; GitHub also accepts — and now
+// recommends — the App's string client id as the issuer, which is the credential
+// konflate is configured with, so clientIDSigner overrides the issuer claim.
+func newGitHubAppClient(cfg *config.Config) (*github.Client, error) {
+	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
+	}
+	signer := clientIDSigner{
+		clientID: cfg.AppClientID,
+		inner:    ghinstallation.NewRSASigner(jwt.SigningMethodRS256, key),
+	}
+	appsTr, err := ghinstallation.NewAppsTransportWithOptions(
+		http.DefaultTransport, 0, ghinstallation.WithSigner(signer))
+	if err != nil {
+		return nil, fmt.Errorf("github: App transport: %w", err)
+	}
+	opts := []github.ClientOptionsFunc{}
+	if host := cfg.Forge.Host; host != "" { // GitHub Enterprise Server
+		appsTr.BaseURL = "https://" + host + "/api/v3" // before NewFromAppsTransport copies it
+		base := "https://" + host + "/"
+		opts = append(opts, github.WithEnterpriseURLs(base, base))
+	}
+	itr := ghinstallation.NewFromAppsTransport(appsTr, cfg.AppInstallationID)
+	opts = append(opts, github.WithTransport(itr))
+	client, err := github.NewClient(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("github: new App client: %w", err)
+	}
+	return client, nil
+}
+
+// clientIDSigner signs the GitHub App JWT with the App's client id as the issuer.
+// ghinstallation builds the claims (with the timestamps GitHub requires) and sets
+// the issuer to its numeric app id; we rewrite the issuer to the client id before
+// signing. The claims are freshly allocated per request, so the mutation is safe.
+type clientIDSigner struct {
+	clientID string
+	inner    ghinstallation.Signer
+}
+
+func (s clientIDSigner) Sign(claims jwt.Claims) (string, error) {
+	rc, ok := claims.(*jwt.RegisteredClaims)
+	if !ok {
+		return "", fmt.Errorf("github: unexpected JWT claims type %T", claims)
+	}
+	rc.Issuer = s.clientID
+	return s.inner.Sign(rc)
 }
 
 func (w *githubWriter) SetStatus(ctx context.Context, pr api.PR, st Status) error {

@@ -48,27 +48,36 @@ func TestConfig_InboundGating(t *testing.T) {
 func TestWriteAccessors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name              string
-		statusChecks      bool
-		writeToken        string
-		appKey            string
-		wantWrite, wantSC bool
+		name                       string
+		statusChecks               bool
+		writeToken                 string
+		appClientID, appKey        string
+		appInstallID               int64
+		wantWrite, wantSC, wantApp bool
 	}{
-		{"off by default (read-only)", false, "", "", false, false},
-		{"toggle on but no credential → still read-only", true, "", "", false, false},
-		{"write PAT enables write; status still needs the toggle", false, "pat", "", true, false},
-		{"write PAT + toggle → status checks on", true, "pat", "", true, true},
-		{"GitHub App key enables write", true, "", "-----BEGIN KEY-----", true, true},
+		{"off by default (read-only)", false, "", "", "", 0, false, false, false},
+		{"toggle on but no credential → still read-only", true, "", "", "", 0, false, false, false},
+		{"write PAT enables write; status still needs the toggle", false, "pat", "", "", 0, true, false, false},
+		{"write PAT + toggle → status checks on", true, "pat", "", "", 0, true, true, false},
+		{"GitHub App key enables write", true, "", "", "-----BEGIN KEY-----", 0, true, true, false},
+		{"complete App → configured", true, "", "Iv1", "-----BEGIN KEY-----", 42, true, true, true},
+		{"App key without installation id → not configured", true, "", "Iv1", "-----BEGIN KEY-----", 0, true, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := &Config{StatusChecks: tt.statusChecks, WriteToken: tt.writeToken, AppPrivateKey: tt.appKey}
+			c := &Config{
+				StatusChecks: tt.statusChecks, WriteToken: tt.writeToken,
+				AppClientID: tt.appClientID, AppPrivateKey: tt.appKey, AppInstallationID: tt.appInstallID,
+			}
 			if got := c.WriteEnabled(); got != tt.wantWrite {
 				t.Errorf("WriteEnabled() = %v, want %v", got, tt.wantWrite)
 			}
 			if got := c.StatusChecksEnabled(); got != tt.wantSC {
 				t.Errorf("StatusChecksEnabled() = %v, want %v", got, tt.wantSC)
+			}
+			if got := c.AppConfigured(); got != tt.wantApp {
+				t.Errorf("AppConfigured() = %v, want %v", got, tt.wantApp)
 			}
 		})
 	}

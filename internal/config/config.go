@@ -311,6 +311,14 @@ func (c *Config) WriteEnabled() bool { return c.WriteToken != "" || c.AppPrivate
 // each rendered PR head: the toggle is on and a write credential is configured.
 func (c *Config) StatusChecksEnabled() bool { return c.StatusChecks && c.WriteEnabled() }
 
+// AppConfigured reports whether a complete GitHub App write credential is set
+// (client id, private key, and installation id). A partial App config — e.g. a
+// key without an installation id — is not "configured": the GitHub writer
+// reports it as an error rather than silently falling back. GitHub only.
+func (c *Config) AppConfigured() bool {
+	return c.AppClientID != "" && c.AppPrivateKey != "" && c.AppInstallationID != 0
+}
+
 // DefaultPRFilter is the PR filter applied when KONFLATE_PR_FILTER_EXPR is
 // empty: render every open PR. Forks are gated separately by RenderForkPRs
 // (default off, AND-ed in by the server) rather than by this expression, so the
