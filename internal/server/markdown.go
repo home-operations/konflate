@@ -316,7 +316,7 @@ func isHex(s string) bool {
 // from the inbound request, honouring the usual reverse-proxy headers (konflate
 // typically sits behind an ingress).
 func reviewURLFromRequest(r *http.Request, number int) string {
-	scheme := "https"
+	scheme := schemeHTTPS
 	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
 		scheme = strings.TrimSpace(strings.Split(p, ",")[0])
 	} else if r.TLS == nil {

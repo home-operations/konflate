@@ -18,6 +18,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"unicode"
 
 	"golang.org/x/sync/errgroup"
 
@@ -209,7 +210,7 @@ func (s *Server) postStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMs
 		status.Description = renderedStatusDescription(sig)
 	case api.JobError:
 		status.State = provider.StatusFailure
-		status.Description = truncateStatus("render failed: " + errMsg)
+		status.Description = truncateStatus("render failed: " + oneLine(errMsg))
 	default:
 		return
 	}
@@ -260,6 +261,21 @@ func renderedStatusDescription(sig *api.Signals) string {
 		d += fmt.Sprintf(", %d render %s", sig.Failures, plural(sig.Failures, "failure", "failures"))
 	}
 	return d
+}
+
+// oneLine flattens s to a single line for a commit-status description: every
+// control character (newlines, tabs, CR, ESC, NUL, …) becomes a space and runs of
+// whitespace collapse to one. A failed render's error message can echo
+// fork-controlled manifest/template text, so this keeps it from injecting line
+// breaks or terminal-control sequences into the status the forge displays.
+func oneLine(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(mapped), " ")
 }
 
 // truncateStatus clamps a status description to the forge limit (GitHub caps the

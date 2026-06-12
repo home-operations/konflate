@@ -26,6 +26,14 @@ type Program struct {
 	src string
 }
 
+// evalCostLimit caps the CEL cost of a single filter evaluation. The expression
+// is operator-supplied (trusted) and its attacker-influenced inputs (pr.title,
+// pr.labels) are forge-bounded, so this is defense-in-depth against a pathological
+// operator expression rather than a likely attack — a ceiling no reasonable PR
+// predicate approaches, while still bounding an accidental blow-up (CEL has no
+// loops, so a finite cost is guaranteed to exist).
+const evalCostLimit = 1_000_000
+
 // Compile parses and type-checks expr and returns a runnable Program. It fails
 // when the expression is syntactically invalid, references unknown
 // variables/functions, or cannot produce a boolean.
@@ -51,7 +59,7 @@ func Compile(expr string) (*Program, error) {
 	default:
 		return nil, fmt.Errorf("prfilter: expression must evaluate to a boolean, got %s", ast.OutputType())
 	}
-	prg, err := env.Program(ast)
+	prg, err := env.Program(ast, cel.CostLimit(evalCostLimit))
 	if err != nil {
 		return nil, fmt.Errorf("prfilter: program: %w", err)
 	}

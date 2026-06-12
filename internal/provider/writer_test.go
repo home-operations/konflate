@@ -124,7 +124,7 @@ func TestNewGitHubWriteClient(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			client, err := newGitHubWriteClient(tc.cfg)
+			client, _, err := newGitHubWriteClient(tc.cfg)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("newGitHubWriteClient: unexpected error %v", err)
@@ -285,9 +285,31 @@ func commentCapture(listJSON string, sink *commentSink) http.HandlerFunc {
 
 const upsertMarker = "<!-- konflate:pr-7 -->"
 
-// markerList is a one-comment listing (id 99) whose body carries the marker.
+// selfLogin is the login the test writers resolve as konflate's own identity (via
+// konflateSelf); the marked comment in markerList is authored by it.
+const selfLogin = "konflate[bot]"
+
+// konflateSelf is a resolvedString reporting konflate's own identity (selfLogin)
+// with no network call — the test stand-in for the per-forge "who am I" lookup.
+func konflateSelf() *resolvedString {
+	return &resolvedString{resolve: func(context.Context) (string, error) { return selfLogin, nil }}
+}
+
+// markerList is a one-comment listing (id 99) whose body carries the marker and is
+// authored by konflate itself. It carries both a GitHub/Forgejo-style `user.login`
+// and a GitLab-style `author.username` so the one fixture serves all three forges
+// (each SDK reads its own field).
 func markerList() string {
-	return fmt.Sprintf(`[{"id":99,"body":%q}]`, upsertMarker+"\nold")
+	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":%q},"author":{"username":%q}}]`,
+		upsertMarker+"\nold", selfLogin, selfLogin)
+}
+
+// foreignMarkerList is the marker planted by a DIFFERENT author — the comment-
+// hijack attempt. konflate must NOT edit it (it isn't konflate's) and must post
+// its own comment instead.
+func foreignMarkerList() string {
+	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":"attacker"},"author":{"username":"attacker"}}]`,
+		upsertMarker+"\nplanted")
 }
 
 func assertCreated(t *testing.T, sink commentSink) {
@@ -317,22 +339,33 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
 	})
-	t.Run("edits when present", func(t *testing.T) {
+	t.Run("edits its own when present", func(t *testing.T) {
 		t.Parallel()
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
+	})
+	t.Run("ignores a foreign comment carrying the marker", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink) // posts its own; must not edit the planted comment
 	})
 }
 
@@ -351,22 +384,33 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
-		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web"}
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
 	})
-	t.Run("edits when present", func(t *testing.T) {
+	t.Run("edits its own when present", func(t *testing.T) {
 		t.Parallel()
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web"}
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
+	})
+	t.Run("ignores a foreign note carrying the marker", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink) // posts its own; must not edit the planted note
 	})
 }
 
@@ -385,22 +429,33 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
-		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web"}
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
 	})
-	t.Run("edits when present", func(t *testing.T) {
+	t.Run("edits its own when present", func(t *testing.T) {
 		t.Parallel()
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web"}
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
+	})
+	t.Run("ignores a foreign comment carrying the marker", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink) // posts its own; must not edit the planted comment
 	})
 }
 
