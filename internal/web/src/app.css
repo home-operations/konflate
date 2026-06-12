@@ -1190,20 +1190,20 @@ button.sum-pill:hover {
   font-weight: 600;
   color: var(--warn);
 }
-/* Up to two columns, each a fixed measure rather than a stretching 1fr, capped
+/* Up to three columns, each a fixed measure rather than a stretching 1fr, capped
    by max-width so the band doesn't span a wide pane edge-to-edge; auto-fit drops
-   to one when narrow. */
+   to fewer (then one) as the pane narrows. */
 .ov-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 380px));
   gap: 28px 44px;
   align-items: start;
-  max-width: 860px;
+  max-width: 1240px;
 }
 /* Each grid track stacks its sections vertically: action items (failures +
-   cautions) in the left column, the informational blast radius + image list in
-   the right. The gap matches the grid's row gap so a wrapped single column on a
-   narrow pane reads evenly. */
+   cautions) in the first column, the informational blast radius and image changes
+   each in their own. The gap matches the grid's row gap so wrapped columns on a
+   narrow pane read evenly. */
 .ov-col {
   display: flex;
   flex-direction: column;

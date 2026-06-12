@@ -65,9 +65,11 @@
 <div class="overview">
   <!-- The impact summary (scope counts + change delta) now rides in the sticky
        summary header (see Diffs.svelte); this content is just the sections. -->
-  <!-- Two columns on a wide pane (see .ov-grid / .ov-col): the things a reviewer
-       must act on — render failures, then cautions — lead in the left column; the
-       informational blast radius and image list sit together in the right one. -->
+  <!-- Three columns on a wide pane (see .ov-grid / .ov-col): the things a reviewer
+       must act on — render failures, then cautions — lead in the first column; the
+       informational blast radius and image changes each get their own. Each column
+       renders only when it has content, so an empty one leaves no gap and a narrow
+       pane collapses them to fewer columns. -->
   <div class="ov-grid">
     {#if d.failures?.length || d.warnings?.length}
       <div class="ov-col">
@@ -102,49 +104,49 @@
       </div>
     {/if}
 
-    {#if d.blastRadius?.length || d.images?.length}
+    {#if d.blastRadius?.length}
       <div class="ov-col">
         <!-- Blast radius: for each changed/failed app, how many downstream apps
              declare a transitive spec.dependsOn on it — the reconciliation reach a
              raw file diff can't show. Direct dependents are named; the count is the
              full transitive closure. Absent when nothing changed depends-on anything. -->
-        {#if d.blastRadius?.length}
-          <section class="ov-section">
-            <h3>Blast radius <span class="ov-count">{d.blastRadius.length}</span></h3>
-            {#each d.blastRadius as br}
-              <div class="blast">
-                <span class="blast-parent">{br.parent}</span>
-                <span class="blast-count">{dependentsLabel(br)}</span>
-                {#if br.direct?.length}
-                  <div class="blast-deps">{br.direct.map(bareRef).join(', ')}</div>
-                {/if}
-              </div>
-            {/each}
-          </section>
-        {/if}
+        <section class="ov-section">
+          <h3>Blast radius <span class="ov-count">{d.blastRadius.length}</span></h3>
+          {#each d.blastRadius as br}
+            <div class="blast">
+              <span class="blast-parent">{br.parent}</span>
+              <span class="blast-count">{dependentsLabel(br)}</span>
+              {#if br.direct?.length}
+                <div class="blast-deps">{br.direct.map(bareRef).join(', ')}</div>
+              {/if}
+            </div>
+          {/each}
+        </section>
+      </div>
+    {/if}
 
-        {#if d.images?.length}
-          <section class="ov-section">
-            <h3>Image changes <span class="ov-count">{d.images.length}</span></h3>
-            <ul class="img-list">
-              {#each d.images as img}
-                <li class="img-change">
-                  <!-- Name, from → to and copy share one line; ∅ = no reference on
-                       that side (image added/removed) and the tooltip spells it out. -->
-                  <div class="img-top">
-                    <span class="img-name">{img.name}</span>
-                    <span class="img-delta">
-                      <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
-                      <span class="img-arrow">→</span>
-                      <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
-                    </span>
-                    {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          </section>
-        {/if}
+    {#if d.images?.length}
+      <div class="ov-col">
+        <section class="ov-section">
+          <h3>Image changes <span class="ov-count">{d.images.length}</span></h3>
+          <ul class="img-list">
+            {#each d.images as img}
+              <li class="img-change">
+                <!-- Name, from → to and copy share one line; ∅ = no reference on
+                     that side (image added/removed) and the tooltip spells it out. -->
+                <div class="img-top">
+                  <span class="img-name">{img.name}</span>
+                  <span class="img-delta">
+                    <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
+                    <span class="img-arrow">→</span>
+                    <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
+                  </span>
+                  {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </section>
       </div>
     {/if}
   </div>

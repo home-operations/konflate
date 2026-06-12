@@ -958,6 +958,29 @@ test('a long image list renders in full by default (no collapse)', async ({ page
   await expect(page.locator('.ov-head')).toHaveCount(0); // no fold control
 });
 
+test('the summary lays out three columns: cautions, blast radius, image changes', async ({ page }) => {
+  // Action items lead (column one); the informational blast radius and image
+  // changes each get their own. Columns render only when their section is present.
+  const diff = {
+    ...diffEnvelope.diff!,
+    failures: [],
+    warnings: [{ level: 'caution', rule: 'removed-statefulset', resource: 'StatefulSet default/db', detail: 'data may be deleted' }],
+    blastRadius: [{ parent: 'Kustomization a/b', direct: ['Kustomization c/d'], transitive: 1 }],
+    images: [{ name: 'ghcr.io/app', from: 'v1.0.0', to: 'v1.1.0', refs: null }],
+  };
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
+  await page.route('**/api/prs/142/diff', (r) => r.fulfill({ json: { ...diffEnvelope, diff } }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/#/pr/142');
+
+  const cols = page.locator('.ov-col');
+  await expect(cols).toHaveCount(3);
+  await expect(cols.nth(0)).toContainText('Cautions');
+  await expect(cols.nth(1)).toContainText('Blast radius');
+  await expect(cols.nth(2)).toContainText('Image changes');
+});
+
 test('an open PR with cautions carries an amber card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
