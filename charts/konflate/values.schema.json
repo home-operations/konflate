@@ -108,6 +108,12 @@
           "title": "mergeCommand",
           "type": "string"
         },
+        "prCommentTemplate": {
+          "default": "",
+          "description": "Optional Go text/template for the PR-comment body, replacing the built-in summary. When set, the chart mounts it (a ConfigMap) and points `KONFLATE_PR_COMMENT_TEMPLATE_FILE` at it. The konflate marker is injected automatically. Context: `.PR`, `.Diff`, `.ReviewURL`, `.Summary` (the default body). Passed verbatim (NOT tpl'd) — it's konflate's own template. See the README.",
+          "title": "prCommentTemplate",
+          "type": "string"
+        },
         "prComments": {
           "default": false,
           "description": "Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.",
