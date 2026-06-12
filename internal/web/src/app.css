@@ -1190,20 +1190,19 @@ button.sum-pill:hover {
   font-weight: 600;
   color: var(--warn);
 }
-/* Up to three columns, each a fixed measure rather than a stretching 1fr, capped
-   by max-width so the band doesn't span a wide pane edge-to-edge; auto-fit drops
-   to fewer (then one) as the pane narrows. */
+/* Four columns — render failures, cautions, blast radius, image changes — each a
+   shrinkable track so all four fit the pane the old three did; auto-fit drops to
+   fewer (then one) as the pane narrows. max-width keeps a wide pane from spreading
+   them edge-to-edge. */
 .ov-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 380px));
-  gap: 28px 44px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 24px;
   align-items: start;
-  max-width: 1240px;
+  max-width: 1280px;
 }
-/* Each grid track stacks its sections vertically: action items (failures +
-   cautions) in the first column, the informational blast radius and image changes
-   each in their own. The gap matches the grid's row gap so wrapped columns on a
-   narrow pane read evenly. */
+/* One section per column. min-width lets the track shrink below its content's
+   intrinsic width so a long identifier wraps instead of widening the column. */
 .ov-col {
   display: flex;
   flex-direction: column;
@@ -1241,6 +1240,15 @@ button.sum-pill:hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* An empty section's placeholder — same flat left-rule row as a flag, but green:
+   the absence is reassuring, the colour matches the red/amber rules on real flags
+   so the four columns read as one family whether or not they have content. */
+.ov-empty {
+  padding-left: 12px;
+  border-left: 2px solid var(--ok);
+  color: var(--muted);
+  font-size: 12px;
+}
 /* A flag — a render failure or a caution — is a flat row with a single left
    rule, not a bordered, tinted card. The rule is red by default (a render
    failure: the diff broke); cautions step it down to amber. The resource leads
@@ -1275,6 +1283,7 @@ button.sum-pill:hover {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .flag-detail {
   display: block;
@@ -1303,6 +1312,7 @@ button.sum-pill:hover {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .blast-count {
   font-size: 11px;

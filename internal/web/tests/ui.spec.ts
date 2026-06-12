@@ -958,9 +958,11 @@ test('a long image list renders in full by default (no collapse)', async ({ page
   await expect(page.locator('.ov-head')).toHaveCount(0); // no fold control
 });
 
-test('the summary lays out three columns: cautions, blast radius, image changes', async ({ page }) => {
-  // Action items lead (column one); the informational blast radius and image
-  // changes each get their own. Columns render only when their section is present.
+test('the summary always lays out four columns, with a green placeholder for an empty section', async ({ page }) => {
+  // The four columns — render failures, cautions, blast radius, image changes —
+  // are always present so the layout holds steady across PRs. This fixture has no
+  // render failures, so that column shows a "No render failures" placeholder
+  // rather than collapsing.
   const diff = {
     ...diffEnvelope.diff!,
     failures: [],
@@ -975,10 +977,15 @@ test('the summary lays out three columns: cautions, blast radius, image changes'
   await page.goto('/#/pr/142');
 
   const cols = page.locator('.ov-col');
-  await expect(cols).toHaveCount(3);
-  await expect(cols.nth(0)).toContainText('Cautions');
-  await expect(cols.nth(1)).toContainText('Blast radius');
-  await expect(cols.nth(2)).toContainText('Image changes');
+  await expect(cols).toHaveCount(4);
+  await expect(cols.nth(0)).toContainText('Render failures');
+  await expect(cols.nth(1)).toContainText('Cautions');
+  await expect(cols.nth(2)).toContainText('Blast radius');
+  await expect(cols.nth(3)).toContainText('Image changes');
+
+  // The empty render-failures column shows the green placeholder, not a flag.
+  await expect(cols.nth(0).locator('.ov-empty')).toHaveText('No render failures');
+  await expect(cols.nth(0).locator('.flag')).toHaveCount(0);
 });
 
 test('an open PR with cautions carries an amber card edge', async ({ page }) => {
