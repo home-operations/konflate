@@ -96,9 +96,10 @@ description = "Install the chart into the current cluster (e.g. a kind context) 
 # KONFLATE_TEST_IMAGE_TAG=e2e + pull policy Never so the test runs the code under
 # review; locally these default to the published `latest` for a quick chart check
 # (the chart appVersion is a release-time placeholder, so a tag is always needed).
-# config.repo is a placeholder; startup doesn't block on it. The trap cleans up.
+# config.repo is a placeholder; startup doesn't block on it. The trap cleans up
+# (without --wait, which can hang on teardown).
 run = """
-trap 'helm uninstall konflate-e2e -n konflate-e2e --wait >/dev/null 2>&1 || true' EXIT
+trap 'helm uninstall konflate-e2e -n konflate-e2e >/dev/null 2>&1 || true' EXIT
 set -e
 helm install konflate-e2e charts/konflate -n konflate-e2e --create-namespace --wait --timeout 5m --set image.tag="${KONFLATE_TEST_IMAGE_TAG:-latest}" --set image.pullPolicy="${KONFLATE_TEST_PULL_POLICY:-IfNotPresent}" --set config.repo=github://home-operations/konflate-e2e
 helm test konflate-e2e -n konflate-e2e --logs
