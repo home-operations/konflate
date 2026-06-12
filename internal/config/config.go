@@ -99,11 +99,11 @@ type Config struct {
 	// the preferred write credential there: konflate authenticates as the App and
 	// mints short-lived, narrowly-scoped installation tokens (a revocable bot
 	// identity rather than a standing PAT). AppClientID is the App's client id,
-	// AppPrivateKey its PEM private key, AppInstallationID the installation to act
-	// as. AppPrivateKey is unset from the environment once read (see Token).
-	AppClientID       string `env:"KONFLATE_APP_CLIENT_ID"`
-	AppPrivateKey     string `env:"KONFLATE_APP_PRIVATE_KEY,unset"`
-	AppInstallationID int64  `env:"KONFLATE_APP_INSTALLATION_ID"`
+	// AppPrivateKey its PEM private key (unset from the environment once read, see
+	// Token). The installation is resolved automatically from the repo, so there's
+	// no installation id to configure.
+	AppClientID   string `env:"KONFLATE_APP_CLIENT_ID"`
+	AppPrivateKey string `env:"KONFLATE_APP_PRIVATE_KEY,unset"`
 
 	// PublicURL is konflate's externally-reachable base URL (e.g.
 	// https://konflate.example.com). Write-back uses it to build the review link a
@@ -328,12 +328,13 @@ func (c *Config) StatusChecksEnabled() bool { return c.StatusChecks && c.WriteEn
 // the rendered summary: the toggle is on and a write credential is configured.
 func (c *Config) PRCommentsEnabled() bool { return c.PRComments && c.WriteEnabled() }
 
-// AppConfigured reports whether a complete GitHub App write credential is set
-// (client id, private key, and installation id). A partial App config — e.g. a
-// key without an installation id — is not "configured": the GitHub writer
-// reports it as an error rather than silently falling back. GitHub only.
+// AppConfigured reports whether GitHub App write credentials are set (a client id
+// and a private key). The installation is auto-resolved from the repo, so it's not
+// part of the credential. A partial config (one without the other) is not
+// "configured": the GitHub writer reports it as an error rather than silently
+// falling back. GitHub only.
 func (c *Config) AppConfigured() bool {
-	return c.AppClientID != "" && c.AppPrivateKey != "" && c.AppInstallationID != 0
+	return c.AppClientID != "" && c.AppPrivateKey != ""
 }
 
 // DefaultPRFilter is the PR filter applied when KONFLATE_PR_FILTER_EXPR is

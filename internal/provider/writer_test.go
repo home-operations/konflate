@@ -115,10 +115,10 @@ func TestNewGitHubWriteClient(t *testing.T) {
 		wantErr string // substring; "" means a client must be returned
 	}{
 		{"pat", &config.Config{Forge: gh, WriteToken: "tok"}, ""},
-		{"complete app", &config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: pemKey, AppInstallationID: 42}, ""},
-		{"app wins over pat", &config.Config{Forge: gh, WriteToken: "tok", AppClientID: "Iv1", AppPrivateKey: pemKey, AppInstallationID: 42}, ""},
-		{"app missing installation id", &config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: pemKey}, "KONFLATE_APP_INSTALLATION_ID"},
-		{"app malformed key", &config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: "not-a-pem", AppInstallationID: 42}, "private key"},
+		{"complete app", &config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: pemKey}, ""},
+		{"app wins over pat", &config.Config{Forge: gh, WriteToken: "tok", AppClientID: "Iv1", AppPrivateKey: pemKey}, ""},
+		{"app missing private key", &config.Config{Forge: gh, AppClientID: "Iv1"}, "KONFLATE_APP_PRIVATE_KEY"},
+		{"app malformed key", &config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: "not-a-pem"}, "private key"},
 		{"no credential", &config.Config{Forge: gh}, "write-back needs"},
 	}
 	for _, tc := range cases {
@@ -513,5 +513,23 @@ func TestForgejoWriter_Verify(t *testing.T) {
 			wr := &forgejoWriter{client: client, owner: "acme", repo: "web"}
 			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
 		})
+	}
+}
+
+func TestGitHubStatus(t *testing.T) {
+	t.Parallel()
+	if s := githubStatus(nil, nil); s != 0 {
+		t.Errorf("no response or error → %d, want 0", s)
+	}
+	// App not installed on the repo: the installation lookup 404s (github.ErrorResponse)
+	// before any request is sent, so the status is only on the error.
+	apiErr := &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}}
+	if s := githubStatus(nil, fmt.Errorf("find installation: %w", apiErr)); s != http.StatusNotFound {
+		t.Errorf("github.ErrorResponse 404 → %d, want 404", s)
+	}
+	// Token mint failure surfaces as a ghinstallation.HTTPError.
+	instErr := &ghinstallation.HTTPError{Response: &http.Response{StatusCode: http.StatusForbidden}}
+	if s := githubStatus(nil, fmt.Errorf("mint token: %w", instErr)); s != http.StatusForbidden {
+		t.Errorf("ghinstallation.HTTPError 403 → %d, want 403", s)
 	}
 }

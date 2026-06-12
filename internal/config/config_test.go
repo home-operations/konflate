@@ -52,24 +52,23 @@ func TestWriteAccessors(t *testing.T) {
 		statusChecks, prComments           bool
 		writeToken                         string
 		appClientID, appKey                string
-		appInstallID                       int64
 		wantWrite, wantSC, wantPC, wantApp bool
 	}{
-		{"off by default (read-only)", false, false, "", "", "", 0, false, false, false, false},
-		{"toggles on but no credential → still read-only", true, true, "", "", "", 0, false, false, false, false},
-		{"write PAT, no toggles → write only", false, false, "pat", "", "", 0, true, false, false, false},
-		{"PAT + status toggle → status on, comments off", true, false, "pat", "", "", 0, true, true, false, false},
-		{"PAT + comment toggle → comments on, status off", false, true, "pat", "", "", 0, true, false, true, false},
-		{"GitHub App key enables write", true, false, "", "", "-----BEGIN KEY-----", 0, true, true, false, false},
-		{"complete App → configured", true, true, "", "Iv1", "-----BEGIN KEY-----", 42, true, true, true, true},
-		{"App key without installation id → not configured", true, false, "", "Iv1", "-----BEGIN KEY-----", 0, true, true, false, false},
+		{"off by default (read-only)", false, false, "", "", "", false, false, false, false},
+		{"toggles on but no credential → still read-only", true, true, "", "", "", false, false, false, false},
+		{"write PAT, no toggles → write only", false, false, "pat", "", "", true, false, false, false},
+		{"PAT + status toggle → status on, comments off", true, false, "pat", "", "", true, true, false, false},
+		{"PAT + comment toggle → comments on, status off", false, true, "pat", "", "", true, false, true, false},
+		{"App key alone enables write but isn't a complete App", true, false, "", "", "-----BEGIN KEY-----", true, true, false, false},
+		{"complete App (client id + key) → configured", true, true, "", "Iv1", "-----BEGIN KEY-----", true, true, true, true},
+		{"App client id without key → not configured", true, false, "", "Iv1", "", false, false, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			c := &Config{
 				StatusChecks: tt.statusChecks, PRComments: tt.prComments, WriteToken: tt.writeToken,
-				AppClientID: tt.appClientID, AppPrivateKey: tt.appKey, AppInstallationID: tt.appInstallID,
+				AppClientID: tt.appClientID, AppPrivateKey: tt.appKey,
 			}
 			if got := c.WriteEnabled(); got != tt.wantWrite {
 				t.Errorf("WriteEnabled() = %v, want %v", got, tt.wantWrite)
