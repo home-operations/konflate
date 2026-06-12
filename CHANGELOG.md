@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.10](https://github.com/home-operations/konflate/compare/0.2.9...0.2.10) (2026-06-12)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.1 → v0.4.3) ([#178](https://github.com/home-operations/konflate/issues/178)) ([d8b1b7a](https://github.com/home-operations/konflate/commit/d8b1b7ac414e3aa3404852495a6713293f0fad40))
+* **deps:** update module github.com/home-operations/flate (v0.4.3 → v0.4.4) ([#181](https://github.com/home-operations/konflate/issues/181)) ([d2096b9](https://github.com/home-operations/konflate/commit/d2096b96d723de82c4cde721f644ccbba3a38054))
+
 ## [0.2.9](https://github.com/home-operations/konflate/compare/0.2.8...0.2.9) (2026-06-11)
 
 
