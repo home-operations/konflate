@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.13](https://github.com/home-operations/konflate/compare/0.2.12...0.2.13) (2026-06-12)
+
+
+### Features
+
+* **ui:** tidy the summary pane — blast radius + image changes ([#202](https://github.com/home-operations/konflate/issues/202)) ([ca6c569](https://github.com/home-operations/konflate/commit/ca6c5699a9049f105b09f7072efaad2609f10659))
+* **writeback:** configurable status check name (default "Konflate") ([#206](https://github.com/home-operations/konflate/issues/206)) ([8f52865](https://github.com/home-operations/konflate/commit/8f528653f839d63e18aa5aad5416a5f267e11a89))
+
+
+### Bug Fixes
+
+* **deps:** update kubernetes monorepo (v0.36.1 → v0.36.2) ([#200](https://github.com/home-operations/konflate/issues/200)) ([f959d27](https://github.com/home-operations/konflate/commit/f959d2743f68f245a0f47e43b86ac47e5198a34a))
+* **deps:** update tailwindcss monorepo (4.3.0 → 4.3.1) ([#201](https://github.com/home-operations/konflate/issues/201)) ([582f466](https://github.com/home-operations/konflate/commit/582f466522e09cecb57d954df1e396b884467fc7))
+* **writeback:** serialize write-backs per PR to stop duplicate comments ([#204](https://github.com/home-operations/konflate/issues/204)) ([7c58403](https://github.com/home-operations/konflate/commit/7c5840346fb37a02a206f896881a23019ea0ac2c))
+
+
+### Code Refactoring
+
+* **provider:** hand-roll GitHub App auth on jwt/v5; drop ghinstallation ([#205](https://github.com/home-operations/konflate/issues/205)) ([27bc350](https://github.com/home-operations/konflate/commit/27bc350d4eb7170bc695838e7eead56eaf09d916))
+
 ## [0.2.12](https://github.com/home-operations/konflate/compare/0.2.11...0.2.12) (2026-06-12)
 
 
