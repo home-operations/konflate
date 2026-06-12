@@ -1,20 +1,10 @@
 <script lang="ts">
   import { router } from './router.svelte';
   import { store, diffIndex, openSel } from './store.svelte';
-  import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiChevronDown, mdiChevronRight } from './icons';
   import type { BlastRadiusEntry } from './types';
 
   const d = $derived(store.diff);
-
-  // Image changes can run long on a big bump; collapse the list past this many so
-  // it doesn't push the higher-signal cautions/failures down the pane. The count
-  // stays in the header and one click expands it; shorter lists render open.
-  // Diffs remounts per PR, so imagesOpen resets with each diff.
-  const imageCollapseThreshold = 6;
-  let imagesOpen = $state(false);
-  const imagesCollapsible = $derived((d?.images?.length ?? 0) > imageCollapseThreshold);
 
   // A warning's resource ("Kind ns/name") matches the diff resource's title, so
   // a warning can deep-link to the diff it flags. Null when the resource didn't
@@ -135,36 +125,24 @@
 
         {#if d.images?.length}
           <section class="ov-section">
-            <!-- A long image list collapses behind its count (imageCollapseThreshold)
-                 so it doesn't crowd the blast radius above; a short one renders open. -->
-            {#if imagesCollapsible}
-              <button class="ov-head" aria-expanded={imagesOpen} onclick={() => (imagesOpen = !imagesOpen)}>
-                <Icon path={imagesOpen ? mdiChevronDown : mdiChevronRight} size={14} />
-                Image changes
-                <span class="ov-count">{d.images.length}</span>
-              </button>
-            {:else}
-              <h3>Image changes <span class="ov-count">{d.images.length}</span></h3>
-            {/if}
-            {#if !imagesCollapsible || imagesOpen}
-              <ul class="img-list">
-                {#each d.images as img}
-                  <li class="img-change">
-                    <!-- Name, from → to and copy share one line; ∅ = no reference on
-                         that side (image added/removed) and the tooltip spells it out. -->
-                    <div class="img-top">
-                      <span class="img-name">{img.name}</span>
-                      <span class="img-delta">
-                        <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
-                        <span class="img-arrow">→</span>
-                        <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
-                      </span>
-                      {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
-                    </div>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
+            <h3>Image changes <span class="ov-count">{d.images.length}</span></h3>
+            <ul class="img-list">
+              {#each d.images as img}
+                <li class="img-change">
+                  <!-- Name, from → to and copy share one line; ∅ = no reference on
+                       that side (image added/removed) and the tooltip spells it out. -->
+                  <div class="img-top">
+                    <span class="img-name">{img.name}</span>
+                    <span class="img-delta">
+                      <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
+                      <span class="img-arrow">→</span>
+                      <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
+                    </span>
+                    {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
+                  </div>
+                </li>
+              {/each}
+            </ul>
           </section>
         {/if}
       </div>

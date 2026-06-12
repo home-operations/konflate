@@ -938,9 +938,9 @@ test('zero counts stay neutral (impact delta) and hidden (diff header)', async (
   await expect(page.locator('[data-sel="r2"] .res-counts .add')).toHaveCount(0);
 });
 
-test('a long image list collapses behind its count and expands on click', async ({ page }) => {
-  // Past the collapse threshold the Image changes list is folded so it can't bury
-  // the higher-signal sections; the count stays visible and one click opens it.
+test('a long image list renders in full by default (no collapse)', async ({ page }) => {
+  // Image changes live in their own summary column, so even a long list renders
+  // open by default — there's no fold-behind-the-count control.
   const many = Array.from({ length: 9 }, (_, i) => ({
     name: `ghcr.io/app-${i}`,
     from: `v1.${i}.0`,
@@ -954,14 +954,8 @@ test('a long image list collapses behind its count and expands on click', async 
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/142');
 
-  const head = page.locator('.ov-head', { hasText: 'Image changes' });
-  await expect(head).toContainText('9');
-  await expect(head).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.locator('.img-list')).toHaveCount(0);
-
-  await head.click();
-  await expect(head).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.img-change')).toHaveCount(9);
+  await expect(page.locator('.ov-head')).toHaveCount(0); // no fold control
 });
 
 test('an open PR with cautions carries an amber card edge', async ({ page }) => {

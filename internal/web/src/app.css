@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .flag-link, .sum-pill, .ov-head):focus-visible {
+:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .flag-link, .sum-pill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -1233,27 +1233,6 @@ button.sum-pill:hover {
 }
 .ov-section.caution-section h3 {
   color: var(--caution);
-}
-/* A collapsible section heading (Image changes when long): the same look as the
-   h3 above, but a button with a leading chevron. */
-.ov-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin: 0 0 10px;
-  padding: 0;
-  background: none;
-  border: 0;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: 0.01em;
-  cursor: pointer;
-}
-.ov-head:hover {
-  color: var(--accent);
 }
 /* The per-section item count: a quiet muted number trailing the heading. */
 .ov-count {
