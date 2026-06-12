@@ -16,19 +16,21 @@ func konflateMarker(number int) string {
 	return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
 }
 
-// summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block,
-// for a CI job to post back onto the pull request. With admonitions=true it uses
-// GitHub-flavoured alert blocks (> [!CAUTION] / > [!WARNING]); otherwise a plain
-// bold-heading + bullet list that renders anywhere. Every forge-controlled value
-// is escaped (see mdInline/mdCode) so a crafted resource name or a render error
-// can't break the table or inject HTML into the comment.
+// summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block for
+// posting back onto the pull request, prefixed with the konflate marker (a hidden
+// HTML comment) so a poster can find and edit its own comment in place.
 func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
+	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions)
+}
+
+// summaryMarkdownBody is the marker-less summary body. With admonitions=true it
+// uses GitHub-flavoured alert blocks (> [!CAUTION] / > [!WARNING]); otherwise a
+// plain bold-heading + bullet list that renders anywhere. Every forge-controlled
+// value is escaped (see mdInline/mdCode) so a crafted resource name or a render
+// error can't break the table or inject HTML. Exposed to a custom comment
+// template as {{ .Summary }}.
+func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
 	var b strings.Builder
-	n := env.PR.Number
-	// A stable marker so a poster can find-and-edit its own comment in place
-	// instead of adding a new one on every render.
-	b.WriteString(konflateMarker(n))
-	b.WriteByte('\n')
 	b.WriteString("### konflate — summary\n")
 
 	writeLink := func() {

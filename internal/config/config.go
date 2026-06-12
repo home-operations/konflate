@@ -81,6 +81,13 @@ type Config struct {
 	// write credential with StatusChecks; the two are independent toggles.
 	PRComments bool `env:"KONFLATE_PR_COMMENTS" envDefault:"false"`
 
+	// PRCommentTemplateFile is an optional path to a Go text/template that renders
+	// the PR-comment body, replacing the built-in summary. It's parsed once at
+	// startup; the konflate marker is injected automatically, so the template need
+	// not include it. Empty uses the built-in default. See the server's
+	// commentTemplateData for the values exposed to the template.
+	PRCommentTemplateFile string `env:"KONFLATE_PR_COMMENT_TEMPLATE_FILE"`
+
 	// WriteToken is a forge token used only for write-back (commit statuses, and
 	// later PR comments) — kept separate from Token so it can be scoped to just the
 	// write permissions a read token shouldn't carry. Unset from the process

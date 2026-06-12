@@ -59,8 +59,9 @@ type Server struct {
 	// rather than a goroutine + forge ListPRs per event. Buffered, created in New.
 	relist chan struct{}
 
-	avatarKey []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
-	mergeTmpl *template.Template // renders the "copy to merge" command; nil disables it
+	avatarKey   []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
+	mergeTmpl   *template.Template // renders the "copy to merge" command; nil disables it
+	commentTmpl *template.Template // renders a custom PR-comment body; nil uses the default summary
 }
 
 // New assembles a Server. ui is the embedded UI filesystem (rooted at the
@@ -81,9 +82,10 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	s := &Server{
 		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
 		store: newStore(), hub: newHub(log), metrics: newMetrics(),
-		avatarKey: avatarKey,
-		mergeTmpl: newMergeTemplate(cfg, log),
-		relist:    make(chan struct{}, 1),
+		avatarKey:   avatarKey,
+		mergeTmpl:   newMergeTemplate(cfg, log),
+		commentTmpl: newCommentTemplate(cfg, log),
+		relist:      make(chan struct{}, 1),
 	}
 
 	// Durability: persist rendered diffs under the (operator-persisted) cache
@@ -166,7 +168,7 @@ func (s *Server) postComment(pr api.PR, st api.JobStatus) {
 	if !ok || env.Diff == nil {
 		return
 	}
-	body := summaryMarkdown(env, s.reviewURL(pr.Number), s.cfg.Forge.Kind == config.ForgeGitHub)
+	body := s.commentBody(env)
 	marker := konflateMarker(pr.Number)
 	s.writeBack("comment", pr.Number, func(ctx context.Context) error {
 		return s.writer.UpsertComment(ctx, pr, marker, body)
