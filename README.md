@@ -283,6 +283,12 @@ konflate logs it but never blocks or fails a render on it. Both writes are
 idempotent (the status is overwritten; the comment is found by its marker and
 edited), so a retry can't double-post.
 
+konflate **checks the write credential once at startup**. A permanent rejection
+(a 401/403/404 — a bad token, missing permission, or a wrong GitHub App
+installation / unreachable repo) disables write-back with a single clear log line
+rather than warning on every render; a transient failure leaves it enabled to
+recover on a later render.
+
 **This does not make konflate writable from the outside.** Its HTTP surface
 stays read-only — no request, authenticated or not, can trigger a write. The
 status and comment are posted only by konflate's own render loop, using a

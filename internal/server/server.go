@@ -115,7 +115,29 @@ const (
 	forgeWriteTimeout  = 30 * time.Second // budget for one write-back, all attempts
 	forgeWriteAttempts = 3                // tries before giving up
 	forgeWriteBackoff  = time.Second      // base backoff, doubled each retry (1s, 2s, …)
+	forgeVerifyTimeout = 10 * time.Second // startup credential check; don't block boot longer
 )
+
+// verifyWriteBack checks the write credential reaches the forge before any render
+// posts. A permanent rejection (401/403/404 — bad token, missing permission, a
+// wrong GitHub App installation, or an unreachable repo) disables write-back with
+// a single error; a transient failure is logged and write-back left on to recover.
+// Called once from Run before the queue starts, so flipping s.writer is race-free.
+func (s *Server) verifyWriteBack(ctx context.Context) {
+	vctx, cancel := context.WithTimeout(ctx, forgeVerifyTimeout)
+	defer cancel()
+	switch err := s.writer.Verify(vctx); {
+	case err == nil:
+		s.log.Info("write-back credential verified")
+	case errors.Is(err, provider.ErrWriteAuthRejected):
+		s.log.Error("write-back disabled: the forge rejected the write credential — "+
+			"check the write token / GitHub App (client id, key, installation) and that it can write to this repo",
+			"error", err)
+		s.writer = nil
+	default:
+		s.log.Warn("could not verify the write-back credential; leaving it enabled to retry on renders", "error", err)
+	}
+}
 
 // reportOutcome is the queue's terminal-outcome hook: it writes konflate's result
 // back to the forge — a commit status and/or a summary comment, per the enabled
@@ -330,11 +352,20 @@ func (s *Server) Run(ctx context.Context) error {
 	g, gctx := errgroup.WithContext(ctx)
 	s.runCtx = gctx
 
-	// Wire write-back into the queue only when something is enabled and a Writer
-	// was built; otherwise report stays nil and the queue skips it — konflate
+	// Verify the write credential once, before any render can post: a permanent
+	// rejection disables write-back with one clear log line instead of a per-render
+	// warning storm; a transient failure leaves it enabled to recover on a render.
+	// Runs before the queue/goroutines start, so flipping s.writer is race-free.
+	wantWriteBack := s.cfg.StatusChecksEnabled() || s.cfg.PRCommentsEnabled()
+	if s.writer != nil && wantWriteBack {
+		s.verifyWriteBack(gctx)
+	}
+
+	// Wire write-back into the queue only when something is enabled and a Writer is
+	// still configured; otherwise report stays nil and the queue skips it — konflate
 	// posts nothing to the forge (the read-only default).
 	var report reportFunc
-	if s.writer != nil && (s.cfg.StatusChecksEnabled() || s.cfg.PRCommentsEnabled()) {
+	if s.writer != nil && wantWriteBack {
 		report = s.reportOutcome
 	}
 	s.queue = newQueue(

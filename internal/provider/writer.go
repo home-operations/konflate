@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -45,6 +46,29 @@ type Writer interface {
 	// UpsertComment posts body as a PR comment, or edits konflate's existing
 	// comment in place — the one whose body contains marker — if there is one.
 	UpsertComment(ctx context.Context, pr api.PR, marker, body string) error
+	// Verify checks the credential can reach the repo, exercising the full auth
+	// path (for a GitHub App, minting the installation token). It returns nil on
+	// success, an ErrWriteAuthRejected-wrapped error for a permanent 401/403/404,
+	// or a plain (transient) error otherwise.
+	Verify(ctx context.Context) error
+}
+
+// ErrWriteAuthRejected marks a write-back credential the forge rejected in a way
+// that won't fix itself — a 401/403/404 (bad token, missing permission, a wrong
+// GitHub App installation, or an unreachable repo), as opposed to a transient 5xx
+// or network error. The server disables write-back on it and keeps trying on
+// transient failures.
+var ErrWriteAuthRejected = errors.New("provider: write-back credential rejected")
+
+// rejectedIf wraps err as ErrWriteAuthRejected for a permanent auth status
+// (401/403/404); any other status (or 0/unknown) stays a plain transient error.
+func rejectedIf(status int, err error) error {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return fmt.Errorf("%w (HTTP %d): %w", ErrWriteAuthRejected, status, err)
+	default:
+		return err
+	}
 }
 
 // NewWriter builds the forge Writer from the configured write credential, or a
@@ -203,6 +227,24 @@ func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 	return nil
 }
 
+func (w *githubWriter) Verify(ctx context.Context) error {
+	_, resp, err := w.client.Repositories.Get(ctx, w.owner, w.repo)
+	if err == nil {
+		return nil
+	}
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+	}
+	// A GitHub App mints its installation token on this first call; if that mint
+	// fails the github.Response is nil and the status is on the ghinstallation error.
+	var instErr *ghinstallation.HTTPError
+	if status == 0 && errors.As(err, &instErr) && instErr.Response != nil {
+		status = instErr.Response.StatusCode
+	}
+	return rejectedIf(status, fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
+}
+
 // --- Forgejo ---
 
 type forgejoWriter struct {
@@ -266,6 +308,18 @@ func (w *forgejoWriter) UpsertComment(_ context.Context, pr api.PR, marker, body
 	return nil
 }
 
+func (w *forgejoWriter) Verify(_ context.Context) error {
+	_, resp, err := w.client.GetRepo(w.owner, w.repo)
+	if err == nil {
+		return nil
+	}
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+	}
+	return rejectedIf(status, fmt.Errorf("forgejo: verify %s/%s: %w", w.owner, w.repo, err))
+}
+
 // --- GitLab ---
 
 type gitlabWriter struct {
@@ -325,6 +379,18 @@ func (w *gitlabWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 		return fmt.Errorf("gitlab: create note !%d: %w", pr.Number, err)
 	}
 	return nil
+}
+
+func (w *gitlabWriter) Verify(ctx context.Context) error {
+	_, resp, err := w.client.Projects.GetProject(w.project, nil, gitlab.WithContext(ctx))
+	if err == nil {
+		return nil
+	}
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+	}
+	return rejectedIf(status, fmt.Errorf("gitlab: verify %s: %w", w.project, err))
 }
 
 // gitlabBuildState maps konflate's state to GitLab's pipeline build state
