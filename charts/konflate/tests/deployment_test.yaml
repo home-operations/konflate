@@ -226,6 +226,11 @@ tests:
           any: true
           content:
             name: KONFLATE_APP_CLIENT_ID
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_STATUS_CHECK_NAME
 
   - it: emits the write-back env when status checks and App credentials are configured
     set:
@@ -258,6 +263,16 @@ tests:
           content:
             name: KONFLATE_PR_COMMENTS
             value: "true"
+
+  - it: emits KONFLATE_STATUS_CHECK_NAME when statusCheckName is set
+    set:
+      config.statusCheckName: Konflate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_STATUS_CHECK_NAME
+            value: Konflate
 
   - it: mounts the comment template and points its env at the mount when prCommentTemplate is set
     set:

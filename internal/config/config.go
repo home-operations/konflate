@@ -75,6 +75,12 @@ type Config struct {
 	// StatusChecksEnabled).
 	StatusChecks bool `env:"KONFLATE_STATUS_CHECKS" envDefault:"false"`
 
+	// StatusCheckName is the name konflate's commit status appears under on the PR
+	// (GitHub calls this the status "context", GitLab the "name"). Empty falls back
+	// to DefaultStatusCheckName. Configurable so an operator can match the status-check
+	// name a branch-protection rule requires.
+	StatusCheckName string `env:"KONFLATE_STATUS_CHECK_NAME"`
+
 	// PRComments, when true AND a write credential is set, makes konflate post (and
 	// then update in place, keyed by a hidden marker) a PR comment carrying the
 	// rendered summary on each successful render (see PRCommentsEnabled). Shares the
@@ -343,6 +349,10 @@ func (c *Config) AppConfigured() bool {
 // default needn't mention them and editing the filter can't enable forks.
 const DefaultPRFilter = "true"
 
+// DefaultStatusCheckName is the name konflate's commit status appears under on the PR
+// when KONFLATE_STATUS_CHECK_NAME is empty.
+const DefaultStatusCheckName = "Konflate"
+
 // Load parses all KONFLATE_* environment variables, validates required fields,
 // and returns a ready-to-use Config. It is the only supported way to construct
 // a Config — direct struct initialization bypasses the forge URI parser and
@@ -408,6 +418,9 @@ func Load() (*Config, error) {
 	// as-is: the refresh loop reads it as "disabled" (inbound triggers only).
 	if cfg.RefreshInterval > 0 && cfg.RefreshInterval < minRefreshInterval {
 		cfg.RefreshInterval = minRefreshInterval
+	}
+	if cfg.StatusCheckName == "" {
+		cfg.StatusCheckName = DefaultStatusCheckName
 	}
 
 	return cfg, nil
