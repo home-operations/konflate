@@ -383,9 +383,15 @@ priorityClassName: ""
 podDisruptionBudget:
   # -- Create a PodDisruptionBudget. ⚠️ With a single replica, the default `minAvailable: 1` makes a node drain block until you delete the pod yourself; set `maxUnavailable: 1` instead to let drains proceed. Off by default.
   enabled: false
-  # -- Minimum pods that must stay available. Used unless `maxUnavailable` is set.
+  # -- Minimum pods that must stay available, as a count or percentage. Used unless `maxUnavailable` is set.
+  # @schema
+  # type: [integer, string]
+  # @schema
   minAvailable: 1
-  # -- Maximum pods that may be unavailable; takes precedence over `minAvailable` when set.
+  # -- Maximum pods that may be unavailable, as a count or percentage; takes precedence over `minAvailable` when set.
+  # @schema
+  # type: [integer, string]
+  # @schema
   maxUnavailable: ""
 
 # -- Additional volumes on the Deployment.

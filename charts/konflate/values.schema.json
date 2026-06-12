@@ -632,15 +632,23 @@
         },
         "maxUnavailable": {
           "default": "",
-          "description": "Maximum pods that may be unavailable; takes precedence over `minAvailable` when set.",
+          "description": "Maximum pods that may be unavailable, as a count or percentage; takes precedence over `minAvailable` when set.",
+          "required": [],
           "title": "maxUnavailable",
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "minAvailable": {
           "default": 1,
-          "description": "Minimum pods that must stay available. Used unless `maxUnavailable` is set.",
+          "description": "Minimum pods that must stay available, as a count or percentage. Used unless `maxUnavailable` is set.",
+          "required": [],
           "title": "minAvailable",
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       },
       "required": [],
