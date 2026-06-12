@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,4 +91,63 @@ func TestRetryWrite(t *testing.T) {
 			t.Fatalf("calls=%d err=%v; want a single try and an error (no long sleep)", calls, err)
 		}
 	})
+}
+
+// TestWriteBack_SerializesPerPR is the duplicate-comment guard: two write-backs
+// for the same PR (the queue can finish its in-flight and trailing renders
+// back-to-back, each firing one) must run one at a time, so the later one sees
+// and edits the earlier one's comment instead of racing into a second create.
+func TestWriteBack_SerializesPerPR(t *testing.T) {
+	t.Parallel()
+	srv := &Server{runCtx: context.Background(), log: discardLog()}
+	var inFlight, maxConc int32
+	var wg sync.WaitGroup
+	work := func(context.Context) error {
+		cur := atomic.AddInt32(&inFlight, 1)
+		for {
+			m := atomic.LoadInt32(&maxConc)
+			if cur <= m || atomic.CompareAndSwapInt32(&maxConc, m, cur) {
+				break
+			}
+		}
+		time.Sleep(3 * time.Millisecond) // widen the window a racing write would overlap in
+		atomic.AddInt32(&inFlight, -1)
+		wg.Done()
+		return nil
+	}
+	wg.Add(2)
+	srv.writeBack("comment", 5, work)
+	srv.writeBack("comment", 5, work)
+	wg.Wait()
+	if maxConc != 1 {
+		t.Fatalf("same-PR write-backs overlapped (max concurrency %d), want serialized (1)", maxConc)
+	}
+}
+
+func TestKeyedMutex_DistinctKeysDoNotBlock(t *testing.T) {
+	t.Parallel()
+	var km keyedMutex
+	unlock1 := km.lock(1)
+	defer unlock1()
+	done := make(chan struct{})
+	go func() {
+		km.lock(2)() // a different key must not wait on key 1
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lock on a distinct key blocked while another key was held")
+	}
+}
+
+func TestKeyedMutex_DropsIdleEntries(t *testing.T) {
+	t.Parallel()
+	var km keyedMutex
+	km.lock(7)() // lock then immediately unlock
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	if n := len(km.m); n != 0 {
+		t.Fatalf("idle key left %d map entries, want 0 (no unbounded growth)", n)
+	}
 }
