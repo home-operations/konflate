@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.14](https://github.com/home-operations/konflate/compare/0.2.13...0.2.14) (2026-06-12)
+
+
+### Bug Fixes
+
+* **writeback:** skip the comment edit when the body is unchanged ([#207](https://github.com/home-operations/konflate/issues/207)) ([b276060](https://github.com/home-operations/konflate/commit/b27606035715abf72035d581df5acef0cada3b7f))
+
 ## [0.2.13](https://github.com/home-operations/konflate/compare/0.2.12...0.2.13) (2026-06-12)
 
 
