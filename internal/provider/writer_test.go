@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -415,5 +416,102 @@ func TestGitlabBuildState(t *testing.T) {
 		if got := gitlabBuildState(in); got != want {
 			t.Errorf("gitlabBuildState(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// statusServer answers every request with the given HTTP status and an empty JSON
+// body — enough to exercise each writer's Verify (a repo/project GET).
+func statusServer(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestRejectedIf(t *testing.T) {
+	t.Parallel()
+	base := errors.New("boom")
+	for _, s := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound} {
+		if err := rejectedIf(s, base); !errors.Is(err, ErrWriteAuthRejected) || !errors.Is(err, base) {
+			t.Errorf("status %d: want ErrWriteAuthRejected wrapping the cause, got %v", s, err)
+		}
+	}
+	for _, s := range []int{0, 200, 429, 500, 503} {
+		if err := rejectedIf(s, base); errors.Is(err, ErrWriteAuthRejected) || !errors.Is(err, base) {
+			t.Errorf("status %d: want a plain (transient) error, got %v", s, err)
+		}
+	}
+}
+
+// verifyCases is the shared status→result table for every forge's Verify.
+var verifyCases = []struct {
+	name             string
+	status           int
+	wantErr, wantRej bool
+}{
+	{"ok", http.StatusOK, false, false},
+	{"not found", http.StatusNotFound, true, true},
+	{"forbidden", http.StatusForbidden, true, true},
+	{"server error", http.StatusInternalServerError, true, false},
+}
+
+func checkVerify(t *testing.T, err error, wantErr, wantRej bool) {
+	t.Helper()
+	if wantErr != (err != nil) {
+		t.Fatalf("err = %v, wantErr = %v", err, wantErr)
+	}
+	if got := errors.Is(err, ErrWriteAuthRejected); got != wantRej {
+		t.Errorf("ErrWriteAuthRejected = %v, want %v (err = %v)", got, wantRej, err)
+	}
+}
+
+func TestGitHubWriter_Verify(t *testing.T) {
+	t.Parallel()
+	for _, tc := range verifyCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := statusServer(t, tc.status)
+			wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
+			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+		})
+	}
+}
+
+func TestGitlabWriter_Verify(t *testing.T) {
+	t.Parallel()
+	for _, tc := range verifyCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := statusServer(t, tc.status)
+			client, err := gitlab.NewClient("tok", gitlab.WithBaseURL(srv.URL))
+			if err != nil {
+				t.Fatalf("gitlab.NewClient: %v", err)
+			}
+			wr := &gitlabWriter{client: client, project: "acme/web"}
+			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+		})
+	}
+}
+
+func TestForgejoWriter_Verify(t *testing.T) {
+	t.Parallel()
+	for _, tc := range verifyCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := statusServer(t, tc.status)
+			client, err := forgejo.NewClient(srv.URL,
+				forgejo.SetForgejoVersion(forgejo.Version()), forgejo.SetToken("tok"))
+			if err != nil {
+				t.Fatalf("forgejo.NewClient: %v", err)
+			}
+			wr := &forgejoWriter{client: client, owner: "acme", repo: "web"}
+			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+		})
 	}
 }
