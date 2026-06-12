@@ -238,9 +238,9 @@ func (w *githubWriter) Verify(ctx context.Context) error {
 	}
 	// A GitHub App mints its installation token on this first call; if that mint
 	// fails the github.Response is nil and the status is on the ghinstallation error.
-	var he *ghinstallation.HTTPError
-	if status == 0 && errors.As(err, &he) && he.Response != nil {
-		status = he.Response.StatusCode
+	var instErr *ghinstallation.HTTPError
+	if status == 0 && errors.As(err, &instErr) && instErr.Response != nil {
+		status = instErr.Response.StatusCode
 	}
 	return rejectedIf(status, fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
 }
