@@ -63,28 +63,8 @@
      parent unmounts this view in the same flush, but guard rather than assert. -->
 {#if d}
 <div class="overview">
-  <div class="impact">
-    <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
-    <span class="impact-pill"><strong>{d.impact.parents}</strong> parents</span>
-    <span class="impact-pill"><strong>{d.impact.crds}</strong> CRDs</span>
-    {#if d.impact.namespaces?.length}
-      <span class="impact-pill"
-        ><strong>{d.impact.namespaces.length}</strong>
-        {d.impact.namespaces.length === 1 ? 'namespace' : 'namespaces'}</span
-      >
-    {/if}
-    <!-- The +added ~changed −removed delta lives in the sticky summary header
-         (see Diffs.svelte) so "what changed" stays visible; this row carries the
-         structural scope. -->
-    <!-- The diff was capped: counts above are the true totals, but this many
-         resources were not rendered. The review here is partial. -->
-    {#if d.truncated}
-      <span class="impact-pill trunc" title="This diff exceeded the render cap; {d.truncated} resource diffs were not rendered."
-        >{d.truncated} not shown</span
-      >
-    {/if}
-  </div>
-
+  <!-- The impact summary (scope counts + change delta) now rides in the sticky
+       summary header (see Diffs.svelte); this content is just the sections. -->
   <!-- Two columns on a wide pane (see .ov-grid). Flags first — render failures,
        then cautions — then the informational blast radius and image list, so the
        things a reviewer must act on lead and don't get buried. -->

@@ -1109,11 +1109,16 @@ button.sum-pill:hover {
 .overview {
   padding: 14px;
 }
+/* The impact summary now rides in the sticky summary header (see Diffs.svelte),
+   left of the merge command — so it centers in the bar with no bottom margin and
+   can shrink/wrap when the bar is tight. The class name is unchanged: it's the
+   marker other views wait on. */
 .impact {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 14px;
+  min-width: 0;
 }
 .impact-pill {
   border: 1px solid var(--border);
