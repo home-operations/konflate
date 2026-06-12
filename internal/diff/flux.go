@@ -2,7 +2,7 @@ package diff
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -139,7 +139,7 @@ func aggregateParentWarnings(counts map[string]int, rule string, detail func(par
 	for l := range counts {
 		labels = append(labels, l)
 	}
-	sort.Strings(labels)
+	slices.Sort(labels)
 	out := make([]api.Warning, 0, len(labels))
 	for _, l := range labels {
 		out = append(out, api.Warning{

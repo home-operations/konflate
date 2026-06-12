@@ -143,11 +143,11 @@ func changedSpecKeysOutside(c Change, mutable map[string]bool) []string {
 // changedFields returns "spec.<key>" for each named spec key whose value
 // differs between the two sides, in the given order.
 func changedFields(c Change, keys ...string) []string {
+	oldSpec, _ := nestedMap(c.Old, "spec")
+	newSpec, _ := nestedMap(c.New, "spec")
 	var out []string
 	for _, k := range keys {
-		oldV, _ := nestedMap(c.Old, "spec")
-		newV, _ := nestedMap(c.New, "spec")
-		if !jsonEqual(oldV[k], newV[k]) {
+		if !jsonEqual(oldSpec[k], newSpec[k]) {
 			out = append(out, "spec."+k)
 		}
 	}

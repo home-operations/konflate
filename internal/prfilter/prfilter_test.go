@@ -120,3 +120,31 @@ func TestSource(t *testing.T) {
 		t.Fatalf("Source() = %q, want %q", p.Source(), expr)
 	}
 }
+
+func TestEval_CostBounded(t *testing.T) {
+	t.Parallel()
+	// The cel.CostLimit must bound a pathological expression rather than let it run
+	// unbounded. A quadratic comprehension over a large label list blows the budget.
+	labels := make([]any, 1500)
+	for i := range labels {
+		labels[i] = map[string]any{"name": "x", "color": "0"}
+	}
+	pr := sampleVars(map[string]any{"labels": labels})
+
+	heavy, err := Compile(`pr.labels.all(a, pr.labels.all(b, a.name == b.name))`)
+	if err != nil {
+		t.Fatalf("Compile heavy: %v", err)
+	}
+	if _, err := heavy.Eval(pr); err == nil {
+		t.Fatal("a quadratic expression over a large label list should exceed the cost limit and error")
+	}
+
+	// A cheap expression over the same input stays well under the limit.
+	cheap, err := Compile("!pr.draft")
+	if err != nil {
+		t.Fatalf("Compile cheap: %v", err)
+	}
+	if _, err := cheap.Eval(pr); err != nil {
+		t.Fatalf("cheap expression must not hit the cost limit: %v", err)
+	}
+}

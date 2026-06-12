@@ -23,9 +23,10 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions)
 }
 
-// summaryMarkdownBody is the marker-less summary body. With admonitions=true it
-// uses GitHub-flavoured alert blocks (> [!CAUTION] / > [!WARNING]); otherwise a
-// plain bold-heading + bullet list that renders anywhere. Every forge-controlled
+// summaryMarkdownBody is the marker-less summary body. It opens with an H3 title
+// (### konflate — summary); with admonitions=true the sections use GitHub-flavoured
+// alert blocks (> [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
+// lists that render anywhere. Every forge-controlled
 // value is escaped (see mdInline/mdCode) so a crafted resource name or a render
 // error can't break the table or inject HTML. Exposed to a custom comment
 // template as {{ .Summary }}.

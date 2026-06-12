@@ -374,3 +374,35 @@ func TestRepoKey(t *testing.T) {
 		t.Errorf("key %q contains path-unsafe characters", a)
 	}
 }
+
+// TestLoad_PartialAppCredential pins the fail-loud check: a GitHub App write
+// credential needs both halves, so a lone client id (which would otherwise leave
+// write-back silently disabled) or a lone key must error at startup.
+func TestLoad_PartialAppCredential(t *testing.T) {
+	t.Run("client id without key errors", func(t *testing.T) {
+		t.Setenv("KONFLATE_REPO", "github://owner/repo")
+		t.Setenv("KONFLATE_APP_CLIENT_ID", "Iv1")
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "only one is set") {
+			t.Fatalf("Load with a lone client id = %v, want an 'only one is set' error", err)
+		}
+	})
+	t.Run("key without client id errors", func(t *testing.T) {
+		t.Setenv("KONFLATE_REPO", "github://owner/repo")
+		t.Setenv("KONFLATE_APP_PRIVATE_KEY", "-----BEGIN KEY-----")
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "only one is set") {
+			t.Fatalf("Load with a lone key = %v, want an 'only one is set' error", err)
+		}
+	})
+	t.Run("both halves is valid and configured", func(t *testing.T) {
+		t.Setenv("KONFLATE_REPO", "github://owner/repo")
+		t.Setenv("KONFLATE_APP_CLIENT_ID", "Iv1")
+		t.Setenv("KONFLATE_APP_PRIVATE_KEY", "-----BEGIN KEY-----")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load with both halves: %v", err)
+		}
+		if !cfg.AppConfigured() {
+			t.Error("both halves set should report AppConfigured")
+		}
+	})
+}
