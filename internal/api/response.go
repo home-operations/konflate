@@ -28,6 +28,11 @@ type PRStatus struct {
 	// Signals is a compact summary of the rendered diff, populated once the job
 	// is ready, so the PR list can show triage badges without loading each diff.
 	Signals *Signals `json:"signals,omitempty"`
+	// Checks is the rolled-up CI status of the PR head (the forge's red/amber/
+	// green), refreshed on the poll and on status webhooks — independent of the
+	// diff job. Nil when no checks were reported or the fetch failed, so the list
+	// shows no indicator rather than a misleading one.
+	Checks *CheckRollup `json:"checks,omitempty"`
 	// MergeCommand is the rendered "copy to merge" CLI command, set only for open
 	// PRs when the feature is enabled. konflate never runs it — the reviewer
 	// pastes it into their own shell.

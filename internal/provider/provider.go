@@ -18,6 +18,10 @@ import (
 // (GitLab uses "opened"). The normalized api.PR.Open flag is derived from it.
 const stateOpen = "open"
 
+// stateSuccess is the "success" status string all three forges use in their
+// commit-status and check-run payloads (see each provider's Checks).
+const stateSuccess = "success"
+
 // ErrPRNotFound is returned by GetPR when the forge reports the pull/merge
 // request does not exist (HTTP 404) — it was deleted, not merged or closed. The
 // server reaps such a PR instead of retrying the lookup every refresh.
@@ -29,6 +33,10 @@ type Provider interface {
 	ListPRs(ctx context.Context) ([]api.PR, error)
 	// GetPR returns a single PR (head ref + SHA, base branch, metadata) by number.
 	GetPR(ctx context.Context, number int) (api.PR, error)
+	// Checks returns the rolled-up CI status of the PR's head commit — the
+	// combined commit statuses and/or check runs the forge shows as red/amber/
+	// green. A head with no checks yields a CheckNone rollup (no error).
+	Checks(ctx context.Context, pr api.PR) (api.CheckRollup, error)
 }
 
 // New builds the provider for the configured forge.

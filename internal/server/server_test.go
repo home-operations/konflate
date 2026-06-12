@@ -37,7 +37,14 @@ type fakeProvider struct {
 	details  map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
 	notFound map[int]bool   // numbers GetPR reports as deleted (provider.ErrPRNotFound)
 	listErr  error
-	listHook func() // optional seam invoked at the start of each ListPRs (set before use)
+	listHook func()                  // optional seam invoked at the start of each ListPRs (set before use)
+	checks   map[int]api.CheckRollup // per-PR CI rollup Checks returns (zero value → none)
+}
+
+func (f *fakeProvider) Checks(_ context.Context, pr api.PR) (api.CheckRollup, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.checks[pr.Number], nil
 }
 
 func (f *fakeProvider) ListPRs(context.Context) ([]api.PR, error) {

@@ -77,6 +77,36 @@ func (p *forgejoProvider) GetPR(ctx context.Context, number int) (api.PR, error)
 	return forgejoToPR(pr), nil
 }
 
+// Checks rolls up the head commit's combined commit status. Forgejo/Gitea report
+// CI — including Forgejo Actions — as commit statuses, so the combined status is
+// the whole picture. "warning" is non-blocking and counts as passed; a 404 means
+// the commit simply has no statuses.
+func (p *forgejoProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup, error) {
+	_ = ctx // see ListPRs: the Forgejo SDK can't take a context.
+	if pr.HeadSHA == "" {
+		return api.CheckRollup{}, nil
+	}
+	cs, resp, err := p.client.GetCombinedStatus(p.owner, p.repo, pr.HeadSHA)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return api.CheckRollup{}, nil
+		}
+		return api.CheckRollup{}, fmt.Errorf("forgejo: combined status #%d: %w", pr.Number, err)
+	}
+	var passed, failed, pending int
+	for _, s := range cs.Statuses {
+		switch string(s.State) {
+		case stateSuccess, "warning":
+			passed++
+		case "pending":
+			pending++
+		default: // error, failure
+			failed++
+		}
+	}
+	return api.Rollup(passed, failed, pending), nil
+}
+
 func forgejoToPR(pr *forgejo.PullRequest) api.PR {
 	var author, avatar string
 	if pr.Poster != nil {

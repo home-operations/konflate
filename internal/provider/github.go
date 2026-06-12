@@ -68,6 +68,61 @@ func (p *githubProvider) GetPR(ctx context.Context, number int) (api.PR, error) 
 	return githubToPR(pr), nil
 }
 
+// Checks rolls up the head commit's CI: legacy commit statuses (GetCombinedStatus)
+// merged with check runs (GitHub Actions and other Checks-API apps report only as
+// check runs), since GitHub's own PR view combines the two. One page of each (100)
+// covers any realistic PR; nothing here paginates further.
+func (p *githubProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup, error) {
+	if pr.HeadSHA == "" {
+		return api.CheckRollup{}, nil
+	}
+	var passed, failed, pending int
+
+	cs, _, err := p.client.Repositories.GetCombinedStatus(ctx, p.owner, p.repo, pr.HeadSHA, &github.ListOptions{PerPage: 100})
+	if err != nil {
+		return api.CheckRollup{}, fmt.Errorf("github: combined status #%d: %w", pr.Number, err)
+	}
+	for _, s := range cs.Statuses {
+		switch s.GetState() {
+		case stateSuccess:
+			passed++
+		case "pending":
+			pending++
+		default: // failure, error
+			failed++
+		}
+	}
+
+	runs, _, err := p.client.Checks.ListCheckRunsForRef(ctx, p.owner, p.repo, pr.HeadSHA,
+		&github.ListCheckRunsOptions{ListOptions: github.ListOptions{PerPage: 100}})
+	if err != nil {
+		return api.CheckRollup{}, fmt.Errorf("github: check runs #%d: %w", pr.Number, err)
+	}
+	for _, r := range runs.CheckRuns {
+		switch {
+		case r.GetStatus() != "completed":
+			pending++
+		case isPassingConclusion(r.GetConclusion()):
+			passed++
+		default:
+			failed++
+		}
+	}
+	return api.Rollup(passed, failed, pending), nil
+}
+
+// isPassingConclusion reports whether a completed check run's conclusion counts
+// as green. neutral and skipped are non-blocking; failure, timed_out, cancelled,
+// action_required, startup_failure and stale all count as a failure.
+func isPassingConclusion(conclusion string) bool {
+	switch conclusion {
+	case stateSuccess, "neutral", "skipped":
+		return true
+	default:
+		return false
+	}
+}
+
 func githubToPR(pr *github.PullRequest) api.PR {
 	labels := make([]api.Label, 0, len(pr.Labels))
 	for _, l := range pr.Labels {
