@@ -1636,6 +1636,11 @@ tr.search-hit > td {
   background: var(--panel);
   z-index: 1;
 }
+/* The summary header has no title (the rail labels it) — its only content is the
+   copy-to-merge command, kept on the right where it sat before. */
+.summary-header {
+  justify-content: flex-end;
+}
 .res-title {
   /* The diff body (table.diff) carries the only monospace; this header is a
      resource identifier shown as a label, so it stays in the UI (sans) font —

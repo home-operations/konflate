@@ -234,15 +234,12 @@
     </div>
     <div class="diff-pane" bind:this={pane} style="--stuck: {stuckPx}px">
       <section class="diff-section" data-sel="summary">
-        <!-- Same sticky container as Diff.svelte's res-header (keep the two in
-             step), but just a "Summary" label — no status chip. The summary is
-             the overview, not a resource with a status, and a chip beside the
-             word read like a pair of tabs. -->
-        <div class="res-header">
-          <span class="res-title">Summary</span>
-          <!-- The "copy to merge" command rides on the right of the Summary's
-               header instead of its own full-width strip — one fewer bar, and it
-               fills the otherwise-empty right side. Open PRs with the feature on. -->
+        <!-- The rail's tree node already labels this section "Summary"; a second
+             "Summary" here read as a duplicate, so the header carries no title of
+             its own. It still mirrors Diff.svelte's res-header (sticky, same
+             height) to keep the level-bar aligned with the rail, and hosts the
+             copy-to-merge command on the right for open PRs with the feature on. -->
+        <div class="res-header summary-header">
           {#if store.diffMergeCommand}
             <MergeCommand command={store.diffMergeCommand} />
           {/if}
