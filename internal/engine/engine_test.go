@@ -340,6 +340,71 @@ func TestImageChanges_SameRepoMultipleTags(t *testing.T) {
 	}
 }
 
+// TestImageChanges_RenameMergesTransition: a chart restructure removes the old
+// resource (pure removal of the image) and adds a differently-named one (pure
+// addition). The two halves must reconcile into the single real version bump the
+// cluster undergoes, not read as one image vanishing and another appearing.
+func TestImageChanges_RenameMergesTransition(t *testing.T) {
+	t.Parallel()
+	changes := []diff.Change{
+		{Status: "removed", Kind: "Deployment", Namespace: "rook", Name: "old-provisioner",
+			Old: deploy("rook", "old-provisioner", "quay.io/cephcsi/cephcsi:v3.16.2"), New: nil},
+		{Status: "added", Kind: "Deployment", Namespace: "rook", Name: "new-provisioner",
+			Old: nil, New: deploy("rook", "new-provisioner", "quay.io/cephcsi/cephcsi:v3.17.0")},
+	}
+	got := imageChanges(changes)
+	if len(got) != 1 {
+		t.Fatalf("got %d image changes, want 1 merged transition: %+v", len(got), got)
+	}
+	c := got[0]
+	if c.Name != "quay.io/cephcsi/cephcsi" || c.From != "v3.16.2" || c.To != "v3.17.0" {
+		t.Errorf("got %+v, want cephcsi v3.16.2→v3.17.0 (the real bump)", c)
+	}
+	if len(c.Refs) != 2 {
+		t.Errorf("merged refs should union both resources, got %v", c.Refs)
+	}
+}
+
+// TestImageChanges_RelocationDropped: an image at the same version on both sides,
+// split across a rename, is a pure relocation — the running image is unchanged,
+// so it must not appear in the Image changes list at all.
+func TestImageChanges_RelocationDropped(t *testing.T) {
+	t.Parallel()
+	changes := []diff.Change{
+		{Status: "removed", Kind: "Deployment", Namespace: "rook", Name: "old",
+			Old: deploy("rook", "old", "registry.k8s.io/sig-storage/csi-resizer:v2.1.0"), New: nil},
+		{Status: "added", Kind: "Deployment", Namespace: "rook", Name: "new",
+			Old: nil, New: deploy("rook", "new", "registry.k8s.io/sig-storage/csi-resizer:v2.1.0")},
+	}
+	if got := imageChanges(changes); len(got) != 0 {
+		t.Fatalf("a same-version relocation is not an image change, got %+v", got)
+	}
+}
+
+// TestImageChanges_AmbiguousNotMerged: two removals and one addition of the same
+// repo are ambiguous to pair, so they stay discrete — reconciliation must not
+// fabricate a transition, mirroring TestImageChanges_SameRepoMultipleTags.
+func TestImageChanges_AmbiguousNotMerged(t *testing.T) {
+	t.Parallel()
+	changes := []diff.Change{
+		{Status: "removed", Kind: "Deployment", Namespace: "a", Name: "r1",
+			Old: deploy("a", "r1", "reg/x:1.0"), New: nil},
+		{Status: "removed", Kind: "Deployment", Namespace: "a", Name: "r2",
+			Old: deploy("a", "r2", "reg/x:1.1"), New: nil},
+		{Status: "added", Kind: "Deployment", Namespace: "a", Name: "n1",
+			Old: nil, New: deploy("a", "n1", "reg/x:2.0")},
+	}
+	got := imageChanges(changes)
+	if len(got) != 3 {
+		t.Fatalf("ambiguous repo must stay discrete, got %d: %+v", len(got), got)
+	}
+	for _, c := range got {
+		if c.From != "" && c.To != "" {
+			t.Errorf("no merged transition expected for an ambiguous repo, got %+v", c)
+		}
+	}
+}
+
 // splitImageRef's behavior now lives in flate's image.Split (tested in
 // flate); konflate's collectImages composes image.Extract + image.Split,
 // exercised end to end by TestImageChanges above.
