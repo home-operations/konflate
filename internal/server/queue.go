@@ -35,8 +35,11 @@ type queue struct {
 	store     *store
 	notify    func(api.Event)
 	reconcile func(number int) // called when a render finds the PR's head branch gone
-	metrics   *metrics
-	log       *slog.Logger
+	// report, if set, is called on each terminal render outcome (ready/error) so
+	// the server can write a commit status back to the forge. nil = write-back off.
+	report  func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string)
+	metrics *metrics
+	log     *slog.Logger
 
 	ctx context.Context // cancelled on shutdown; threaded into every diff
 	sem chan struct{}
@@ -51,12 +54,13 @@ type queue struct {
 func newQueue(
 	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
 	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
+	report func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string),
 ) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
 	return &queue{
-		diff: diff, store: st, notify: notify, reconcile: reconcile, metrics: m, log: log,
+		diff: diff, store: st, notify: notify, reconcile: reconcile, report: report, metrics: m, log: log,
 		ctx:      ctx,
 		sem:      make(chan struct{}, concurrency),
 		inflight: map[int]struct{}{},
@@ -174,6 +178,9 @@ func (q *queue) run(pr api.PR) {
 				q.emit(pr.Number, api.JobReady, "")
 			} else {
 				q.emit(pr.Number, api.JobError, msg)
+				if q.report != nil {
+					q.report(pr, api.JobError, nil, msg)
+				}
 			}
 		default:
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
@@ -184,6 +191,9 @@ func (q *queue) run(pr api.PR) {
 			q.log.Info("diff rendered", "pr", pr.Number, "duration", time.Since(start).Round(time.Millisecond),
 				"resources", sig.Resources, "caution", sig.Caution, "images", sig.Images, "failures", sig.Failures)
 			q.emit(pr.Number, api.JobReady, "")
+			if q.report != nil {
+				q.report(pr, api.JobReady, sig, "")
+			}
 		}
 
 		q.mu.Lock()

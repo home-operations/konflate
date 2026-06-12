@@ -44,7 +44,7 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
 	pr := api.PR{Number: 1}
 
 	q.enqueue(pr)
@@ -87,7 +87,7 @@ func TestQueue_CoalesceUsesLatestMetadata(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 
 	q.enqueue(api.PR{Number: 1, HeadSHA: "old"})
 	<-started // "old" is rendering
@@ -118,7 +118,7 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 	t.Parallel()
 	diff := func(context.Context, api.PR) (api.DiffResult, error) { panic("boom") }
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 
 	st.upsertPR(api.PR{Number: 1}, false)
 	q.enqueue(api.PR{Number: 1})
@@ -142,7 +142,7 @@ func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
 	st := newStore()
 	st.upsertPR(api.PR{Number: 1}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from when the PR was open
-	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1, nil)
 
 	q.enqueue(api.PR{Number: 1})
 
@@ -174,7 +174,7 @@ func TestQueue_CanceledRenderDoesNotErrorOrClobber(t *testing.T) {
 	st := newStore()
 	st.upsertPR(api.PR{Number: 1}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from before shutdown
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 
 	q.enqueue(api.PR{Number: 1})
 	q.wait() // the render goroutine takes the canceled branch and returns
@@ -203,7 +203,7 @@ func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
 		st := newStore()
 		st.upsertPR(api.PR{Number: 1}, false)
 		st.setResult(1, api.DiffResult{PRNumber: 1})
-		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 		q.enqueue(api.PR{Number: 1})
 		q.wait() // the single render goroutine finishes after taking the keep-last branch
 		env, _ := st.get(1)
@@ -222,7 +222,7 @@ func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
 		t.Parallel()
 		st := newStore()
 		st.upsertPR(api.PR{Number: 2}, false)
-		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 		q.enqueue(api.PR{Number: 2})
 		waitTerminal(t, st, 2)
 		if env, _ := st.get(2); env.Status != api.JobError {
@@ -246,7 +246,7 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
 
 	q.enqueue(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 2})
@@ -271,7 +271,7 @@ func TestQueue_ClosingRejectsNewWork(t *testing.T) {
 		return api.DiffResult{}, nil
 	}
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
 
 	q.wait() // no in-flight work: returns at once and marks the queue closing
 	q.enqueue(api.PR{Number: 1})

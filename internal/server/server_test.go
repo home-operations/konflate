@@ -126,7 +126,7 @@ func newTestServer(t *testing.T, cfg *config.Config, prov *fakeProvider, eng Eng
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency)
+	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, nil)
 	return s
 }
 

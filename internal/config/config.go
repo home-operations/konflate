@@ -92,6 +92,12 @@ type Config struct {
 	AppPrivateKey     string `env:"KONFLATE_APP_PRIVATE_KEY,unset"`
 	AppInstallationID int64  `env:"KONFLATE_APP_INSTALLATION_ID"`
 
+	// PublicURL is konflate's externally-reachable base URL (e.g.
+	// https://konflate.example.com). Write-back uses it to build the review link a
+	// commit status points back to; without it the status is posted with no link.
+	// The SPA derives its own URLs from the request and never needs this.
+	PublicURL string `env:"KONFLATE_PUBLIC_URL"`
+
 	// PRFilterExpr is a CEL expression deciding which PRs konflate tracks (lists,
 	// renders, comments on) — the single PR filter, with no separate label
 	// allowlist or fork toggle. It evaluates against one variable, pr:
