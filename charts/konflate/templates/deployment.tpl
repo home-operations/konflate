@@ -48,6 +48,10 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "konflate.serviceAccountName" . | quote }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ tpl . $ | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- tpl (toYaml .Values.podSecurityContext) $ | nindent 8 }}
       containers:
@@ -182,6 +186,10 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
           livenessProbe:
             {{- tpl (toYaml .Values.livenessProbe) $ | nindent 12 }}
           readinessProbe:

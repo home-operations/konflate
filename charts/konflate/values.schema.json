@@ -621,6 +621,32 @@
       "title": "podAnnotations",
       "type": "object"
     },
+    "podDisruptionBudget": {
+      "description": "konflate runs a single replica (in-memory state; see replicaCount), so this guards only against *voluntary* disruption — node drains, autoscaler scale-down.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Create a PodDisruptionBudget. ⚠️ With a single replica, the default `minAvailable: 1` makes a node drain block until you delete the pod yourself; set `maxUnavailable: 1` instead to let drains proceed. Off by default.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "maxUnavailable": {
+          "default": "",
+          "description": "Maximum pods that may be unavailable; takes precedence over `minAvailable` when set.",
+          "title": "maxUnavailable",
+          "type": "string"
+        },
+        "minAvailable": {
+          "default": 1,
+          "description": "Minimum pods that must stay available. Used unless `maxUnavailable` is set.",
+          "title": "minAvailable",
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "title": "podDisruptionBudget",
+      "type": "object"
+    },
     "podLabels": {
       "description": "Labels added to the pod.",
       "required": [],
@@ -666,6 +692,12 @@
       "required": [],
       "title": "podSecurityContext",
       "type": "object"
+    },
+    "priorityClassName": {
+      "default": "",
+      "description": "PriorityClass for the pod, so konflate is less likely to be preempted/evicted under node pressure. Empty uses the cluster default.",
+      "title": "priorityClassName",
+      "type": "string"
     },
     "readinessProbe": {
       "description": "Readiness probe.",
@@ -881,6 +913,18 @@
       "required": [],
       "title": "serviceAccount",
       "type": "object"
+    },
+    "startupProbe": {
+      "description": "Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it.",
+      "required": [],
+      "title": "startupProbe",
+      "type": "object"
+    },
+    "terminationGracePeriodSeconds": {
+      "default": 30,
+      "description": "Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains.",
+      "title": "terminationGracePeriodSeconds",
+      "type": "integer"
     },
     "tests": {
       "description": "Config for the chart's `helm test` hook — a one-shot pod that curls the Service's /readyz to prove the release serves. Used only by `helm test`, never the workload.",

@@ -115,8 +115,12 @@ Kubernetes: `>=1.25.0-0`
 | persistence.size | string | `"5Gi"` | PVC size. |
 | persistence.storageClass | string | `""` | StorageClass for the created PVC. |
 | podAnnotations | object | `{}` | Annotations added to the pod. |
+| podDisruptionBudget.enabled | bool | `false` | Create a PodDisruptionBudget. ⚠️ With a single replica, the default `minAvailable: 1` makes a node drain block until you delete the pod yourself; set `maxUnavailable: 1` instead to let drains proceed. Off by default. |
+| podDisruptionBudget.maxUnavailable | string | `""` | Maximum pods that may be unavailable; takes precedence over `minAvailable` when set. |
+| podDisruptionBudget.minAvailable | int | `1` | Minimum pods that must stay available. Used unless `maxUnavailable` is set. |
 | podLabels | object | `{}` | Labels added to the pod. |
 | podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level securityContext (runs as non-root uid/gid 65532 with the RuntimeDefault seccomp profile). |
+| priorityClassName | string | `""` | PriorityClass for the pod, so konflate is less likely to be preempted/evicted under node pressure. Empty uses the cluster default. |
 | readinessProbe | object | `{"httpGet":{"path":"/readyz","port":"http"},"initialDelaySeconds":5,"periodSeconds":10}` | Readiness probe. |
 | replicaCount | int | `1` | Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time). |
 | resources | object | `{"limits":{"memory":"1Gi"},"requests":{"cpu":"50m","memory":"256Mi"}}` | Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters. |
@@ -134,6 +138,8 @@ Kubernetes: `>=1.25.0-0`
 | serviceAccount.automount | bool | `false` | Automount the ServiceAccount API token (off by default: konflate talks to forges, not the cluster API). |
 | serviceAccount.create | bool | `true` | Create a ServiceAccount. |
 | serviceAccount.name | string | `""` | ServiceAccount name; generated from the release name if empty. |
+| startupProbe | object | `{}` | Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it. |
+| terminationGracePeriodSeconds | int | `30` | Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains. |
 | tests.image.pullPolicy | string | `"IfNotPresent"` | `helm test` image pull policy. |
 | tests.image.repository | string | `"mirror.gcr.io/busybox"` | `helm test` pod image; needs a shell with wget (konflate's own image is distroless). |
 | tests.image.tag | string | `"1.38.0@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
