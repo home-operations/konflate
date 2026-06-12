@@ -23,6 +23,10 @@ const (
 // engine plugs in directly and tests pass a fake.
 type diffFunc func(ctx context.Context, pr api.PR) (api.DiffResult, error)
 
+// reportFunc is called on each terminal render outcome (ready/error) so the
+// server can write a commit status back to the forge. nil = write-back off.
+type reportFunc func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string)
+
 // queue runs diff jobs with bounded concurrency and per-PR coalescing: while a
 // PR is in flight, a second enqueue does not start a duplicate render — it
 // records the PR as pending so exactly one more render happens after the
@@ -35,6 +39,7 @@ type queue struct {
 	store     *store
 	notify    func(api.Event)
 	reconcile func(number int) // called when a render finds the PR's head branch gone
+	report    reportFunc       // terminal-outcome write-back hook; nil = off
 	metrics   *metrics
 	log       *slog.Logger
 
@@ -51,12 +56,13 @@ type queue struct {
 func newQueue(
 	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
 	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
+	report reportFunc,
 ) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
 	return &queue{
-		diff: diff, store: st, notify: notify, reconcile: reconcile, metrics: m, log: log,
+		diff: diff, store: st, notify: notify, reconcile: reconcile, report: report, metrics: m, log: log,
 		ctx:      ctx,
 		sem:      make(chan struct{}, concurrency),
 		inflight: map[int]struct{}{},
@@ -174,6 +180,9 @@ func (q *queue) run(pr api.PR) {
 				q.emit(pr.Number, api.JobReady, "")
 			} else {
 				q.emit(pr.Number, api.JobError, msg)
+				if q.report != nil {
+					q.report(pr, api.JobError, nil, msg)
+				}
 			}
 		default:
 			q.metrics.diffTotal.WithLabelValues("success").Inc()
@@ -184,6 +193,9 @@ func (q *queue) run(pr api.PR) {
 			q.log.Info("diff rendered", "pr", pr.Number, "duration", time.Since(start).Round(time.Millisecond),
 				"resources", sig.Resources, "caution", sig.Caution, "images", sig.Images, "failures", sig.Failures)
 			q.emit(pr.Number, api.JobReady, "")
+			if q.report != nil {
+				q.report(pr, api.JobReady, sig, "")
+			}
 		}
 
 		q.mu.Lock()

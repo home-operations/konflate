@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"text/template"
 	"time"
 
@@ -37,6 +38,7 @@ type Engine interface {
 type Server struct {
 	cfg    *config.Config
 	prov   provider.Provider
+	writer provider.Writer // forge write-back (commit statuses); nil when disabled
 	engine Engine
 	ui     fs.FS
 	log    *slog.Logger
@@ -68,8 +70,16 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	avatarKey := make([]byte, 32)
 	_, _ = rand.Read(avatarKey) // crypto/rand; signs the same-origin avatar-proxy URLs
 
+	// Optional write-back: a nil Writer (no credential) keeps konflate read-only.
+	// A construction error (e.g. App-only auth on GitHub before it's wired)
+	// disables write-back rather than failing startup.
+	writer, werr := provider.NewWriter(cfg)
+	if werr != nil {
+		log.Warn("write-back disabled (no commit statuses will be posted)", "error", werr)
+	}
+
 	s := &Server{
-		cfg: cfg, prov: prov, engine: eng, ui: ui, log: log,
+		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
 		store: newStore(), hub: newHub(log), metrics: newMetrics(),
 		avatarKey: avatarKey,
 		mergeTmpl: newMergeTemplate(cfg, log),
@@ -88,6 +98,79 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	}
 
 	return s
+}
+
+// statusContext is the name konflate's commit status appears under on the PR.
+const statusContext = "konflate"
+
+// statusWriteTimeout bounds a single forge status write so a slow or hung forge
+// can't park a write-back goroutine until shutdown (it's fire-and-forget off the
+// render path). Generous: a status POST is a small request.
+const statusWriteTimeout = 30 * time.Second
+
+// reportStatus writes konflate's commit status for a terminal render outcome,
+// when status write-back is enabled. It runs the forge write on a goroutine —
+// it must never block the render queue — and logs (never fails) on error. Wired
+// to the queue only when StatusChecksEnabled (see Run).
+func (s *Server) reportStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
+	if s.writer == nil {
+		return
+	}
+	status := provider.Status{Context: statusContext, TargetURL: s.reviewURL(pr.Number)}
+	switch st {
+	case api.JobReady:
+		status.State = provider.StatusSuccess
+		status.Description = renderedStatusDescription(sig)
+	case api.JobError:
+		status.State = provider.StatusFailure
+		status.Description = truncateStatus("render failed: " + errMsg)
+	default:
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(s.runCtx, statusWriteTimeout)
+		defer cancel()
+		if err := s.writer.SetStatus(ctx, pr, status); err != nil {
+			s.log.Warn("status write-back failed", "pr", pr.Number, "error", err)
+		}
+	}()
+}
+
+// reviewURL is konflate's review link for a PR, built from KONFLATE_PUBLIC_URL;
+// "" when that's unset (the status is then posted without a link).
+func (s *Server) reviewURL(number int) string {
+	base := strings.TrimRight(s.cfg.PublicURL, "/")
+	if base == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/#/pr/%d", base, number)
+}
+
+// renderedStatusDescription is the one-line summary on a successful status.
+func renderedStatusDescription(sig *api.Signals) string {
+	if sig == nil {
+		return "Rendered the diff"
+	}
+	d := fmt.Sprintf("%d %s changed", sig.Resources, plural(sig.Resources, "resource", "resources"))
+	if sig.Caution > 0 {
+		d += fmt.Sprintf(", %d %s", sig.Caution, plural(sig.Caution, "caution", "cautions"))
+	}
+	if sig.Failures > 0 {
+		d += fmt.Sprintf(", %d render %s", sig.Failures, plural(sig.Failures, "failure", "failures"))
+	}
+	return d
+}
+
+// truncateStatus clamps a status description to the forge limit (GitHub caps the
+// description at 140 characters). It counts runes, not bytes, so a multibyte
+// character (an error message isn't guaranteed ASCII) is never split mid-rune.
+func truncateStatus(s string) string {
+	const max = 140
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // dropFilteredOnLoad re-applies the PR filter to everything restored from disk.
@@ -167,9 +250,17 @@ func (s *Server) Run(ctx context.Context) error {
 	// waiting out each render's full DiffTimeout while refreshLoop keeps feeding it.
 	g, gctx := errgroup.WithContext(ctx)
 	s.runCtx = gctx
+
+	// Wire status write-back into the queue only when it's enabled and a Writer
+	// was built; otherwise report stays nil and the queue skips it — konflate
+	// posts nothing to the forge (the read-only default).
+	var report reportFunc
+	if s.cfg.StatusChecksEnabled() && s.writer != nil {
+		report = s.reportStatus
+	}
 	s.queue = newQueue(
 		gctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
-		s.metrics, s.log, s.cfg.MaxDiffConcurrency,
+		s.metrics, s.log, s.cfg.MaxDiffConcurrency, report,
 	)
 
 	mainSrv := &http.Server{

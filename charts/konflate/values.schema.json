@@ -10,6 +10,18 @@
     "config": {
       "description": "konflate configuration (the non-secret KONFLATE_* environment variables).",
       "properties": {
+        "appClientId": {
+          "default": "",
+          "description": "GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT.",
+          "title": "appClientId",
+          "type": "string"
+        },
+        "appInstallationId": {
+          "default": "",
+          "description": "GitHub App installation id to act as (**GitHub only**); quote it.",
+          "title": "appInstallationId",
+          "type": "string"
+        },
         "cacheTtl": {
           "default": "",
           "description": "Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); \"0\" disables the sweep.",
@@ -102,6 +114,12 @@
           "title": "prFilterExpr",
           "type": "string"
         },
+        "publicUrl": {
+          "default": "",
+          "description": "konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status links back to it. Empty = the status is posted without a link.",
+          "title": "publicUrl",
+          "type": "string"
+        },
         "refreshInterval": {
           "default": "30m",
           "description": "How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). \"0\" disables periodic refresh (webhooks only); positive values are floored to 1m.",
@@ -131,6 +149,12 @@
           "description": "Advanced: tries per source fetch on transient network errors. Empty = default (3); \"1\" disables retry.",
           "title": "sourceRetryAttempts",
           "type": "string"
+        },
+        "statusChecks": {
+          "default": false,
+          "description": "Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.",
+          "title": "statusChecks",
+          "type": "boolean"
         }
       },
       "required": [],
@@ -710,8 +734,14 @@
       "type": "object"
     },
     "secret": {
-      "description": "Sensitive settings — a forge token plus inbound webhook/push secrets (all empty = anonymous, read-only mode).",
+      "description": "Sensitive settings — a forge read token, inbound webhook/push secrets, and the optional write-back credential (all empty = anonymous, read-only mode).",
       "properties": {
+        "appPrivateKey": {
+          "default": "",
+          "description": "GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId` + `config.appInstallationId`.",
+          "title": "appPrivateKey",
+          "type": "string"
+        },
         "existingSecret": {
           "default": "",
           "description": "Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below.",
@@ -734,6 +764,12 @@
           "default": "",
           "description": "Webhook secret; enables POST /hooks (authenticated mode).",
           "title": "webhookSecret",
+          "type": "string"
+        },
+        "writeToken": {
+          "default": "",
+          "description": "Write credential for status write-back (commit statuses), separate from `token` so it carries only write scope. The universal option and the only one on GitLab/Forgejo. Needs `config.statusChecks: true` to take effect.",
+          "title": "writeToken",
           "type": "string"
         }
       },

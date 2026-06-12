@@ -18,15 +18,20 @@ type gitlabProvider struct {
 }
 
 func newGitLab(cfg *config.Config) (*gitlabProvider, error) {
-	var opts []gitlab.ClientOptionFunc
-	if host := cfg.Forge.Host; host != "" {
-		opts = append(opts, gitlab.WithBaseURL("https://"+host))
-	}
-	client, err := gitlab.NewClient(cfg.Token, opts...)
+	client, err := gitlab.NewClient(cfg.Token, gitlabHostOpts(cfg.Forge.Host)...)
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: new client: %w", err)
 	}
 	return &gitlabProvider{client: client, project: cfg.Forge.RepoPath}, nil
+}
+
+// gitlabHostOpts returns the base-URL option for a self-hosted GitLab host, or
+// nil for gitlab.com (host == ""). Shared by the read provider and the Writer.
+func gitlabHostOpts(host string) []gitlab.ClientOptionFunc {
+	if host == "" {
+		return nil
+	}
+	return []gitlab.ClientOptionFunc{gitlab.WithBaseURL("https://" + host)}
 }
 
 func (p *gitlabProvider) ListPRs(ctx context.Context) ([]api.PR, error) {

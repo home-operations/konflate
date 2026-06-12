@@ -21,16 +21,24 @@ func newGitHub(cfg *config.Config) (*githubProvider, error) {
 	if cfg.Token != "" {
 		opts = append(opts, github.WithAuthToken(cfg.Token))
 	}
-	if host := cfg.Forge.Host; host != "" { // GitHub Enterprise Server
-		base := "https://" + host + "/"
-		opts = append(opts, github.WithEnterpriseURLs(base, base))
-	}
+	opts = append(opts, githubEnterpriseOpts(cfg.Forge.Host)...)
 	client, err := github.NewClient(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("github: new client: %w", err)
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
 	return &githubProvider{client: client, owner: owner, repo: repo}, nil
+}
+
+// githubEnterpriseOpts returns the base/upload-URL option for a self-hosted
+// GitHub Enterprise Server host, or nil for github.com (host == ""). Shared by
+// the read provider and the Writer.
+func githubEnterpriseOpts(host string) []github.ClientOptionsFunc {
+	if host == "" {
+		return nil
+	}
+	base := "https://" + host + "/"
+	return []github.ClientOptionsFunc{github.WithEnterpriseURLs(base, base)}
 }
 
 func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {

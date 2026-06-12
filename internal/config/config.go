@@ -65,6 +65,39 @@ type Config struct {
 	// once read (see Token).
 	PushToken string `env:"KONFLATE_PUSH_TOKEN,unset"`
 
+	// --- Write-back (opt-in, off by default) ---
+	// konflate's HTTP surface stays read-only: no client/guest request can cause a
+	// write. These only let konflate's own render loop report results back to the
+	// forge, using a write credential held by the process. Off unless configured.
+
+	// StatusChecks, when true AND a write credential is set, makes konflate report
+	// a commit status on each rendered PR head linking to the konflate review (see
+	// StatusChecksEnabled). The PR-comment write-back will gate the same way.
+	StatusChecks bool `env:"KONFLATE_STATUS_CHECKS" envDefault:"false"`
+
+	// WriteToken is a forge token used only for write-back (commit statuses, and
+	// later PR comments) — kept separate from Token so it can be scoped to just the
+	// write permissions a read token shouldn't carry. Unset from the process
+	// environment once read (see Token). On GitHub, prefer the App credentials
+	// below; WriteToken is the universal (and only) option for Forgejo and GitLab.
+	WriteToken string `env:"KONFLATE_WRITE_TOKEN,unset"`
+
+	// GitHub App credentials — an alternative to WriteToken for GitHub only, and
+	// the preferred write credential there: konflate authenticates as the App and
+	// mints short-lived, narrowly-scoped installation tokens (a revocable bot
+	// identity rather than a standing PAT). AppClientID is the App's client id,
+	// AppPrivateKey its PEM private key, AppInstallationID the installation to act
+	// as. AppPrivateKey is unset from the environment once read (see Token).
+	AppClientID       string `env:"KONFLATE_APP_CLIENT_ID"`
+	AppPrivateKey     string `env:"KONFLATE_APP_PRIVATE_KEY,unset"`
+	AppInstallationID int64  `env:"KONFLATE_APP_INSTALLATION_ID"`
+
+	// PublicURL is konflate's externally-reachable base URL (e.g.
+	// https://konflate.example.com). Write-back uses it to build the review link a
+	// commit status points back to; without it the status is posted with no link.
+	// The SPA derives its own URLs from the request and never needs this.
+	PublicURL string `env:"KONFLATE_PUBLIC_URL"`
+
 	// PRFilterExpr is a CEL expression deciding which PRs konflate tracks (lists,
 	// renders, comments on) — the single PR filter, with no separate label
 	// allowlist or fork toggle. It evaluates against one variable, pr:
@@ -268,6 +301,23 @@ func (c *Config) WebhookEnabled() bool { return c.WebhookSecret != "" }
 // PushEnabled reports whether POST /api/prs/{n}/refresh should be served: gated
 // solely by a configured push token.
 func (c *Config) PushEnabled() bool { return c.PushToken != "" }
+
+// WriteEnabled reports whether konflate has a write-back credential — a write
+// PAT or a GitHub App key. It is the master gate for any forge write: without
+// it konflate stays read-only regardless of the feature toggles.
+func (c *Config) WriteEnabled() bool { return c.WriteToken != "" || c.AppPrivateKey != "" }
+
+// StatusChecksEnabled reports whether konflate should report a commit status on
+// each rendered PR head: the toggle is on and a write credential is configured.
+func (c *Config) StatusChecksEnabled() bool { return c.StatusChecks && c.WriteEnabled() }
+
+// AppConfigured reports whether a complete GitHub App write credential is set
+// (client id, private key, and installation id). A partial App config — e.g. a
+// key without an installation id — is not "configured": the GitHub writer
+// reports it as an error rather than silently falling back. GitHub only.
+func (c *Config) AppConfigured() bool {
+	return c.AppClientID != "" && c.AppPrivateKey != "" && c.AppInstallationID != 0
+}
 
 // DefaultPRFilter is the PR filter applied when KONFLATE_PR_FILTER_EXPR is
 // empty: render every open PR. Forks are gated separately by RenderForkPRs

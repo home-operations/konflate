@@ -169,6 +169,65 @@ tests:
             name: KONFLATE_FETCH_TIMEOUT
             value: "30s"
 
+  - it: omits all write-back env by default (read-only)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_STATUS_CHECKS
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_PUBLIC_URL
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_APP_CLIENT_ID
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_APP_INSTALLATION_ID
+
+  - it: emits the write-back env when status checks and App credentials are configured
+    set:
+      config.statusChecks: true
+      config.publicUrl: https://konflate.example.com
+      config.appClientId: Iv23liExAmple
+      config.appInstallationId: "12345678"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_STATUS_CHECKS
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PUBLIC_URL
+            value: https://konflate.example.com
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_APP_CLIENT_ID
+            value: Iv23liExAmple
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_APP_INSTALLATION_ID
+            value: "12345678"
+
+  - it: wires the chart Secret via envFrom when only a write credential is set
+    set:
+      secret.writeToken: my-write-token
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].secretRef.name
+          value: RELEASE-NAME-konflate
+
   # The values.yaml contract: string values (except mergeCommand) are tpl-rendered.
   - it: renders config.prFilterExpr through tpl
     set:
