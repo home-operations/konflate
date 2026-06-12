@@ -65,8 +65,9 @@ func newCommentTemplate(cfg *config.Config, log *slog.Logger) *template.Template
 func (s *Server) commentBody(env api.DiffEnvelope) string {
 	reviewURL := s.reviewURL(env.PR.Number)
 	admonitions := s.cfg.Forge.Kind == config.ForgeGitHub
+	defaultBody := func() string { return summaryMarkdown(env, reviewURL, admonitions) }
 	if s.commentTmpl == nil {
-		return summaryMarkdown(env, reviewURL, admonitions)
+		return defaultBody()
 	}
 	data := commentTemplateData{
 		PR:        env.PR,
@@ -79,7 +80,7 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 	if err := s.commentTmpl.Execute(&b, data); err != nil {
 		s.log.Warn("custom PR comment template failed; using the default comment body",
 			"pr", env.PR.Number, "error", err)
-		return summaryMarkdown(env, reviewURL, admonitions)
+		return defaultBody()
 	}
 	return ensureMarker(env.PR.Number, b.String())
 }

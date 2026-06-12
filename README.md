@@ -276,6 +276,13 @@ least one of the feature toggles:
 Set `KONFLATE_PUBLIC_URL` as well so the status and comment link back to the
 review; without it they're still posted, just without a link.
 
+Write-back is **best-effort**: each write runs off the render path, a transient
+forge failure (a 5xx, a blip, a brief outage) is retried a few times with
+backoff, and any write that still fails is re-attempted on the PR's next render —
+konflate logs it but never blocks or fails a render on it. Both writes are
+idempotent (the status is overwritten; the comment is found by its marker and
+edited), so a retry can't double-post.
+
 **This does not make konflate writable from the outside.** Its HTTP surface
 stays read-only — no request, authenticated or not, can trigger a write. The
 status and comment are posted only by konflate's own render loop, using a
