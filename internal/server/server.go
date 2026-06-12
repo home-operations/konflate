@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 	"unicode"
@@ -53,6 +54,11 @@ type Server struct {
 	metrics *metrics
 	queue   *queue
 	runCtx  context.Context
+
+	// prWrite serializes forge write-backs per PR (see writeBack): the queue can
+	// finish a PR's in-flight and trailing renders back-to-back, each firing a
+	// write-back, and two for the same PR must not race into duplicate comments.
+	prWrite keyedMutex
 
 	// relist is the coalescing signal for webhook-triggered re-lists. It holds a
 	// single token, so a burst of inbound events collapses to one in-flight
@@ -155,13 +161,60 @@ func (s *Server) reportOutcome(pr api.PR, st api.JobStatus, sig *api.Signals, er
 	}
 }
 
+// keyedMutex serializes work per integer key (a PR number): locking a key blocks
+// only other holders of the same key, so distinct PRs proceed concurrently. The
+// per-key mutex is reference-counted and dropped once idle, so the map can't grow
+// without bound across a long-lived instance's PR numbers.
+type keyedMutex struct {
+	mu sync.Mutex
+	m  map[int]*keyedLock
+}
+
+type keyedLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lock acquires key's mutex and returns its unlock func.
+func (k *keyedMutex) lock(key int) func() {
+	k.mu.Lock()
+	if k.m == nil {
+		k.m = make(map[int]*keyedLock)
+	}
+	kl := k.m[key]
+	if kl == nil {
+		kl = &keyedLock{}
+		k.m[key] = kl
+	}
+	kl.refs++
+	k.mu.Unlock()
+
+	kl.mu.Lock()
+	return func() {
+		kl.mu.Unlock()
+		k.mu.Lock()
+		if kl.refs--; kl.refs == 0 {
+			delete(k.m, key)
+		}
+		k.mu.Unlock()
+	}
+}
+
 // writeBack runs one forge write off the render path: on its own goroutine,
 // retried with backoff and bounded by forgeWriteTimeout, logging (never failing)
 // on giving up so a write-back problem never blocks or fails a render. A write
 // cut short by shutdown (runCtx cancelled) is draining, not a failure, so it
 // isn't warned — matching the render queue's handling of context.Canceled.
+//
+// Write-backs for one PR are serialized (s.prWrite): the queue can finish two
+// renders of a PR back-to-back (in-flight + trailing), each firing a write-back,
+// and unserialized their UpsertComment find-then-create would race into duplicate
+// comments. The later write instead waits, then sees and edits the earlier one's
+// comment. The lock is taken before the timeout so the wait isn't charged against it.
 func (s *Server) writeBack(kind string, number int, fn func(ctx context.Context) error) {
 	go func() {
+		unlock := s.prWrite.lock(number)
+		defer unlock()
 		ctx, cancel := context.WithTimeout(s.runCtx, forgeWriteTimeout)
 		defer cancel()
 		if err := retryWrite(ctx, forgeWriteAttempts, forgeWriteBackoff, func() error { return fn(ctx) }); err != nil &&
