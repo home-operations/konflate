@@ -2,15 +2,16 @@ package provider
 
 import (
 	"context"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-github/v88/github"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
@@ -172,50 +173,40 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Cont
 	}
 }
 
-// newGitHubAppClient authenticates as a GitHub App installation, minting
-// short-lived installation tokens (auto-refreshed by the transport). ghinstallation
-// issues the App JWT with a numeric app id; GitHub also accepts — and now
-// recommends — the App's string client id as the issuer, which is the credential
-// konflate is configured with, so clientIDSigner overrides the issuer claim.
+// newGitHubAppClient authenticates as a GitHub App installation: it signs a
+// short-lived App JWT (with the App's client id as the issuer — GitHub accepts and
+// now recommends the client id over the numeric app id), mints installation tokens
+// from it, and refreshes them before expiry. The installation is discovered from
+// the repo on first use, so there's no installation id to configure (like
+// actions/create-github-app-token). Two go-github clients share the App JWT: an
+// App-level one (installation lookup, token mint, identity) and the write client,
+// whose transport injects the minted installation token.
 func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Context) (string, error), error) {
 	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
 	if err != nil {
 		return nil, nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
 	}
-	signer := clientIDSigner{
-		clientID: cfg.AppClientID,
-		inner:    ghinstallation.NewRSASigner(jwt.SigningMethodRS256, key),
-	}
-	appsTr, err := ghinstallation.NewAppsTransportWithOptions(
-		http.DefaultTransport, 0, ghinstallation.WithSigner(signer))
+	// githubEnterpriseOpts points both clients at the GHES API base (nil ⇒ github.com).
+	hostOpts := githubEnterpriseOpts(cfg.Forge.Host)
+	apps, err := github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(&appJWTTransport{base: http.DefaultTransport, clientID: cfg.AppClientID, key: key}),
+	}, hostOpts...)...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("github: App transport: %w", err)
+		return nil, nil, fmt.Errorf("github: App client: %w", err)
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
-	opts := githubEnterpriseOpts(cfg.Forge.Host)
-	if host := cfg.Forge.Host; host != "" {
-		// GHES: the App-JWT calls (installation lookup, token mint) go to the API base.
-		appsTr.BaseURL = "https://" + host + "/api/v3"
-	}
-	// The installation is discovered from the repo on first use — no installation
-	// id to configure (see repoInstallTransport).
-	opts = append(opts, github.WithTransport(&repoInstallTransport{
-		apps: appsTr, host: cfg.Forge.Host, owner: owner, repo: repo,
-	}))
-	client, err := github.NewClient(opts...)
+	client, err := github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(&installTransport{base: http.DefaultTransport, apps: apps, owner: owner, repo: repo}),
+	}, hostOpts...)...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("github: new App client: %w", err)
 	}
-	// konflate's comments are authored by the App's bot user, "<app-slug>[bot]".
-	// Resolve the slug from the App itself (App-JWT auth) so comment write-back only
+	// konflate's comments are authored by the App's bot user, "<app-slug>[bot]";
+	// resolve the slug from the App itself (App-JWT auth) so comment write-back only
 	// ever edits konflate's own comment, never one a PR author planted with the
 	// (public) marker.
 	self := func(ctx context.Context) (string, error) {
-		ac, err := appJWTClient(appsTr, cfg.Forge.Host)
-		if err != nil {
-			return "", err
-		}
-		app, _, err := ac.Apps.Get(ctx, "")
+		app, _, err := apps.Apps.Get(ctx, "")
 		if err != nil {
 			return "", fmt.Errorf("github: resolve App identity: %w", err)
 		}
@@ -224,78 +215,102 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Contex
 	return client, self, nil
 }
 
-// appJWTClient builds a go-github client that authenticates as the App itself (the
-// App JWT), on the same API base as the write client. Used to discover the repo
-// installation and konflate's own bot identity.
-func appJWTClient(appsTr *ghinstallation.AppsTransport, host string) (*github.Client, error) {
-	c, err := github.NewClient(append([]github.ClientOptionsFunc{
-		github.WithTransport(appsTr),
-	}, githubEnterpriseOpts(host)...)...)
-	if err != nil {
-		return nil, fmt.Errorf("github: app client: %w", err)
-	}
-	return c, nil
+// appJWT mints a short-lived GitHub App JWT signed with the App's client id as the
+// issuer. The 9-minute lifetime stays under GitHub's 10-minute cap; the backdated
+// iat absorbs minor clock skew between konflate and GitHub.
+func appJWT(clientID string, key *rsa.PrivateKey) (string, error) {
+	now := time.Now()
+	return jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
+		Issuer:    clientID,
+		IssuedAt:  jwt.NewNumericDate(now.Add(-30 * time.Second)),
+		ExpiresAt: jwt.NewNumericDate(now.Add(9 * time.Minute)),
+	}).SignedString(key)
 }
 
-// repoInstallTransport authenticates as the GitHub App and, on first request,
-// resolves the App's installation for the repo (so no installation id need be
-// configured — like actions/create-github-app-token), then delegates to a
-// per-installation token transport. Resolution is cached on success and retried
-// on failure, so a transient lookup error doesn't wedge write-back permanently;
-// a permanent one (the App isn't installed on the repo → 404) surfaces on the
-// request, where the startup verify classifies and disables it.
-type repoInstallTransport struct {
-	apps        *ghinstallation.AppsTransport
-	host        string // forge host for GHES, "" for github.com
-	owner, repo string
+// appJWTTransport signs each request as the App itself with an App JWT, regenerated
+// as it nears expiry. It backs the App-level client (installation lookup, token
+// mint, identity).
+type appJWTTransport struct {
+	base     http.RoundTripper
+	clientID string
+	key      *rsa.PrivateKey
 
 	mu  sync.Mutex
-	itr *ghinstallation.Transport // the resolved per-installation transport; nil until resolved
+	tok string
+	exp time.Time
 }
 
-func (t *repoInstallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	itr, err := t.installation(req.Context())
+func (t *appJWTTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tok, err := t.jwt()
 	if err != nil {
 		return nil, err
 	}
-	return itr.RoundTrip(req)
+	r := req.Clone(req.Context())
+	r.Header.Set("Authorization", "Bearer "+tok)
+	return t.base.RoundTrip(r)
 }
 
-func (t *repoInstallTransport) installation(ctx context.Context) (*ghinstallation.Transport, error) {
+func (t *appJWTTransport) jwt() (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.itr != nil {
-		return t.itr, nil
+	if time.Until(t.exp) > time.Minute {
+		return t.tok, nil
 	}
-	// An App-JWT client (the apps transport), on the same base as the write client.
-	appClient, err := appJWTClient(t.apps, t.host)
+	tok, err := appJWT(t.clientID, t.key)
+	if err != nil {
+		return "", fmt.Errorf("github: sign App JWT: %w", err)
+	}
+	t.tok, t.exp = tok, time.Now().Add(9*time.Minute)
+	return tok, nil
+}
+
+// installTransport authenticates as the App's installation for the repo: on first
+// use it discovers the installation (no id to configure — like
+// actions/create-github-app-token), mints an installation token via the App-JWT
+// client, caches it, and refreshes it before expiry. The minted token is injected
+// as the bearer on the write client's requests; a permanent failure (the App isn't
+// installed on the repo → 404) surfaces on the request, where the startup verify
+// classifies and disables write-back. The installation id is resolved once.
+type installTransport struct {
+	base        http.RoundTripper
+	apps        *github.Client // App-JWT client: installation lookup + token mint
+	owner, repo string
+
+	mu     sync.Mutex
+	instID int64 // resolved installation id; 0 until discovered
+	tok    string
+	exp    time.Time
+}
+
+func (t *installTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tok, err := t.token(req.Context())
 	if err != nil {
 		return nil, err
 	}
-	inst, _, err := appClient.Apps.GetRepositoryInstallation(ctx, t.owner, t.repo)
+	r := req.Clone(req.Context())
+	r.Header.Set("Authorization", "Bearer "+tok)
+	return t.base.RoundTrip(r)
+}
+
+func (t *installTransport) token(ctx context.Context) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if time.Until(t.exp) > time.Minute {
+		return t.tok, nil
+	}
+	if t.instID == 0 {
+		inst, _, err := t.apps.Apps.GetRepositoryInstallation(ctx, t.owner, t.repo)
+		if err != nil {
+			return "", fmt.Errorf("github: find App installation for %s/%s: %w", t.owner, t.repo, err)
+		}
+		t.instID = inst.GetID()
+	}
+	it, _, err := t.apps.Apps.CreateInstallationToken(ctx, t.instID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("github: find App installation for %s/%s: %w", t.owner, t.repo, err)
+		return "", fmt.Errorf("github: mint installation token: %w", err)
 	}
-	t.itr = ghinstallation.NewFromAppsTransport(t.apps, inst.GetID())
-	return t.itr, nil
-}
-
-// clientIDSigner signs the GitHub App JWT with the App's client id as the issuer.
-// ghinstallation builds the claims (with the timestamps GitHub requires) and sets
-// the issuer to its numeric app id; we rewrite the issuer to the client id before
-// signing. The claims are freshly allocated per request, so the mutation is safe.
-type clientIDSigner struct {
-	clientID string
-	inner    ghinstallation.Signer
-}
-
-func (s clientIDSigner) Sign(claims jwt.Claims) (string, error) {
-	rc, ok := claims.(*jwt.RegisteredClaims)
-	if !ok {
-		return "", fmt.Errorf("github: unexpected JWT claims type %T", claims)
-	}
-	rc.Issuer = s.clientID
-	return s.inner.Sign(rc)
+	t.tok, t.exp = it.GetToken(), it.GetExpiresAt().Time
+	return t.tok, nil
 }
 
 func (w *githubWriter) SetStatus(ctx context.Context, pr api.PR, st Status) error {
@@ -349,9 +364,9 @@ func (w *githubWriter) Verify(ctx context.Context) error {
 }
 
 // githubStatus extracts the HTTP status behind a write-client error: the API
-// response when there is one, otherwise the App-JWT failures that surface from
-// the lazy transport before the request is sent — the installation lookup (a
-// github.ErrorResponse) or the token mint (a ghinstallation.HTTPError). 0 if none.
+// response when there is one, otherwise the App-auth failures that surface from the
+// lazy transport before the request is sent — the installation lookup and the token
+// mint, both github.ErrorResponse. 0 if none.
 func githubStatus(resp *github.Response, err error) int {
 	if resp != nil {
 		return resp.StatusCode
@@ -359,10 +374,6 @@ func githubStatus(resp *github.Response, err error) int {
 	var apiErr *github.ErrorResponse
 	if errors.As(err, &apiErr) && apiErr.Response != nil {
 		return apiErr.Response.StatusCode
-	}
-	var instErr *ghinstallation.HTTPError
-	if errors.As(err, &instErr) && instErr.Response != nil {
-		return instErr.Response.StatusCode
 	}
 	return 0
 }

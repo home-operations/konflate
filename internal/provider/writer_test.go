@@ -13,10 +13,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
 	"github.com/google/go-github/v88/github"
@@ -77,21 +77,19 @@ func TestNewWriter_NilWhenDisabled(t *testing.T) {
 	}
 }
 
-// TestClientIDSigner_SetsIssuer is the crux of GitHub App auth: ghinstallation
-// builds the JWT with the numeric app id as the issuer, and the signer must
-// rewrite it to the App's client id (which is what konflate is configured with).
-func TestClientIDSigner_SetsIssuer(t *testing.T) {
+// TestAppJWT is the crux of GitHub App auth: the App JWT must carry the App's
+// client id as the issuer (GitHub's recommended issuer) and a short, bounded
+// lifetime under GitHub's 10-minute cap.
+func TestAppJWT(t *testing.T) {
 	t.Parallel()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
 	const clientID = "Iv23liExAmple"
-	s := clientIDSigner{clientID: clientID, inner: ghinstallation.NewRSASigner(jwt.SigningMethodRS256, key)}
-
-	tok, err := s.Sign(&jwt.RegisteredClaims{Issuer: "0"}) // 0 = the placeholder app id we pass ghinstallation
+	tok, err := appJWT(clientID, key)
 	if err != nil {
-		t.Fatalf("Sign: %v", err)
+		t.Fatalf("appJWT: %v", err)
 	}
 	var got jwt.RegisteredClaims
 	if _, _, err := jwt.NewParser().ParseUnverified(tok, &got); err != nil {
@@ -99,6 +97,12 @@ func TestClientIDSigner_SetsIssuer(t *testing.T) {
 	}
 	if got.Issuer != clientID {
 		t.Errorf("issuer = %q, want %q", got.Issuer, clientID)
+	}
+	if got.IssuedAt == nil || got.ExpiresAt == nil {
+		t.Fatal("token must carry iat and exp")
+	}
+	if d := got.ExpiresAt.Sub(got.IssuedAt.Time); d <= 0 || d > 10*time.Minute {
+		t.Errorf("lifetime = %v, want >0 and within GitHub's 10m cap", d)
 	}
 }
 
@@ -582,9 +586,9 @@ func TestGitHubStatus(t *testing.T) {
 	if s := githubStatus(nil, fmt.Errorf("find installation: %w", apiErr)); s != http.StatusNotFound {
 		t.Errorf("github.ErrorResponse 404 → %d, want 404", s)
 	}
-	// Token mint failure surfaces as a ghinstallation.HTTPError.
-	instErr := &ghinstallation.HTTPError{Response: &http.Response{StatusCode: http.StatusForbidden}}
-	if s := githubStatus(nil, fmt.Errorf("mint token: %w", instErr)); s != http.StatusForbidden {
-		t.Errorf("ghinstallation.HTTPError 403 → %d, want 403", s)
+	// Token mint failure also surfaces as a github.ErrorResponse (go-github mints it).
+	mintErr := &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusForbidden}}
+	if s := githubStatus(nil, fmt.Errorf("mint token: %w", mintErr)); s != http.StatusForbidden {
+		t.Errorf("github.ErrorResponse 403 → %d, want 403", s)
 	}
 }
