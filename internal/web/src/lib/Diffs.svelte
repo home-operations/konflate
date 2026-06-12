@@ -235,11 +235,11 @@
     <div class="diff-pane" bind:this={pane} style="--stuck: {stuckPx}px">
       <section class="diff-section" data-sel="summary">
         <!-- Same sticky container as Diff.svelte's res-header (keep the two in
-             step), with a neutral status chip and a quiet title — the Summary
-             is a section like the others, not a resource. -->
+             step), but just a "Summary" label — no status chip. The summary is
+             the overview, not a resource with a status, and a chip beside the
+             word read like a pair of tabs. -->
         <div class="res-header">
-          <span class="res-status">summary</span>
-          <span class="res-title res-title-quiet">Overview</span>
+          <span class="res-title">Summary</span>
           <!-- The "copy to merge" command rides on the right of the Summary's
                header instead of its own full-width strip — one fewer bar, and it
                fills the otherwise-empty right side. Open PRs with the feature on. -->

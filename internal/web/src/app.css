@@ -1644,10 +1644,8 @@ tr.search-hit > td {
   flex: 1 1 auto;
   word-break: break-all;
 }
-/* The resource kind reads quieter than the ns/name it qualifies; the Summary
-   header's quiet "Overview" title shares the muted treatment (a label). */
-.res-kind,
-.res-title-quiet {
+/* The resource kind reads quieter than the ns/name it qualifies. */
+.res-kind {
   color: var(--muted);
   font-weight: 500;
 }
