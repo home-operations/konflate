@@ -151,7 +151,9 @@ config:
 
   # -- Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.
   statusChecks: false
-  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status links back to it. Empty = the status is posted without a link.
+  # -- Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.
+  prComments: false
+  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.
   publicUrl: ""
   # -- GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT.
   appClientId: ""

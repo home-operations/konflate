@@ -135,6 +135,10 @@ spec:
             - name: KONFLATE_STATUS_CHECKS
               value: "true"
             {{- end }}
+            {{- if .Values.config.prComments }}
+            - name: KONFLATE_PR_COMMENTS
+              value: "true"
+            {{- end }}
             {{- with .Values.config.publicUrl }}
             - name: KONFLATE_PUBLIC_URL
               value: {{ tpl . $ | quote }}

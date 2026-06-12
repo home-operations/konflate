@@ -58,12 +58,11 @@ front.
    complete. Diff rendering runs in a bounded, per-PR-coalescing job queue.
 
 By default konflate is **read-only toward your forge** — it writes nothing back.
-Commit-status [write-back](#write-back) is **opt-in**: turn it on and konflate
-posts a single `konflate` status on each rendered PR head, linking back to the
-review. Even then its **HTTP surface stays read-only** — writes come only from
-konflate's own render loop, using a credential held by the process, never from a
-visitor's request — so a public instance still exposes no way for anyone to make
-it write.
+[Write-back](#write-back) is **opt-in**: turn it on and konflate posts a commit
+status and/or a summary comment on each rendered PR, linking back to the review.
+Even then its **HTTP surface stays read-only** — writes come only from konflate's
+own render loop, using a credential held by the process, never from a visitor's
+request — so a public instance still exposes no way for anyone to make it write.
 
 PRs refresh automatically — each open PR re-renders on a configurable interval
 (the missed-webhook backstop), and an authenticated CI push or a verified
@@ -117,11 +116,12 @@ All configuration is via environment variables.
 | `KONFLATE_WEBHOOK_SECRET`      | _(none)_      | Secret for verifying inbound webhooks. Set it to enable `POST /hooks`; unset ⇒ `501`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `KONFLATE_PUSH_TOKEN`          | _(none)_      | Bearer token for the CI push endpoint. Set it to enable `POST /api/prs/{n}/refresh`; unset ⇒ `501`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `KONFLATE_STATUS_CHECKS`       | `false`       | Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (below) and stays off until both are set. See [Write-back](#write-back).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `KONFLATE_WRITE_TOKEN`         | _(none)_      | Write credential for status write-back, kept separate from `KONFLATE_TOKEN` so it carries only write scope. The universal option (and the only one on GitLab/Forgejo); on GitHub, prefer the App credentials below. See [Write-back](#write-back).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `KONFLATE_PR_COMMENTS`         | `false`       | Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential (below) and stays off until both are set; independent of `KONFLATE_STATUS_CHECKS`. See [Write-back](#write-back).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `KONFLATE_WRITE_TOKEN`         | _(none)_      | Write credential for write-back, kept separate from `KONFLATE_TOKEN` so it carries only write scope. The universal option (and the only one on GitLab/Forgejo); on GitHub, prefer the App credentials below. See [Write-back](#write-back).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `KONFLATE_APP_CLIENT_ID`       | _(none)_      | GitHub App client id (**GitHub only**) — the preferred write identity. With the key and installation id below, konflate mints short-lived installation tokens instead of carrying a standing PAT.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `KONFLATE_APP_PRIVATE_KEY`     | _(none)_      | GitHub App PEM private key (**GitHub only**).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `KONFLATE_APP_INSTALLATION_ID` | _(none)_      | GitHub App installation id to act as (**GitHub only**).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `KONFLATE_PUBLIC_URL`          | _(none)_      | konflate's externally-reachable base URL, e.g. `https://konflate.example.com`. Used only to build the review link a commit status points to; unset ⇒ the status is posted with no link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `KONFLATE_PUBLIC_URL`          | _(none)_      | konflate's externally-reachable base URL, e.g. `https://konflate.example.com`. Used only to build the review link a posted status/comment points back to; unset ⇒ posted with no link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `KONFLATE_PORT`                | `8080`        | Main HTTP port (UI, API, websocket, webhook).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `KONFLATE_METRICS_ADDR`        | `:9090`       | Listen address for the **separate** metrics server. Bind to loopback to keep it private.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `KONFLATE_LOG_LEVEL`           | `info`        | `debug`, `info`, `warn`, or `error`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -250,36 +250,50 @@ re-renders](#triggering-re-renders)).
 ## Write-back
 
 By default konflate writes nothing to your forge. Enable write-back and it
-reports its own result back to the PR as a **commit status** — a single check
-named `konflate` on the PR's head commit: `success` when the diff rendered
-(summarising the resource / caution / failure counts), `failure` when it didn't,
-linking to the konflate review. It's the same verdict the
-[summary endpoint](#http-endpoints)'s `X-Konflate-Render-Status` header carries —
-now posted by konflate itself instead of by a CI step that polls and posts.
+reports its own result back to the PR — as a **commit status**, a **PR comment**,
+or both. Each is independently opt-in and off by default.
 
-Write-back is **off until you opt in** — it needs both:
+A **commit status** is a single check named `konflate` on the PR's head commit:
+`success` when the diff rendered (summarising the resource / caution / failure
+counts), `failure` when it didn't, linking to the konflate review. It's the same
+verdict the [summary endpoint](#http-endpoints)'s `X-Konflate-Render-Status`
+header carries — now posted by konflate itself instead of by a CI step that polls.
 
-1. `KONFLATE_STATUS_CHECKS=true`, **and**
-2. a write credential (a write token, or GitHub App credentials).
+A **PR comment** carries the rendered summary (the same Markdown the summary
+endpoint serves). konflate posts it on a successful render and edits that one
+comment in place on every later render — keyed by a hidden marker, so it never
+piles up duplicates. Render failures stay on the commit status, so konflate won't
+open a "render failed" comment on a PR it can't render.
 
-Set `KONFLATE_PUBLIC_URL` as well so the status links back to the review; without
-it the status is still posted, just without a link.
+Write-back is **off until you opt in** — it needs a write credential **and** at
+least one of the feature toggles:
+
+- `KONFLATE_STATUS_CHECKS=true` — post the commit status.
+- `KONFLATE_PR_COMMENTS=true` — post (and update in place) the summary comment.
+- a write credential — a write token, or GitHub App credentials (below).
+
+Set `KONFLATE_PUBLIC_URL` as well so the status and comment link back to the
+review; without it they're still posted, just without a link.
 
 **This does not make konflate writable from the outside.** Its HTTP surface
 stays read-only — no request, authenticated or not, can trigger a write. The
-status is posted only by konflate's own render loop, using a credential the
-process holds. The change is operational, not in the request surface: a standing
-write credential now lives in the deployment, so scope it narrowly and treat a
-konflate compromise as able to write commit statuses on that repo.
+status and comment are posted only by konflate's own render loop, using a
+credential the process holds. The change is operational, not in the request
+surface: a standing write credential now lives in the deployment, so scope it
+narrowly and treat a konflate compromise as able to write commit statuses and PR
+comments on that repo.
 
 ### Credentials
 
-| Forge           | Credential                                                                                  | Scope                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| GitHub          | **GitHub App** (preferred) — `KONFLATE_APP_CLIENT_ID` + `_PRIVATE_KEY` + `_INSTALLATION_ID` | App permission **Commit statuses: Read & write**, installed on the repo.   |
-| GitHub          | or a write PAT — `KONFLATE_WRITE_TOKEN`                                                     | Fine-grained **Commit statuses: Read & write** (or classic `repo:status`). |
-| GitLab          | `KONFLATE_WRITE_TOKEN`                                                                      | Token with the `api` scope and at least **Developer** on the project.      |
-| Forgejo / Gitea | `KONFLATE_WRITE_TOKEN`                                                                      | Token with the `write:repository` scope.                                   |
+Scopes depend on which write-back you enable: commit statuses and PR comments are
+governed by different permissions.
+
+| Forge           | Credential                                                                                  | Scope                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub          | **GitHub App** (preferred) — `KONFLATE_APP_CLIENT_ID` + `_PRIVATE_KEY` + `_INSTALLATION_ID` | App permissions, installed on the repo: **Commit statuses: R/W** (statuses) and/or **Pull requests: R/W** (comments).                 |
+| GitHub          | or a write PAT — `KONFLATE_WRITE_TOKEN`                                                     | Fine-grained **Commit statuses** and/or **Pull requests** (R/W); or a classic `repo:status` (statuses only) / `repo` (also comments). |
+| GitLab          | `KONFLATE_WRITE_TOKEN`                                                                      | Token with the `api` scope and at least **Developer** on the project (covers both statuses and notes).                                |
+| Forgejo / Gitea | `KONFLATE_WRITE_TOKEN`                                                                      | Token with `write:repository` (statuses) and, for comments, `write:issue`.                                                            |
 
 On GitHub the **App is preferred**: konflate authenticates as the App and mints
 short-lived installation tokens, so no long-lived PAT sits in the deployment, the
@@ -292,8 +306,10 @@ only one on GitLab and Forgejo — keep it separate from `KONFLATE_TOKEN` so it
 carries only the write scope a read token shouldn't.
 
 ```bash
-# GitHub App (preferred): post a `konflate` status linking back to the review
+# GitHub App (preferred): post the status and the summary comment, linking back
+# to the review. Enable either toggle on its own — they're independent.
 KONFLATE_STATUS_CHECKS=true
+KONFLATE_PR_COMMENTS=true
 KONFLATE_APP_CLIENT_ID=Iv23li...
 KONFLATE_APP_PRIVATE_KEY="$(cat konflate.private-key.pem)"
 KONFLATE_APP_INSTALLATION_ID=12345678
@@ -301,13 +317,13 @@ KONFLATE_PUBLIC_URL=https://konflate.example.com
 
 # …or a write token (the only option on GitLab / Forgejo)
 KONFLATE_STATUS_CHECKS=true
+KONFLATE_PR_COMMENTS=true
 KONFLATE_WRITE_TOKEN=...
 KONFLATE_PUBLIC_URL=https://konflate.example.com
 ```
 
-PR-comment write-back — konflate posting the rendered summary as a PR comment,
-reusing the same credential — is planned; until then, post comments from CI via
-the [summary endpoint](#http-endpoints).
+The [summary endpoint](#http-endpoints) remains available either way — for
+pulling the Markdown into a CI step yourself, rather than letting konflate post.
 
 ## HTTP endpoints
 

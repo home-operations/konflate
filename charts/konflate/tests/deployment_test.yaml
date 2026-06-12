@@ -180,6 +180,11 @@ tests:
           path: spec.template.spec.containers[0].env
           any: true
           content:
+            name: KONFLATE_PR_COMMENTS
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
             name: KONFLATE_PUBLIC_URL
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -219,6 +224,16 @@ tests:
           content:
             name: KONFLATE_APP_INSTALLATION_ID
             value: "12345678"
+
+  - it: emits KONFLATE_PR_COMMENTS when prComments is true
+    set:
+      config.prComments: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PR_COMMENTS
+            value: "true"
 
   - it: wires the chart Secret via envFrom when only a write credential is set
     set:

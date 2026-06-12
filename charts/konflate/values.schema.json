@@ -108,6 +108,12 @@
           "title": "mergeCommand",
           "type": "string"
         },
+        "prComments": {
+          "default": false,
+          "description": "Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.",
+          "title": "prComments",
+          "type": "boolean"
+        },
         "prFilterExpr": {
           "default": "",
           "description": "CEL expression deciding which PRs konflate renders; must return a bool. Empty = `true` (every open PR). Forks are gated separately by `renderForkPrs`, so editing this can't enable forks. A PR it excludes is listed but hidden. e.g. `pr.labels.exists(l, l.name == \"cluster/production\") \u0026\u0026 !pr.draft`. See the README.",
@@ -116,7 +122,7 @@
         },
         "publicUrl": {
           "default": "",
-          "description": "konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status links back to it. Empty = the status is posted without a link.",
+          "description": "konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.",
           "title": "publicUrl",
           "type": "string"
         },
