@@ -958,6 +958,61 @@ test('a long image list renders in full by default (no collapse)', async ({ page
   await expect(page.locator('.ov-head')).toHaveCount(0); // no fold control
 });
 
+test('the summary always lays out four columns, with a green placeholder for an empty section', async ({ page }) => {
+  // The four columns — render failures, cautions, blast radius, image changes —
+  // are always present so the layout holds steady across PRs. This fixture has no
+  // render failures, so that column shows a "No render failures" placeholder
+  // rather than collapsing.
+  const diff = {
+    ...diffEnvelope.diff!,
+    failures: [],
+    warnings: [{ level: 'caution', rule: 'removed-statefulset', resource: 'StatefulSet default/db', detail: 'data may be deleted' }],
+    blastRadius: [{ parent: 'Kustomization a/b', direct: ['Kustomization c/d'], transitive: 1 }],
+    images: [{ name: 'ghcr.io/app', from: 'v1.0.0', to: 'v1.1.0', refs: null }],
+  };
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
+  await page.route('**/api/prs/142/diff', (r) => r.fulfill({ json: { ...diffEnvelope, diff } }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/#/pr/142');
+
+  const cols = page.locator('.ov-col');
+  await expect(cols).toHaveCount(4);
+  await expect(cols.nth(0)).toContainText('Render failures');
+  await expect(cols.nth(1)).toContainText('Cautions');
+  await expect(cols.nth(2)).toContainText('Blast radius');
+  await expect(cols.nth(3)).toContainText('Image changes');
+
+  // The empty render-failures column shows the green placeholder, not a flag.
+  await expect(cols.nth(0).locator('.ov-empty')).toHaveText('No render failures');
+  await expect(cols.nth(0).locator('.flag')).toHaveCount(0);
+});
+
+test('the summary grid resolves to 4 / 2 / 1 columns by pane width (never an orphaned 3+1)', async ({ page }) => {
+  // The grid uses explicit container-query breakpoints, not auto-fit, so the four
+  // columns always land in a balanced shape: four across when wide, a 2×2 at medium
+  // widths, a single stack when narrow. The resolved track count is the assertion —
+  // a count of 3 would be the old orphaned "3 + lonely 1" layout.
+  await stubApi(page);
+  // getComputedStyle resolves grid-template-columns to one px value per track.
+  const trackCount = () =>
+    page.locator('.ov-grid').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+
+  // Wide desktop (rail + a roomy pane): four across.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/#/pr/142');
+  await expect(page.locator('.ov-grid')).toBeVisible();
+  await expect.poll(trackCount).toBe(4);
+
+  // Mid width — the pane auto-fit used to orphan (3 + 1). Now a balanced 2×2.
+  await page.setViewportSize({ width: 960, height: 900 });
+  await expect.poll(trackCount).toBe(2);
+
+  // Mobile (the switcher's Summary pane, full width): a single stack.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect.poll(trackCount).toBe(1);
+});
+
 test('an open PR with cautions carries an amber card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');

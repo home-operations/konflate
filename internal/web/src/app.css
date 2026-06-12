@@ -1128,8 +1128,11 @@ button.sum-pill:hover {
 /* ---- overview -------------------------------------------------------- */
 /* Flush-left like the diff sections below it — the Summary is one of the
    stacked sections, not a centered page. */
+/* Query container for the summary grid: its 4/2/1 column breakpoints measure this
+   pane's width directly, so they're right whether or not the tree rail is present. */
 .overview {
   padding: 14px;
+  container-type: inline-size;
 }
 /* The impact summary now rides in the sticky summary header (see Diffs.svelte),
    left of the merge command — so it centers in the bar with no bottom margin and
@@ -1190,20 +1193,30 @@ button.sum-pill:hover {
   font-weight: 600;
   color: var(--warn);
 }
-/* Up to two columns, each a fixed measure rather than a stretching 1fr, capped
-   by max-width so the band doesn't span a wide pane edge-to-edge; auto-fit drops
-   to one when narrow. */
+/* Four columns — render failures, cautions, blast radius, image changes. Explicit
+   4 / 2 / 1 breakpoints rather than auto-fit, which packs three then orphans the
+   fourth onto a lonely second row: wide → four across, medium → a balanced 2×2,
+   narrow → a single stack. Always a balanced grid, never a 3+1. The queries read
+   .overview's width (the pane), so they're right with or without the tree rail. */
 .ov-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 380px));
-  gap: 28px 44px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
-  max-width: 860px;
+  max-width: 1280px;
 }
-/* Each grid track stacks its sections vertically: action items (failures +
-   cautions) in the left column, the informational blast radius + image list in
-   the right. The gap matches the grid's row gap so a wrapped single column on a
-   narrow pane reads evenly. */
+@container (min-width: 440px) {
+  .ov-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 820px) {
+  .ov-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+/* One section per column. min-width lets the track shrink below its content's
+   intrinsic width so a long identifier wraps instead of widening the column. */
 .ov-col {
   display: flex;
   flex-direction: column;
@@ -1241,6 +1254,15 @@ button.sum-pill:hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* An empty section's placeholder — same flat left-rule row as a flag, but green:
+   the absence is reassuring, the colour matches the red/amber rules on real flags
+   so the four columns read as one family whether or not they have content. */
+.ov-empty {
+  padding-left: 12px;
+  border-left: 2px solid var(--ok);
+  color: var(--muted);
+  font-size: 12px;
+}
 /* A flag — a render failure or a caution — is a flat row with a single left
    rule, not a bordered, tinted card. The rule is red by default (a render
    failure: the diff broke); cautions step it down to amber. The resource leads
@@ -1275,6 +1297,7 @@ button.sum-pill:hover {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .flag-detail {
   display: block;
@@ -1303,6 +1326,7 @@ button.sum-pill:hover {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .blast-count {
   font-size: 11px;
