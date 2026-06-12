@@ -42,7 +42,7 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        {#if pr}<ForgeLink url={pr.url} number={pr.number} size={16} />{/if}
+        {#if pr}<ForgeLink url={pr.url} number={pr.number} glyph={false} />{/if}
         <div class="rt-meta">
           {#if pr}
             <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>

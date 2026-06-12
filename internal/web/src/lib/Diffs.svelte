@@ -248,15 +248,17 @@
           {#if store.diff}
             {@const d = store.diff}
             <div class="impact">
-              <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
-              <span class="impact-pill"><strong>{d.impact.parents}</strong> parents</span>
-              <span class="impact-pill"><strong>{d.impact.crds}</strong> CRDs</span>
-              {#if d.impact.namespaces?.length}
-                <span class="impact-pill"
-                  ><strong>{d.impact.namespaces.length}</strong>
-                  {d.impact.namespaces.length === 1 ? 'namespace' : 'namespaces'}</span
-                >
-              {/if}
+              <span class="impact-facts">
+                <span class="fact"><strong>{d.impact.resources}</strong> resources</span>
+                <span class="fact"><strong>{d.impact.parents}</strong> parents</span>
+                <span class="fact"><strong>{d.impact.crds}</strong> CRDs</span>
+                {#if d.impact.namespaces?.length}
+                  <span class="fact"
+                    ><strong>{d.impact.namespaces.length}</strong>
+                    {d.impact.namespaces.length === 1 ? 'namespace' : 'namespaces'}</span
+                  >
+                {/if}
+              </span>
               <span
                 class="impact-delta"
                 title="{d.summary.added} added, {d.summary.changed} changed, {d.summary.removed} removed"
@@ -267,7 +269,7 @@
               </span>
               {#if d.truncated}
                 <span
-                  class="impact-pill trunc"
+                  class="impact-trunc"
                   title="This diff exceeded the render cap; {d.truncated} resource diffs were not rendered."
                   >{d.truncated} not shown</span
                 >

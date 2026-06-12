@@ -95,9 +95,9 @@ test('list → review → single-page flow', async ({ page }) => {
   await card142.click();
   await expect(page).toHaveURL(/#\/pr\/142$/);
   await expect(page.locator('.impact')).toContainText('resources');
-  await expect(page.locator('.warning.caution', { hasText: 'StatefulSet' })).toBeVisible();
+  await expect(page.locator('.flag.caution', { hasText: 'StatefulSet' })).toBeVisible();
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
-  await expect(page.locator('.failure')).toContainText('plex');
+  await expect(page.locator('.flag', { hasText: 'plex' })).toBeVisible();
   // The same forge link sits next to the PR title on the review header.
   await expect(page.locator('.review-title .forge-link')).toHaveAttribute(
     'href',
@@ -904,7 +904,7 @@ test('a warning deep-links to the flagged resource diff', async ({ page }) => {
 
   // The caution's resource rendered into the diff → it's a button that jumps
   // straight to that diff.
-  await page.locator('.warning-link.caution').click();
+  await page.locator('.flag-link.caution').click();
   await expect(page).toHaveURL(/#\/pr\/142\/r2$/);
   await expect(page.locator('[data-sel="r2"] .res-title')).toContainText('StatefulSet default/postgres');
 
@@ -916,9 +916,9 @@ test('a warning deep-links to the flagged resource diff', async ({ page }) => {
   await expect(page.locator('[data-sel="r0"] .res-header .badge')).toHaveCount(0);
 });
 
-test('zero counts stay neutral (impact pills) and hidden (diff header)', async ({ page }) => {
-  // A diff with nothing added/removed: the "+0 added" / "−0 removed" pills must
-  // not carry their green/red tint (colored zeros draw the eye to nothing).
+test('zero counts stay neutral (impact delta) and hidden (diff header)', async ({ page }) => {
+  // A diff with nothing added/removed: the "+0 added" / "−0 removed" segments
+  // must not carry their green/red tint (colored zeros draw the eye to nothing).
   const diff = { ...diffEnvelope.diff!, summary: { added: 0, changed: 2, removed: 0 } };
   await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
   await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
@@ -926,8 +926,8 @@ test('zero counts stay neutral (impact pills) and hidden (diff header)', async (
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/142');
 
-  // The compact delta pill: +0 added and −0 removed are muted (.zero), the
-  // non-zero changed segment keeps its tint.
+  // The change delta: +0 added and −0 removed are muted (.zero), the non-zero
+  // changed segment keeps its tint.
   await expect(page.locator('.d-seg.add')).toHaveClass(/zero/);
   await expect(page.locator('.d-seg.del')).toHaveClass(/zero/);
   await expect(page.locator('.d-seg.chg')).not.toHaveClass(/zero/);
@@ -964,7 +964,7 @@ test('a long image list collapses behind its count and expands on click', async 
   await expect(page.locator('.img-change')).toHaveCount(9);
 });
 
-test('an open PR with cautions carries a red card edge', async ({ page }) => {
+test('an open PR with cautions carries an amber card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
   // #142 carries a caution signal; #138 doesn't. The merged #128 never does.

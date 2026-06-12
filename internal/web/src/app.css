@@ -15,7 +15,7 @@
   --del-bg: #fdeeec;
   --del-bar: #cf222e;
   --danger: #cf222e;
-  --caution: #cf222e; /* the sole lint severity — red */
+  --caution: #9a6700; /* lint caution — amber, a notch below the --danger red of a render failure */
   --warn: #9a6700; /* amber accent: changed-status pill, the "showing last render" notice, truncation */
   --ok: #1a7f37;
   --merged: #8250df;
@@ -34,7 +34,7 @@
   --del-bg: #221015;
   --del-bar: #f85149;
   --danger: #f85149;
-  --caution: #f85149; /* the sole lint severity — red */
+  --caution: #d29922; /* lint caution — amber, a notch below the --danger red of a render failure */
   --warn: #d29922; /* amber accent: changed-status pill, the "showing last render" notice, truncation */
   --ok: #3fb950;
   --merged: #a371f7;
@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .warning-link, .sum-pill, .ov-head):focus-visible {
+:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .flag-link, .sum-pill, .ov-head):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -522,7 +522,7 @@ a.repo:focus-visible .repo-ext {
 .card-shell:hover {
   border-color: var(--accent);
 }
-/* Cards carrying cautions show a red edge. Inset shadow, not a
+/* Cards carrying cautions show an amber edge. Inset shadow, not a
    border, so layout is stable. */
 .card-shell.caution {
   box-shadow: inset 3px 0 0 var(--caution);
@@ -875,8 +875,8 @@ button.sum-pill:hover {
   color: var(--caution);
   border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
 }
-/* The stale-render badge ("showing the last render") is a soft amber notice,
-   not a caution — it shares the amber accent, not the red lint severity. */
+/* The stale-render badge ("showing the last render") is a soft amber notice —
+   the same amber as a caution, but distinct in context (a status, not a lint). */
 .badge.warn {
   color: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
@@ -918,9 +918,9 @@ button.sum-pill:hover {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
-/* One row: the title grows to fill the bar and the meta chips sit at the far
-   right, so the header uses its full width and the nav buttons line up with a
-   single-height content row (no taller two-line block to float against). */
+/* One row: the title hugs its content with the PR number right after it, and the
+   meta trailer is pushed right (margin-left:auto on .rt-meta). The title shrinks
+   (ellipsis) before the number does. */
 .review-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -929,7 +929,7 @@ button.sum-pill:hover {
   gap: 12px;
 }
 .rt-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: 600;
   font-size: 14px;
@@ -937,26 +937,31 @@ button.sum-pill:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The PR number rejoins the title as its identifier — no glyph (that's the list
+   rows'), a step up in weight from the muted meta trailer, still a forge link. */
+.review-title > .forge-link {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+}
 .rt-meta {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   flex: 0 0 auto;
-  gap: 6px;
+  margin-left: auto; /* pushed to the far right; the number stays by the title */
+  gap: 14px;
   font-size: 11px;
   color: var(--muted);
 }
-/* Each meta item (#id, author, sha, opened, refreshed, open link) reads as a
-   small tag, matching the chip language of the status pills. Explicit class —
-   a bare child selector would chip whatever else lands in the row. */
+/* Each meta item (author, sha, opened, refreshed) reads as quiet inline text —
+   its leading icon, avatar, or mono sha sets it apart, so no chip border is
+   needed. Explicit class so a bare child selector doesn't catch the rest of the
+   row. */
 .rt-tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 8px;
-  background: var(--panel-alt);
 }
 .rt-author {
   display: inline-flex;
@@ -1132,35 +1137,34 @@ button.sum-pill:hover {
    marker other views wait on. */
 .impact {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px 14px;
   min-width: 0;
 }
-.impact-pill {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 11px;
+/* The scope counts as one quiet line, separated by whitespace — no pill borders,
+   no divider glyphs. */
+.impact-facts {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   color: var(--muted);
-  background: var(--panel-alt);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.impact-pill strong {
+.impact-facts .fact strong {
   color: var(--text);
+  font-weight: 600;
 }
-/* The change shape in one pill: +added ~changed −removed. Each segment is tinted
-   only when non-zero (the .zero modifier mutes it) so a "+0" doesn't draw the eye
-   to nothing — the same intent the three separate pills used to carry. */
+/* The change shape: +added ~changed −removed, now the one tinted thing in the
+   bar. Each segment is tinted only when non-zero (the .zero modifier mutes it)
+   so a "+0" doesn't draw the eye to nothing. */
 .impact-delta {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 11px;
-  background: var(--panel-alt);
+  align-items: baseline;
+  gap: 9px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .d-seg {
@@ -1179,86 +1183,94 @@ button.sum-pill:hover {
   color: var(--muted);
   font-weight: 400;
 }
-/* Truncation pill: the diff was capped — a soft "heads up, incomplete" in the
-   amber accent, not the red lint severity. */
-.impact-pill.trunc {
+/* Truncation: the diff was capped — a quiet amber "heads up, incomplete", not
+   the red lint severity. */
+.impact-trunc {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
-  background: color-mix(in srgb, var(--warn) 10%, var(--panel));
 }
-/* Two columns on a wide pane: auto-fit collapses to one when narrow, and a lone
-   section spans the full width (empty tracks collapse). Keeps the summary's
-   sections from stacking into one tall scroll above the diffs. */
+/* Up to two columns, each a fixed measure rather than a stretching 1fr, capped
+   by max-width so the band doesn't span a wide pane edge-to-edge; auto-fit drops
+   to one when narrow. */
 .ov-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 14px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 380px));
+  gap: 28px 44px;
   align-items: start;
+  max-width: 860px;
 }
 /* Overview sections sit flat on the pane — headed lists, not boxed cards. The
    grid gap spaces them now, so no per-section margin. */
 .ov-section {
   margin: 0;
 }
+/* A plain readable label, not an all-caps micro-header. The heading carries the
+   severity: render failures red (the diff broke), cautions amber, images
+   neutral. A count rides quietly alongside. */
 .ov-section h3 {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin: 0 0 6px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  margin: 0 0 10px;
+}
+.ov-section.fail-section h3 {
+  color: var(--danger);
+}
+.ov-section.caution-section h3 {
+  color: var(--caution);
 }
 /* A collapsible section heading (Image changes when long): the same look as the
    h3 above, but a button with a leading chevron. */
 .ov-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  margin: 0 0 6px;
+  margin: 0 0 10px;
   padding: 0;
   background: none;
   border: 0;
   font: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  color: var(--text);
+  letter-spacing: 0.01em;
   cursor: pointer;
 }
 .ov-head:hover {
-  color: var(--text);
+  color: var(--accent);
 }
-/* The per-section item count: a quiet pill carried in the heading. */
+/* The per-section item count: a quiet muted number trailing the heading. */
 .ov-count {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 6px;
   font-variant-numeric: tabular-nums;
 }
-/* One line per warning: level badge, resource, detail share a baseline and
-   wrap only when they must. */
-.warning {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  margin-bottom: 6px;
+/* A flag — a render failure or a caution — is a flat row with a single left
+   rule, not a bordered, tinted card. The rule is red by default (a render
+   failure: the diff broke); cautions step it down to amber. The resource leads
+   (mono, it's an identifier); the detail sits muted below it. */
+.flag {
+  padding-left: 12px;
+  border-left: 2px solid var(--danger);
+  margin-bottom: 12px;
 }
-/* A warning whose resource rendered into the diff is a button that jumps to
-   it — reset the button chrome but keep the level tint, and deepen on hover. */
-.warning-link {
+.flag.caution {
+  border-left-color: var(--caution);
+}
+.flag:last-child {
+  margin-bottom: 0;
+}
+/* A caution whose resource rendered into the diff is a button that jumps to
+   it — reset the button chrome, keep the rule, tint faintly on hover. */
+.flag-link {
+  display: block;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -1266,63 +1278,45 @@ button.sum-pill:hover {
   background: none;
   cursor: pointer;
 }
-.warning:last-child {
-  margin-bottom: 0;
-}
-.warning.caution {
-  border-color: color-mix(in srgb, var(--caution) 35%, var(--border));
+.flag-link.caution:hover {
   background: color-mix(in srgb, var(--caution) 8%, transparent);
 }
-.warning-link.caution:hover {
-  background: color-mix(in srgb, var(--caution) 14%, transparent);
-}
-.warning-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-.warning.caution .warning-badge {
-  color: var(--caution);
-}
-.warning-res {
+.flag-title {
+  display: block;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
 }
-.warning-detail {
+.flag-detail {
+  display: block;
+  margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
-/* One row per changed app: the app, a neutral "N dependents" count, then the
-   named direct dependents wrapping below. Baseline-aligned like a warning row
-   but untinted — blast radius is informational, not a flag. */
+/* One row per changed app: the app, a quiet "N dependents" count, then the
+   named direct dependents wrapping below. Same flat shape as a flag but a
+   neutral rule — blast radius is informational, not something to act on. */
 .blast {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  margin-bottom: 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  margin-bottom: 12px;
 }
 .blast:last-child {
   margin-bottom: 0;
 }
 .blast-parent {
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
 }
 .blast-count {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--muted);
 }
 .blast-deps {
@@ -1337,31 +1331,31 @@ button.sum-pill:hover {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   font-size: 12px;
 }
-/* One line per image: name, from → to, refs share a baseline; long digests
-   wrap the row rather than overflowing. */
 .img-change {
+  font-size: 12px;
+}
+/* Name, from → to and the copy button share one baseline row; long digests
+   wrap rather than overflow. The refs trail muted below. */
+.img-top {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 2px 8px;
-}
-.img-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 4px 10px;
 }
 .img-name {
+  font-family: var(--font-mono);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .img-delta {
-  display: flex;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 6px;
+  font-family: var(--font-mono);
 }
 .img-ver {
   overflow-wrap: anywhere;
@@ -1376,19 +1370,10 @@ button.sum-pill:hover {
   color: var(--muted);
 }
 .img-refs {
+  margin-top: 2px;
   color: var(--muted);
-  overflow-wrap: anywhere;
-}
-.failure {
-  padding: 4px 0;
-}
-.failure-parent {
-  font-size: 12px;
-}
-.failure-msg {
-  color: var(--danger);
   font-size: 11px;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* ---- diffs (rail + diff) --------------------------------------------- */
 .diffs {
@@ -2168,11 +2153,11 @@ kbd {
   .review-title {
     order: 1;
     flex-basis: 100%;
-    /* Stack title over the (wrapping) meta chips on a phone — there's no room
-       for them side by side. */
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    /* Inline flow, not a flex row: the title text and its #number share line
+       boxes, so the number trails the last word of the (wrapping) title instead
+       of being bumped to its own line once the title fills the width. The meta
+       row is a block beneath. */
+    display: block;
   }
   /* 16px so iOS doesn't force-zoom the page when the filter gains focus. */
   .pr-search {
@@ -2226,10 +2211,22 @@ kbd {
     overflow: hidden;
     min-width: 0;
   }
-  /* The review header's meta row (sha · author · opened · refreshed · open) is
-     too wide for a phone — let it wrap instead of overflowing. */
+  /* The title flows inline here so #number can trail it; override the two-line
+     clamp that .card-title still relies on. */
+  .rt-name {
+    display: inline;
+    -webkit-line-clamp: none;
+  }
+  /* #number flows inline right after the last word of the title. */
+  .review-title > .forge-link {
+    margin-left: 6px;
+  }
+  /* The meta row (author · sha · opened · refreshed) sits on its own line below
+     the inline title+number; let it wrap, and clear the desktop margin-left:auto. */
   .rt-meta {
+    margin-top: 6px;
     flex-wrap: wrap;
     row-gap: 6px;
+    margin-left: 0;
   }
 }
