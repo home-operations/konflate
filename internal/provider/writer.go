@@ -46,7 +46,9 @@ type Writer interface {
 	// SetStatus posts (or overwrites) konflate's commit status on the PR head.
 	SetStatus(ctx context.Context, pr api.PR, st Status) error
 	// UpsertComment posts body as a PR comment, or edits konflate's existing
-	// comment in place — the one whose body contains marker — if there is one.
+	// comment in place — the one konflate authored whose body contains marker — if
+	// there is one. An existing comment already carrying this exact body is left
+	// untouched, so a re-render of an unchanged PR doesn't mark the comment "edited".
 	UpsertComment(ctx context.Context, pr api.PR, marker, body string) error
 	// Verify checks the credential can reach the repo, exercising the full auth
 	// path (for a GitHub App, minting the installation token). It returns nil on
@@ -342,6 +344,9 @@ func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 			return fmt.Errorf("github: list comments #%d: %w", pr.Number, err)
 		}
 		if c.GetUser().GetLogin() == self && c.Body != nil && strings.Contains(*c.Body, marker) {
+			if strings.TrimSpace(*c.Body) == strings.TrimSpace(body) {
+				return nil // unchanged — skip the no-op edit so a re-render doesn't mark it "edited"
+			}
 			_, _, err = w.client.Issues.EditComment(ctx, w.owner, w.repo, c.GetID(), &github.IssueComment{Body: &body})
 			if err != nil {
 				return fmt.Errorf("github: edit comment #%d: %w", pr.Number, err)
@@ -436,6 +441,9 @@ func (w *forgejoWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bo
 		for _, c := range comments {
 			// Match konflate's own comment (author + marker), not just the public marker.
 			if c.Poster != nil && c.Poster.UserName == self && strings.Contains(c.Body, marker) {
+				if strings.TrimSpace(c.Body) == strings.TrimSpace(body) {
+					return nil // unchanged — skip the no-op edit
+				}
 				_, _, err = w.client.EditIssueComment(w.owner, w.repo, c.ID, forgejo.EditIssueCommentOption{Body: body})
 				if err != nil {
 					return fmt.Errorf("forgejo: edit comment #%d: %w", pr.Number, err)
@@ -520,6 +528,9 @@ func (w *gitlabWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 		for _, n := range notes {
 			// Match konflate's own note (author + marker), not just the public marker.
 			if n.Author.Username == self && strings.Contains(n.Body, marker) {
+				if strings.TrimSpace(n.Body) == strings.TrimSpace(body) {
+					return nil // unchanged — skip the no-op edit
+				}
 				_, _, err = w.client.Notes.UpdateMergeRequestNote(w.project, mr, n.ID,
 					&gitlab.UpdateMergeRequestNoteOptions{Body: &body}, gitlab.WithContext(ctx))
 				if err != nil {
