@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.15](https://github.com/home-operations/konflate/compare/0.2.14...0.2.15) (2026-06-12)
+
+
+### Features
+
+* **ui:** always show all four summary columns, with empty-state placeholders ([#209](https://github.com/home-operations/konflate/issues/209)) ([4f24ba4](https://github.com/home-operations/konflate/commit/4f24ba4b455eab6ce38e4af8bd4f3fea4ef50cda))
+
 ## [0.2.14](https://github.com/home-operations/konflate/compare/0.2.13...0.2.14) (2026-06-12)
 
 
