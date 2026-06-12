@@ -340,6 +340,16 @@ readinessProbe:
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
+# -- Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it.
+startupProbe: {}
+#  httpGet:
+#    path: /readyz
+#    port: http
+#  periodSeconds: 5
+#  failureThreshold: 30
+
+# -- Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains.
+terminationGracePeriodSeconds: 30
 
 monitoring:
   serviceMonitor:
@@ -366,6 +376,23 @@ nodeSelector: {}
 tolerations: []
 # -- Affinity rules for pod scheduling.
 affinity: {}
+# -- PriorityClass for the pod, so konflate is less likely to be preempted/evicted under node pressure. Empty uses the cluster default.
+priorityClassName: ""
+
+# konflate runs a single replica (in-memory state; see replicaCount), so this guards only against *voluntary* disruption — node drains, autoscaler scale-down.
+podDisruptionBudget:
+  # -- Create a PodDisruptionBudget. ⚠️ With a single replica, the default `minAvailable: 1` makes a node drain block until you delete the pod yourself; set `maxUnavailable: 1` instead to let drains proceed. Off by default.
+  enabled: false
+  # -- Minimum pods that must stay available, as a count or percentage. Used unless `maxUnavailable` is set.
+  # @schema
+  # type: [integer, string]
+  # @schema
+  minAvailable: 1
+  # -- Maximum pods that may be unavailable, as a count or percentage; takes precedence over `minAvailable` when set.
+  # @schema
+  # type: [integer, string]
+  # @schema
+  maxUnavailable: ""
 
 # -- Additional volumes on the Deployment.
 volumes: []

@@ -1,0 +1,38 @@
+suite: poddisruptionbudget
+templates:
+  - pdb.tpl
+set:
+  config.repo: github://owner/repo
+tests:
+  - it: renders no PDB by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a PDB with minAvailable when enabled
+    set:
+      podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-konflate
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: prefers maxUnavailable when it is set
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable

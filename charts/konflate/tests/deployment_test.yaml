@@ -87,6 +87,36 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
 
+  - it: defaults the grace period and omits priorityClassName / startupProbe
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 30
+      - notExists:
+          path: spec.template.spec.priorityClassName
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: sets priorityClassName, grace, and a startup probe when configured
+    set:
+      priorityClassName: high-priority
+      terminationGracePeriodSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /readyz
+          port: http
+        failureThreshold: 30
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+
   - it: omits KONFLATE_PR_FILTER_EXPR when prFilterExpr is empty (default applied in-binary)
     asserts:
       - notContains:
