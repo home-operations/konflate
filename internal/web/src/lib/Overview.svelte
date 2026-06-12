@@ -73,16 +73,9 @@
         {d.impact.namespaces.length === 1 ? 'namespace' : 'namespaces'}</span
       >
     {/if}
-    <!-- The change shape in one pill: +added ~changed −removed. Each part is tinted
-         only when non-zero — a tinted "+0" draws the eye to nothing. -->
-    <span
-      class="impact-delta"
-      title="{d.summary.added} added, {d.summary.changed} changed, {d.summary.removed} removed"
-    >
-      <span class="d-seg add" class:zero={d.summary.added === 0}>+{d.summary.added}</span>
-      <span class="d-seg chg" class:zero={d.summary.changed === 0}>~{d.summary.changed}</span>
-      <span class="d-seg del" class:zero={d.summary.removed === 0}>−{d.summary.removed}</span>
-    </span>
+    <!-- The +added ~changed −removed delta lives in the sticky summary header
+         (see Diffs.svelte) so "what changed" stays visible; this row carries the
+         structural scope. -->
     <!-- The diff was capped: counts above are the true totals, but this many
          resources were not rendered. The review here is partial. -->
     {#if d.truncated}

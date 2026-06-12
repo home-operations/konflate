@@ -240,6 +240,17 @@
              height) to keep the level-bar aligned with the rail, and hosts the
              copy-to-merge command on the right for open PRs with the feature on. -->
         <div class="res-header summary-header">
+          <!-- The change shape moves up into the bar the title vacated: sticky,
+               so "what changed" reads at a glance beside the merge command, and
+               the bar is no longer empty when there's no command. -->
+          {#if store.diff}
+            {@const s = store.diff.summary}
+            <span class="impact-delta" title="{s.added} added, {s.changed} changed, {s.removed} removed">
+              <span class="d-seg add" class:zero={s.added === 0}>+{s.added}</span>
+              <span class="d-seg chg" class:zero={s.changed === 0}>~{s.changed}</span>
+              <span class="d-seg del" class:zero={s.removed === 0}>−{s.removed}</span>
+            </span>
+          {/if}
           {#if store.diffMergeCommand}
             <MergeCommand command={store.diffMergeCommand} />
           {/if}
