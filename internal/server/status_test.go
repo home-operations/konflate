@@ -3,6 +3,7 @@ package server
 import (
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -52,5 +53,33 @@ func TestTruncateStatus(t *testing.T) {
 	multi := truncateStatus(strings.Repeat("é", 200))
 	if !utf8.ValidString(multi) {
 		t.Errorf("truncation split a multibyte rune: %q", multi)
+	}
+}
+
+func TestOneLine(t *testing.T) {
+	t.Parallel()
+	// oneLine guards the commit-status description against newline / control-char
+	// injection from a fork-PR render error.
+	cases := []struct{ name, in, want string }{
+		{"newline to space", "line1\nline2", "line1 line2"},
+		{"crlf and tab collapse", "a\r\n\tb", "a b"},
+		{"esc and nul become spaces", "a\x1b\x00b", "a b"},
+		{"runs collapse and trim", "  multiple   spaces  ", "multiple spaces"},
+		{"plain passes through", "plain", "plain"},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := oneLine(tc.in)
+			if got != tc.want {
+				t.Errorf("oneLine(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+			for _, r := range got {
+				if unicode.IsControl(r) {
+					t.Errorf("oneLine(%q) left a control char %U", tc.in, r)
+				}
+			}
+		})
 	}
 }

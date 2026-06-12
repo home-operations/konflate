@@ -36,7 +36,7 @@ func Parse(forge config.ForgeKind, header http.Header, body []byte) Event {
 	case config.ForgeGitHub:
 		switch header.Get("X-GitHub-Event") {
 		case "pull_request":
-			return parsePullRequest(true, body)
+			return parsePullRequest(body)
 		case "status", "check_run", "check_suite":
 			return parseStatus(body)
 		default:
@@ -45,7 +45,7 @@ func Parse(forge config.ForgeKind, header http.Header, body []byte) Event {
 	case config.ForgeForgejo:
 		switch header.Get("X-Gitea-Event") {
 		case "pull_request":
-			return parsePullRequest(true, body)
+			return parsePullRequest(body)
 		case "status":
 			return parseStatus(body)
 		default:
@@ -79,10 +79,7 @@ func unwrapFormPayload(header http.Header, body []byte) []byte {
 // parsePullRequest handles GitHub and Forgejo/Gitea, whose "pull_request"
 // payloads share a shape: {action, number, pull_request:{number}}. The actions
 // that change the open-PR set are the same on both.
-func parsePullRequest(isPullRequest bool, body []byte) Event {
-	if !isPullRequest {
-		return Event{Relist: true}
-	}
+func parsePullRequest(body []byte) Event {
 	var p struct {
 		Action      string `json:"action"`
 		Number      int    `json:"number"`
