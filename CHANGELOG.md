@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.11](https://github.com/home-operations/konflate/compare/0.2.10...0.2.11) (2026-06-12)
+
+
+### Features
+
+* CI check status in the PR list (poll + webhook push) ([#185](https://github.com/home-operations/konflate/issues/185)) ([cb9487c](https://github.com/home-operations/konflate/commit/cb9487c8066c9cf425ad1d6fadce96e9288a8067))
+* **ui:** compact the review summary layout ([#184](https://github.com/home-operations/konflate/issues/184)) ([e699892](https://github.com/home-operations/konflate/commit/e699892b4e17c4c4a25d4348e782203d8929cf72))
+* **writeback:** opt-in commit-status write-back (PAT or GitHub App) ([#186](https://github.com/home-operations/konflate/issues/186)) ([a80f782](https://github.com/home-operations/konflate/commit/a80f782fc651850c4860fc520ccbfb26f3ad02c0))
+* **writeback:** post/update a PR comment with the rendered summary ([#187](https://github.com/home-operations/konflate/issues/187)) ([0a9909d](https://github.com/home-operations/konflate/commit/0a9909de0aa8cdd687bad66cfb9c5cb2dc67028c))
+* **writeback:** retry transient forge writes with backoff ([#188](https://github.com/home-operations/konflate/issues/188)) ([fb8f2c5](https://github.com/home-operations/konflate/commit/fb8f2c5a7657114846965f7dc87c869071eb8932))
+
+
+### Bug Fixes
+
+* **images:** merge rename-split add/remove pairs into one transition ([#182](https://github.com/home-operations/konflate/issues/182)) ([5108871](https://github.com/home-operations/konflate/commit/51088716b97096dfe42583245bfce7ac8df21772))
+
 ## [0.2.10](https://github.com/home-operations/konflate/compare/0.2.9...0.2.10) (2026-06-12)
 
 
