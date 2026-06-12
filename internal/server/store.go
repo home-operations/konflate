@@ -201,6 +201,20 @@ func checksEqual(a, b *api.CheckRollup) bool {
 	return *a == *b
 }
 
+// prByHeadSHA finds the open PR whose head commit is sha, for routing a
+// CI-status webhook to the right rollup refresh. Closed (merged/frozen) jobs are
+// skipped — a status for a merged PR's old head shouldn't revive it.
+func (s *store) prByHeadSHA(sha string) (api.PR, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, j := range s.jobs {
+		if j.closedAt.IsZero() && j.pr.HeadSHA == sha {
+			return j.pr, true
+		}
+	}
+	return api.PR{}, false
+}
+
 // setStatus transitions a PR to status, recording its metadata if new. A PR
 // already frozen on the merged shelf is left untouched, so a render that was
 // enqueued before the PR merged cannot drag it back into a live state.

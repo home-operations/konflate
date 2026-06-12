@@ -446,18 +446,22 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-render only the affected PR for content events; re-list when the
-	// open-PR set may have changed (opened/closed/...) or the payload is opaque.
-	if ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); ev.PR > 0 && !ev.Relist {
+	// Route the verified event: a CI-status event refreshes just the matching
+	// PR's check rollup; a content event re-renders the affected PR; an open-set
+	// change (opened/closed/...) or an opaque payload re-lists.
+	switch ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); {
+	case ev.HeadSHA != "":
+		go s.refreshChecksForSHA(s.runCtx, ev.HeadSHA)
+	case ev.PR > 0 && !ev.Relist:
 		go func() {
 			if err := s.refreshPR(s.runCtx, ev.PR, "webhook"); err != nil {
 				s.log.Warn("webhook: refresh PR failed", "pr", ev.PR, "error", err)
 			}
 		}()
-	} else {
-		// Coalesce: a chatty webhook (every check_run/status/push delivered) would
-		// otherwise spawn a goroutine + full ListPRs per event. requestRelist folds
-		// the burst into at most one in-flight relist plus one trailing run.
+	default:
+		// Coalesce: a chatty webhook (every push/opened delivered) would otherwise
+		// spawn a goroutine + full ListPRs per event. requestRelist folds the burst
+		// into at most one in-flight relist plus one trailing run.
 		s.requestRelist()
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{keyStatus: "accepted"})
@@ -538,6 +542,27 @@ func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
 			r := rollup
 			s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
 		}
+	}
+}
+
+// refreshChecksForSHA handles a CI-status webhook: it finds the open PR whose
+// head is at sha and refreshes only that PR's check rollup, broadcasting if it
+// changed. A SHA matching no open PR (a status for a non-PR branch, or a PR we
+// don't track) is a no-op — deliberately no relist, so a chatty CI can't trigger
+// a forge re-list per delivered event.
+func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
+	pr, ok := s.store.prByHeadSHA(sha)
+	if !ok {
+		return
+	}
+	rollup, err := s.prov.Checks(ctx, pr)
+	if err != nil {
+		s.log.Debug("webhook checks fetch failed", "pr", pr.Number, "error", err)
+		return
+	}
+	if s.store.setChecks(pr.Number, rollup) {
+		r := rollup
+		s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
 	}
 }
 
