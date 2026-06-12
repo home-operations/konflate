@@ -12,14 +12,8 @@
       "properties": {
         "appClientId": {
           "default": "",
-          "description": "GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT.",
+          "description": "GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey`, konflate mints short-lived installation tokens instead of carrying a standing PAT; the installation is auto-detected from the repo.",
           "title": "appClientId",
-          "type": "string"
-        },
-        "appInstallationId": {
-          "default": "",
-          "description": "GitHub App installation id to act as (**GitHub only**); quote it.",
-          "title": "appInstallationId",
           "type": "string"
         },
         "cacheTtl": {
@@ -790,7 +784,7 @@
       "properties": {
         "appPrivateKey": {
           "default": "",
-          "description": "GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId` + `config.appInstallationId`.",
+          "description": "GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId`.",
           "title": "appPrivateKey",
           "type": "string"
         },

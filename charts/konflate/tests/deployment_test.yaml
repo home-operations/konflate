@@ -226,18 +226,12 @@ tests:
           any: true
           content:
             name: KONFLATE_APP_CLIENT_ID
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          any: true
-          content:
-            name: KONFLATE_APP_INSTALLATION_ID
 
   - it: emits the write-back env when status checks and App credentials are configured
     set:
       config.statusChecks: true
       config.publicUrl: https://konflate.example.com
       config.appClientId: Iv23liExAmple
-      config.appInstallationId: "12345678"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -254,11 +248,6 @@ tests:
           content:
             name: KONFLATE_APP_CLIENT_ID
             value: Iv23liExAmple
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: KONFLATE_APP_INSTALLATION_ID
-            value: "12345678"
 
   - it: emits KONFLATE_PR_COMMENTS when prComments is true
     set:

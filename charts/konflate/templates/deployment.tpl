@@ -156,10 +156,6 @@ spec:
             - name: KONFLATE_APP_CLIENT_ID
               value: {{ tpl . $ | quote }}
             {{- end }}
-            {{- if ne (toString .Values.config.appInstallationId) "" }}
-            - name: KONFLATE_APP_INSTALLATION_ID
-              value: {{ tpl (toString .Values.config.appInstallationId) $ | quote }}
-            {{- end }}
             # Writable locations under the mounted volumes (readOnlyRootFilesystem).
             - name: KONFLATE_CACHE_DIR
               value: /var/cache/konflate

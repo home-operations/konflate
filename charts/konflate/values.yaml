@@ -157,10 +157,8 @@ config:
   prCommentTemplate: ""
   # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.
   publicUrl: ""
-  # -- GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT.
+  # -- GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey`, konflate mints short-lived installation tokens instead of carrying a standing PAT; the installation is auto-detected from the repo.
   appClientId: ""
-  # -- GitHub App installation id to act as (**GitHub only**); quote it.
-  appInstallationId: ""
   # Extra raw env vars merged into the container (advanced). konflate already
   # derives GOMEMLIMIT from the cgroup memory limit (90%) and GOMAXPROCS from the
   # CPU limit (Go runtime), so set those here only to override.
@@ -186,7 +184,7 @@ secret:
   pushToken: ""
   # -- Write credential for status write-back (commit statuses), separate from `token` so it carries only write scope. The universal option and the only one on GitLab/Forgejo. Needs `config.statusChecks: true` to take effect.
   writeToken: ""
-  # -- GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId` + `config.appInstallationId`.
+  # -- GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId`.
   appPrivateKey: ""
 
 serviceAccount:

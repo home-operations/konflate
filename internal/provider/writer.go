@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/bradleyfalzon/ghinstallation/v2"
@@ -131,9 +132,8 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, error) {
 			return nil, fmt.Errorf("github: new write client: %w", err)
 		}
 		return client, nil
-	case cfg.AppClientID != "" || cfg.AppPrivateKey != "" || cfg.AppInstallationID != 0:
-		return nil, fmt.Errorf("github: App write-back needs all of KONFLATE_APP_CLIENT_ID, " +
-			"KONFLATE_APP_PRIVATE_KEY and KONFLATE_APP_INSTALLATION_ID")
+	case cfg.AppClientID != "" || cfg.AppPrivateKey != "":
+		return nil, fmt.Errorf("github: App write-back needs both KONFLATE_APP_CLIENT_ID and KONFLATE_APP_PRIVATE_KEY")
 	default:
 		return nil, fmt.Errorf("github: write-back needs KONFLATE_WRITE_TOKEN or GitHub App credentials")
 	}
@@ -158,20 +158,67 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("github: App transport: %w", err)
 	}
-	host := cfg.Forge.Host
-	opts := githubEnterpriseOpts(host)
-	if host != "" {
-		// GHES: ghinstallation mints tokens against the API base; set it before
-		// NewFromAppsTransport copies BaseURL off the apps transport.
+	owner, repo := ownerRepo(cfg.Forge.RepoPath)
+	opts := githubEnterpriseOpts(cfg.Forge.Host)
+	if host := cfg.Forge.Host; host != "" {
+		// GHES: the App-JWT calls (installation lookup, token mint) go to the API base.
 		appsTr.BaseURL = "https://" + host + "/api/v3"
 	}
-	itr := ghinstallation.NewFromAppsTransport(appsTr, cfg.AppInstallationID)
-	opts = append(opts, github.WithTransport(itr))
+	// The installation is discovered from the repo on first use — no installation
+	// id to configure (see repoInstallTransport).
+	opts = append(opts, github.WithTransport(&repoInstallTransport{
+		apps: appsTr, host: cfg.Forge.Host, owner: owner, repo: repo,
+	}))
 	client, err := github.NewClient(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("github: new App client: %w", err)
 	}
 	return client, nil
+}
+
+// repoInstallTransport authenticates as the GitHub App and, on first request,
+// resolves the App's installation for the repo (so no installation id need be
+// configured — like actions/create-github-app-token), then delegates to a
+// per-installation token transport. Resolution is cached on success and retried
+// on failure, so a transient lookup error doesn't wedge write-back permanently;
+// a permanent one (the App isn't installed on the repo → 404) surfaces on the
+// request, where the startup verify classifies and disables it.
+type repoInstallTransport struct {
+	apps        *ghinstallation.AppsTransport
+	host        string // forge host for GHES, "" for github.com
+	owner, repo string
+
+	mu  sync.Mutex
+	itr *ghinstallation.Transport // the resolved per-installation transport; nil until resolved
+}
+
+func (t *repoInstallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	itr, err := t.installation(req.Context())
+	if err != nil {
+		return nil, err
+	}
+	return itr.RoundTrip(req)
+}
+
+func (t *repoInstallTransport) installation(ctx context.Context) (*ghinstallation.Transport, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.itr != nil {
+		return t.itr, nil
+	}
+	// An App-JWT client (the apps transport), on the same base as the write client.
+	appClient, err := github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(t.apps),
+	}, githubEnterpriseOpts(t.host)...)...)
+	if err != nil {
+		return nil, fmt.Errorf("github: app client: %w", err)
+	}
+	inst, _, err := appClient.Apps.GetRepositoryInstallation(ctx, t.owner, t.repo)
+	if err != nil {
+		return nil, fmt.Errorf("github: find App installation for %s/%s: %w", t.owner, t.repo, err)
+	}
+	t.itr = ghinstallation.NewFromAppsTransport(t.apps, inst.GetID())
+	return t.itr, nil
 }
 
 // clientIDSigner signs the GitHub App JWT with the App's client id as the issuer.
@@ -232,17 +279,26 @@ func (w *githubWriter) Verify(ctx context.Context) error {
 	if err == nil {
 		return nil
 	}
-	status := 0
+	return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
+}
+
+// githubStatus extracts the HTTP status behind a write-client error: the API
+// response when there is one, otherwise the App-JWT failures that surface from
+// the lazy transport before the request is sent — the installation lookup (a
+// github.ErrorResponse) or the token mint (a ghinstallation.HTTPError). 0 if none.
+func githubStatus(resp *github.Response, err error) int {
 	if resp != nil {
-		status = resp.StatusCode
+		return resp.StatusCode
 	}
-	// A GitHub App mints its installation token on this first call; if that mint
-	// fails the github.Response is nil and the status is on the ghinstallation error.
+	var apiErr *github.ErrorResponse
+	if errors.As(err, &apiErr) && apiErr.Response != nil {
+		return apiErr.Response.StatusCode
+	}
 	var instErr *ghinstallation.HTTPError
-	if status == 0 && errors.As(err, &instErr) && instErr.Response != nil {
-		status = instErr.Response.StatusCode
+	if errors.As(err, &instErr) && instErr.Response != nil {
+		return instErr.Response.StatusCode
 	}
-	return rejectedIf(status, fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
+	return 0
 }
 
 // --- Forgejo ---
