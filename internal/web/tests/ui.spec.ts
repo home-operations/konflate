@@ -916,14 +916,42 @@ test('zero counts stay neutral (impact pills) and hidden (diff header)', async (
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/#/pr/142');
 
-  await expect(page.locator('.impact-pill', { hasText: 'added' })).not.toHaveClass(/add/);
-  await expect(page.locator('.impact-pill', { hasText: 'removed' })).not.toHaveClass(/del/);
-  await expect(page.locator('.impact-pill', { hasText: 'changed' })).toHaveClass(/chg/);
+  // The compact delta pill: +0 added and −0 removed are muted (.zero), the
+  // non-zero changed segment keeps its tint.
+  await expect(page.locator('.d-seg.add')).toHaveClass(/zero/);
+  await expect(page.locator('.d-seg.del')).toHaveClass(/zero/);
+  await expect(page.locator('.d-seg.chg')).not.toHaveClass(/zero/);
 
   // The removed StatefulSet (+0 −5): the header hides the zero, like the tree.
   await page.goto('/#/pr/142/r2');
   await expect(page.locator('[data-sel="r2"] .res-counts .del')).toHaveText('-5');
   await expect(page.locator('[data-sel="r2"] .res-counts .add')).toHaveCount(0);
+});
+
+test('a long image list collapses behind its count and expands on click', async ({ page }) => {
+  // Past the collapse threshold the Image changes list is folded so it can't bury
+  // the higher-signal sections; the count stays visible and one click opens it.
+  const many = Array.from({ length: 9 }, (_, i) => ({
+    name: `ghcr.io/app-${i}`,
+    from: `v1.${i}.0`,
+    to: `v1.${i}.1`,
+    refs: [`Deployment apps/app-${i}`],
+  }));
+  const diff = { ...diffEnvelope.diff!, images: many };
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
+  await page.route('**/api/prs/142/diff', (r) => r.fulfill({ json: { ...diffEnvelope, diff } }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/#/pr/142');
+
+  const head = page.locator('.ov-head', { hasText: 'Image changes' });
+  await expect(head).toContainText('9');
+  await expect(head).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.img-list')).toHaveCount(0);
+
+  await head.click();
+  await expect(head).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.img-change')).toHaveCount(9);
 });
 
 test('an open PR with cautions carries a red card edge', async ({ page }) => {
