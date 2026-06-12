@@ -94,11 +94,8 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, error) {
 	case cfg.AppConfigured():
 		return newGitHubAppClient(cfg)
 	case cfg.WriteToken != "":
-		opts := []github.ClientOptionsFunc{github.WithAuthToken(cfg.WriteToken)}
-		if host := cfg.Forge.Host; host != "" {
-			base := "https://" + host + "/"
-			opts = append(opts, github.WithEnterpriseURLs(base, base))
-		}
+		opts := append([]github.ClientOptionsFunc{github.WithAuthToken(cfg.WriteToken)},
+			githubEnterpriseOpts(cfg.Forge.Host)...)
 		client, err := github.NewClient(opts...)
 		if err != nil {
 			return nil, fmt.Errorf("github: new write client: %w", err)
@@ -131,11 +128,12 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("github: App transport: %w", err)
 	}
-	opts := []github.ClientOptionsFunc{}
-	if host := cfg.Forge.Host; host != "" { // GitHub Enterprise Server
-		appsTr.BaseURL = "https://" + host + "/api/v3" // before NewFromAppsTransport copies it
-		base := "https://" + host + "/"
-		opts = append(opts, github.WithEnterpriseURLs(base, base))
+	host := cfg.Forge.Host
+	opts := githubEnterpriseOpts(host)
+	if host != "" {
+		// GHES: ghinstallation mints tokens against the API base; set it before
+		// NewFromAppsTransport copies BaseURL off the apps transport.
+		appsTr.BaseURL = "https://" + host + "/api/v3"
 	}
 	itr := ghinstallation.NewFromAppsTransport(appsTr, cfg.AppInstallationID)
 	opts = append(opts, github.WithTransport(itr))
@@ -189,11 +187,7 @@ func newForgejoWriter(cfg *config.Config) (*forgejoWriter, error) {
 	if cfg.WriteToken == "" {
 		return nil, fmt.Errorf("forgejo: write-back needs KONFLATE_WRITE_TOKEN")
 	}
-	base := "https://codeberg.org"
-	if host := cfg.Forge.Host; host != "" {
-		base = "https://" + host
-	}
-	client, err := forgejo.NewClient(base,
+	client, err := forgejo.NewClient(forgejoBaseURL(cfg.Forge.Host),
 		forgejo.SetForgejoVersion(forgejo.Version()), forgejo.SetToken(cfg.WriteToken))
 	if err != nil {
 		return nil, fmt.Errorf("forgejo: new write client: %w", err)
@@ -227,11 +221,7 @@ func newGitLabWriter(cfg *config.Config) (*gitlabWriter, error) {
 	if cfg.WriteToken == "" {
 		return nil, fmt.Errorf("gitlab: write-back needs KONFLATE_WRITE_TOKEN")
 	}
-	var opts []gitlab.ClientOptionFunc
-	if host := cfg.Forge.Host; host != "" {
-		opts = append(opts, gitlab.WithBaseURL("https://"+host))
-	}
-	client, err := gitlab.NewClient(cfg.WriteToken, opts...)
+	client, err := gitlab.NewClient(cfg.WriteToken, gitlabHostOpts(cfg.Forge.Host)...)
 	if err != nil {
 		return nil, fmt.Errorf("gitlab: new write client: %w", err)
 	}

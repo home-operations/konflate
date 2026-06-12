@@ -254,7 +254,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// Wire status write-back into the queue only when it's enabled and a Writer
 	// was built; otherwise report stays nil and the queue skips it — konflate
 	// posts nothing to the forge (the read-only default).
-	var report func(api.PR, api.JobStatus, *api.Signals, string)
+	var report reportFunc
 	if s.cfg.StatusChecksEnabled() && s.writer != nil {
 		report = s.reportStatus
 	}

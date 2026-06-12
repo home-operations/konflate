@@ -18,10 +18,6 @@ type forgejoProvider struct {
 }
 
 func newForgejo(cfg *config.Config) (*forgejoProvider, error) {
-	base := "https://codeberg.org"
-	if host := cfg.Forge.Host; host != "" {
-		base = "https://" + host
-	}
 	// Pin the API version so NewClient does not probe the server at
 	// construction (which would make startup depend on network reachability and
 	// eager token validation). Version is discovered lazily on the first real
@@ -30,12 +26,22 @@ func newForgejo(cfg *config.Config) (*forgejoProvider, error) {
 	if cfg.Token != "" {
 		opts = append(opts, forgejo.SetToken(cfg.Token))
 	}
-	client, err := forgejo.NewClient(base, opts...)
+	client, err := forgejo.NewClient(forgejoBaseURL(cfg.Forge.Host), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("forgejo: new client: %w", err)
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
 	return &forgejoProvider{client: client, owner: owner, repo: repo}, nil
+}
+
+// forgejoBaseURL is the API base for a Forgejo host, defaulting to the
+// codeberg.org cloud when host is empty. Shared by the read provider and the
+// Writer.
+func forgejoBaseURL(host string) string {
+	if host == "" {
+		return "https://codeberg.org"
+	}
+	return "https://" + host
 }
 
 func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {

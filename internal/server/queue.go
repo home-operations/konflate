@@ -23,6 +23,10 @@ const (
 // engine plugs in directly and tests pass a fake.
 type diffFunc func(ctx context.Context, pr api.PR) (api.DiffResult, error)
 
+// reportFunc is called on each terminal render outcome (ready/error) so the
+// server can write a commit status back to the forge. nil = write-back off.
+type reportFunc func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string)
+
 // queue runs diff jobs with bounded concurrency and per-PR coalescing: while a
 // PR is in flight, a second enqueue does not start a duplicate render — it
 // records the PR as pending so exactly one more render happens after the
@@ -35,11 +39,9 @@ type queue struct {
 	store     *store
 	notify    func(api.Event)
 	reconcile func(number int) // called when a render finds the PR's head branch gone
-	// report, if set, is called on each terminal render outcome (ready/error) so
-	// the server can write a commit status back to the forge. nil = write-back off.
-	report  func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string)
-	metrics *metrics
-	log     *slog.Logger
+	report    reportFunc       // terminal-outcome write-back hook; nil = off
+	metrics   *metrics
+	log       *slog.Logger
 
 	ctx context.Context // cancelled on shutdown; threaded into every diff
 	sem chan struct{}
@@ -54,7 +56,7 @@ type queue struct {
 func newQueue(
 	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
 	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
-	report func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string),
+	report reportFunc,
 ) *queue {
 	if concurrency < 1 {
 		concurrency = 1
