@@ -1,4 +1,4 @@
-{{- if and (not .Values.secret.existingSecret) (or .Values.secret.token .Values.secret.webhookSecret .Values.secret.pushToken) -}}
+{{- if and (not .Values.secret.existingSecret) (include "konflate.hasInlineSecret" .) -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -16,5 +16,11 @@ stringData:
   {{- end }}
   {{- with .Values.secret.pushToken }}
   KONFLATE_PUSH_TOKEN: {{ tpl . $ | quote }}
+  {{- end }}
+  {{- with .Values.secret.writeToken }}
+  KONFLATE_WRITE_TOKEN: {{ tpl . $ | quote }}
+  {{- end }}
+  {{- with .Values.secret.appPrivateKey }}
+  KONFLATE_APP_PRIVATE_KEY: {{ tpl . $ | quote }}
   {{- end }}
 {{- end }}

@@ -45,6 +45,8 @@ Kubernetes: `>=1.25.0-0`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules for pod scheduling. |
+| config.appClientId | string | `""` | GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT. |
+| config.appInstallationId | string | `""` | GitHub App installation id to act as (**GitHub only**); quote it. |
 | config.cacheTtl | string | `""` | Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); "0" disables the sweep. |
 | config.closedPrMax | int | `25` | Cap on retained merged PRs (most-recent win); bounds disk + memory. 0 disables the cap (with `closedPrTtl: "0"`, merged diffs are kept forever). |
 | config.closedPrTtl | string | `"336h"` | How long a merged PR is kept (Go duration); 0 disables the age cap. |
@@ -60,11 +62,13 @@ Kubernetes: `>=1.25.0-0`
 | config.maxDiffResources | string | `""` | Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables. |
 | config.mergeCommand | string | `""` | Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it. |
 | config.prFilterExpr | string | `""` | CEL expression deciding which PRs konflate renders; must return a bool. Empty = `true` (every open PR). Forks are gated separately by `renderForkPrs`, so editing this can't enable forks. A PR it excludes is listed but hidden. e.g. `pr.labels.exists(l, l.name == "cluster/production") && !pr.draft`. See the README. |
+| config.publicUrl | string | `""` | konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status links back to it. Empty = the status is posted without a link. |
 | config.refreshInterval | string | `"30m"` | How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). "0" disables periodic refresh (webhooks only); positive values are floored to 1m. |
 | config.renderConcurrency | string | `""` | Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4). |
 | config.renderForkPrs | bool | `false` | Render fork PRs. ⚠️ A fork runs untrusted external code through flate (SSRF / resource exhaustion). Off by default — forks are listed but hidden until you flip this. Kept separate from `prFilterExpr` so the filter can't accidentally enable them. |
 | config.repo | required | `""` | Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo). |
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
+| config.statusChecks | bool | `false` | Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set. |
 | fullnameOverride | string | `""` | Override the full release name. |
 | httpRoute.additionalRules | list | `[]` | Custom rules prepended before the default rule (templated). |
 | httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
@@ -114,10 +118,12 @@ Kubernetes: `>=1.25.0-0`
 | readinessProbe | object | `{"httpGet":{"path":"/readyz","port":"http"},"initialDelaySeconds":5,"periodSeconds":10}` | Readiness probe. |
 | replicaCount | int | `1` | Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time). |
 | resources | object | `{"limits":{"memory":"1Gi"},"requests":{"cpu":"50m","memory":"256Mi"}}` | Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters. |
+| secret.appPrivateKey | string | `""` | GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId` + `config.appInstallationId`. |
 | secret.existingSecret | string | `""` | Existing Secret holding the KONFLATE_* keys; takes precedence over the inline values below. |
 | secret.pushToken | string | `""` | Push token; enables POST /api/prs/{n}/refresh (authenticated mode). |
 | secret.token | string | `""` | Forge API token. Empty = anonymous, read-only mode. |
 | secret.webhookSecret | string | `""` | Webhook secret; enables POST /hooks (authenticated mode). |
+| secret.writeToken | string | `""` | Write credential for status write-back (commit statuses), separate from `token` so it carries only write scope. The universal option and the only one on GitLab/Forgejo. Needs `config.statusChecks: true` to take effect. |
 | securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container securityContext (no privilege escalation, read-only root filesystem, drops ALL capabilities). |
 | service.metricsPort | int | `9090` | Operational /metrics port. |
 | service.port | int | `8080` | UI / API / websocket port. |

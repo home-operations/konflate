@@ -127,6 +127,26 @@ spec:
             - name: KONFLATE_MERGE_COMMAND
               value: {{ . | quote }}
             {{- end }}
+            {{- /* Write-back (opt-in): the non-secret half. The write credential
+                   itself — writeToken / appPrivateKey — rides in via the Secret
+                   (envFrom below). KONFLATE_STATUS_CHECKS gates the feature; it
+                   does nothing without a credential, so it's safe to always emit. */}}
+            {{- if .Values.config.statusChecks }}
+            - name: KONFLATE_STATUS_CHECKS
+              value: "true"
+            {{- end }}
+            {{- with .Values.config.publicUrl }}
+            - name: KONFLATE_PUBLIC_URL
+              value: {{ tpl . $ | quote }}
+            {{- end }}
+            {{- with .Values.config.appClientId }}
+            - name: KONFLATE_APP_CLIENT_ID
+              value: {{ tpl . $ | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.appInstallationId) "" }}
+            - name: KONFLATE_APP_INSTALLATION_ID
+              value: {{ tpl (toString .Values.config.appInstallationId) $ | quote }}
+            {{- end }}
             # Writable locations under the mounted volumes (readOnlyRootFilesystem).
             - name: KONFLATE_CACHE_DIR
               value: /var/cache/konflate

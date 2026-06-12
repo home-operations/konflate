@@ -84,6 +84,17 @@ the test uses a small image with a shell). The tag is pinned as
 {{- end }}
 
 {{/*
+True ("true") when at least one inline secret value is set. The chart-managed
+Secret is rendered (and referenced) only then; the secretName helper and
+secret.tpl both gate on this, so its stringData keys stay in sync here.
+*/}}
+{{- define "konflate.hasInlineSecret" -}}
+{{- if or .Values.secret.token .Values.secret.webhookSecret .Values.secret.pushToken .Values.secret.writeToken .Values.secret.appPrivateKey -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
 Name of the Secret holding the sensitive KONFLATE_* values, or "" if none:
 an existing Secret wins; otherwise a chart-managed Secret is used only when at
 least one inline value is set.
@@ -91,7 +102,7 @@ least one inline value is set.
 {{- define "konflate.secretName" -}}
 {{- if .Values.secret.existingSecret -}}
 {{- tpl .Values.secret.existingSecret $ -}}
-{{- else if or .Values.secret.token .Values.secret.webhookSecret .Values.secret.pushToken -}}
+{{- else if include "konflate.hasInlineSecret" . -}}
 {{- include "konflate.fullname" . -}}
 {{- end -}}
 {{- end }}
