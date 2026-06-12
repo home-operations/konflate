@@ -885,6 +885,23 @@ button.sum-pill:hover {
   color: var(--muted);
   font-weight: 400;
 }
+/* CI status indicator (the forge's checks): a bare tinted icon — green check,
+   red ✕, amber hollow circle — that rides with the signal badges. Not a count
+   pill, so no border or background; the state class carries the color. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.check-success {
+  color: var(--ok);
+}
+.check-failure {
+  color: var(--danger);
+}
+.check-pending {
+  color: var(--warn);
+}
 
 /* ---- review shell ---------------------------------------------------- */
 .review {

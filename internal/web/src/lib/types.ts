@@ -32,6 +32,17 @@ export interface Signals {
   failures: number;
 }
 
+// CheckRollup is the PR head's rolled-up CI status (the forge's red/amber/green).
+// state is '' (CheckNone) only on a clearing websocket event; PRStatus.checks is
+// absent when there are no checks, so a present rollup always has a real state.
+export type CheckState = 'pending' | 'success' | 'failure';
+export interface CheckRollup {
+  state: CheckState | '';
+  total: number;
+  passed: number;
+  failed: number;
+}
+
 export interface PRStatus extends PR {
   status: JobStatus;
   error?: string;
@@ -39,6 +50,7 @@ export interface PRStatus extends PR {
   updatedAt: string;
   closedAt?: string; // set once merged; UI groups these below open PRs
   signals?: Signals;
+  checks?: CheckRollup; // PR-head CI rollup; absent when no checks were reported
   mergeCommand?: string; // "copy to merge" CLI command; set only for open PRs when enabled
   hidden?: boolean; // excluded by the PR filter — listed (greyed, under the "hidden" pill) but never rendered
 }
@@ -168,7 +180,8 @@ export interface DiffEnvelope {
 // narrow on `ev.type` instead of asserting `status` is present.
 export type WSEvent =
   | { type: 'status'; number: number; status: JobStatus; error?: string }
-  | { type: 'removed'; number: number };
+  | { type: 'removed'; number: number }
+  | { type: 'checks'; number: number; checks: CheckRollup };
 
 export interface Meta {
   forge: string;
