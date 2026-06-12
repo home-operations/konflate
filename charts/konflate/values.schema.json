@@ -156,9 +156,15 @@
           "title": "sourceRetryAttempts",
           "type": "string"
         },
+        "statusCheckName": {
+          "default": "",
+          "description": "Name the commit status konflate posts under (the required-check name in branch-protection rules). Empty uses the default, \"Konflate\".",
+          "title": "statusCheckName",
+          "type": "string"
+        },
         "statusChecks": {
           "default": false,
-          "description": "Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.",
+          "description": "Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.",
           "title": "statusChecks",
           "type": "boolean"
         }

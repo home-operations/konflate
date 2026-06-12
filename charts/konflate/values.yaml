@@ -149,8 +149,10 @@ config:
   # loop report results back to the forge using a process-held write credential
   # (secret.writeToken, or the GitHub App credentials). See the README.
 
-  # -- Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.
+  # -- Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.
   statusChecks: false
+  # -- Name the commit status konflate posts under (the required-check name in branch-protection rules). Empty uses the default, "Konflate".
+  statusCheckName: ""
   # -- Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.
   prComments: false
   # -- Optional Go text/template for the PR-comment body, replacing the built-in summary. When set, the chart mounts it (a ConfigMap) and points `KONFLATE_PR_COMMENT_TEMPLATE_FILE` at it. The konflate marker is injected automatically. Context: `.PR`, `.Diff`, `.ReviewURL`, `.Summary` (the default body). Passed verbatim (NOT tpl'd) — it's konflate's own template. See the README.

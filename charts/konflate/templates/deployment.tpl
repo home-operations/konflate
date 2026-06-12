@@ -139,6 +139,10 @@ spec:
             - name: KONFLATE_STATUS_CHECKS
               value: "true"
             {{- end }}
+            {{- with .Values.config.statusCheckName }}
+            - name: KONFLATE_STATUS_CHECK_NAME
+              value: {{ tpl . $ | quote }}
+            {{- end }}
             {{- if .Values.config.prComments }}
             - name: KONFLATE_PR_COMMENTS
               value: "true"

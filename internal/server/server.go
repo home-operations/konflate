@@ -109,9 +109,6 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	return s
 }
 
-// statusContext is the name konflate's commit status appears under on the PR.
-const statusContext = "konflate"
-
 // Write-back tuning. forgeWriteTimeout is the overall budget for one write
 // (across all attempts) so a slow or hung forge can't park a fire-and-forget
 // goroutine until shutdown. A brief forge outage is retried a few times with
@@ -256,7 +253,7 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 
 // postStatus writes konflate's commit status for a terminal render outcome.
 func (s *Server) postStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
-	status := provider.Status{Context: statusContext, TargetURL: s.reviewURL(pr.Number)}
+	status := provider.Status{Context: s.cfg.StatusCheckName, TargetURL: s.reviewURL(pr.Number)}
 	switch st {
 	case api.JobReady:
 		status.State = provider.StatusSuccess

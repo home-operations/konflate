@@ -406,3 +406,30 @@ func TestLoad_PartialAppCredential(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_StatusCheckName(t *testing.T) {
+	t.Run("defaults to Konflate when unset", func(t *testing.T) {
+		t.Setenv("KONFLATE_REPO", "github://owner/repo")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if DefaultStatusCheckName != "Konflate" {
+			t.Errorf("DefaultStatusCheckName = %q, want %q", DefaultStatusCheckName, "Konflate")
+		}
+		if cfg.StatusCheckName != DefaultStatusCheckName {
+			t.Errorf("StatusCheckName = %q, want the default %q", cfg.StatusCheckName, DefaultStatusCheckName)
+		}
+	})
+	t.Run("respects an explicit name", func(t *testing.T) {
+		t.Setenv("KONFLATE_REPO", "github://owner/repo")
+		t.Setenv("KONFLATE_STATUS_CHECK_NAME", "ci/konflate")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.StatusCheckName != "ci/konflate" {
+			t.Errorf("StatusCheckName = %q, want %q", cfg.StatusCheckName, "ci/konflate")
+		}
+	})
+}
