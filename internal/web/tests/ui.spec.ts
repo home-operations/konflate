@@ -988,6 +988,31 @@ test('the summary always lays out four columns, with a green placeholder for an 
   await expect(cols.nth(0).locator('.flag')).toHaveCount(0);
 });
 
+test('the summary grid resolves to 4 / 2 / 1 columns by pane width (never an orphaned 3+1)', async ({ page }) => {
+  // The grid uses explicit container-query breakpoints, not auto-fit, so the four
+  // columns always land in a balanced shape: four across when wide, a 2×2 at medium
+  // widths, a single stack when narrow. The resolved track count is the assertion —
+  // a count of 3 would be the old orphaned "3 + lonely 1" layout.
+  await stubApi(page);
+  // getComputedStyle resolves grid-template-columns to one px value per track.
+  const trackCount = () =>
+    page.locator('.ov-grid').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+
+  // Wide desktop (rail + a roomy pane): four across.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/#/pr/142');
+  await expect(page.locator('.ov-grid')).toBeVisible();
+  await expect.poll(trackCount).toBe(4);
+
+  // Mid width — the pane auto-fit used to orphan (3 + 1). Now a balanced 2×2.
+  await page.setViewportSize({ width: 960, height: 900 });
+  await expect.poll(trackCount).toBe(2);
+
+  // Mobile (the switcher's Summary pane, full width): a single stack.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect.poll(trackCount).toBe(1);
+});
+
 test('an open PR with cautions carries an amber card edge', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
