@@ -134,13 +134,15 @@ func (s *Server) reportOutcome(pr api.PR, st api.JobStatus, sig *api.Signals, er
 
 // writeBack runs one forge write off the render path: on its own goroutine,
 // retried with backoff and bounded by forgeWriteTimeout, logging (never failing)
-// on giving up so a write-back problem never blocks or fails a render.
+// on giving up so a write-back problem never blocks or fails a render. A write
+// cut short by shutdown (runCtx cancelled) is draining, not a failure, so it
+// isn't warned — matching the render queue's handling of context.Canceled.
 func (s *Server) writeBack(kind string, number int, fn func(ctx context.Context) error) {
 	go func() {
 		ctx, cancel := context.WithTimeout(s.runCtx, forgeWriteTimeout)
 		defer cancel()
-		err := retryWrite(ctx, forgeWriteAttempts, forgeWriteBackoff, func() error { return fn(ctx) })
-		if err != nil {
+		if err := retryWrite(ctx, forgeWriteAttempts, forgeWriteBackoff, func() error { return fn(ctx) }); err != nil &&
+			!errors.Is(ctx.Err(), context.Canceled) {
 			s.log.Warn("write-back failed", "kind", kind, "pr", number, "attempts", forgeWriteAttempts, "error", err)
 		}
 	}()
