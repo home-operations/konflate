@@ -58,9 +58,92 @@ func imageChanges(changes []diff.Change) []api.ImageChange {
 		slices.Sort(refs)
 		out = append(out, api.ImageChange{Name: a.name, From: a.from, To: a.to, Refs: refs})
 	}
+	out = reconcileRelocations(out)
 	slices.SortFunc(out, func(a, b api.ImageChange) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.From, b.From), cmp.Compare(a.To, b.To))
 	})
+	return out
+}
+
+// reconcileRelocations folds the artificial add/remove split that a resource
+// rename produces back into the one real image transition. When a PR moves an
+// image to a differently-named resource (a chart restructure), the old resource
+// (removed) reports the image as a pure removal (To == "") and the new resource
+// (added) reports it as a pure addition (From == ""); per-resource diffing can't
+// see the two are the same image. This pass pairs a lone pure removal with a lone
+// pure addition of the same repository into one from→to move, unioning the
+// resources that reference it.
+//
+// Only the unambiguous one-removal-one-addition case is merged — mirroring
+// repoTransitions' refusal to pair when several versions are in play, so a
+// transition no container underwent is never invented. A merged move whose
+// versions are equal is a pure relocation: the image itself is unchanged, so it
+// is dropped — the Image changes list reports version deltas, not where a
+// resource moved (the resource diff already shows that), the same reason record
+// skips a no-op move.
+func reconcileRelocations(in []api.ImageChange) []api.ImageChange {
+	type repoIdx struct{ adds, removes []int }
+	byRepo := map[string]*repoIdx{}
+	idx := func(name string) *repoIdx {
+		if byRepo[name] == nil {
+			byRepo[name] = &repoIdx{}
+		}
+		return byRepo[name]
+	}
+	for i, ic := range in {
+		switch {
+		case ic.From == "" && ic.To != "":
+			r := idx(ic.Name)
+			r.adds = append(r.adds, i)
+		case ic.To == "" && ic.From != "":
+			r := idx(ic.Name)
+			r.removes = append(r.removes, i)
+		}
+	}
+
+	dropped := make([]bool, len(in))
+	var merged []api.ImageChange
+	for _, r := range byRepo {
+		if len(r.adds) != 1 || len(r.removes) != 1 {
+			continue // ambiguous (or one-sided) — leave the entries discrete
+		}
+		add, rem := in[r.adds[0]], in[r.removes[0]]
+		dropped[r.adds[0]] = true
+		dropped[r.removes[0]] = true
+		if rem.From == add.To {
+			continue // same version on both sides: a relocation, not a change
+		}
+		merged = append(merged, api.ImageChange{
+			Name: add.Name, From: rem.From, To: add.To, Refs: mergeRefs(rem.Refs, add.Refs),
+		})
+	}
+
+	out := make([]api.ImageChange, 0, len(in))
+	for i, ic := range in {
+		if !dropped[i] {
+			out = append(out, ic)
+		}
+	}
+	return append(out, merged...)
+}
+
+// mergeRefs unions two already-sorted reference lists into one sorted, deduped list.
+func mergeRefs(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	add := func(s string) {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	for _, s := range a {
+		add(s)
+	}
+	for _, s := range b {
+		add(s)
+	}
+	slices.Sort(out)
 	return out
 }
 
