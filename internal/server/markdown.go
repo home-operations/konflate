@@ -8,6 +8,14 @@ import (
 	"github.com/home-operations/konflate/internal/api"
 )
 
+// konflateMarker is the hidden HTML comment tagging konflate's own PR comment,
+// so comment write-back can find and edit it in place instead of posting a new
+// one on each render. summaryMarkdown embeds it at the top; the forge Writer
+// matches a comment body against it.
+func konflateMarker(number int) string {
+	return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
+}
+
 // summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block,
 // for a CI job to post back onto the pull request. With admonitions=true it uses
 // GitHub-flavoured alert blocks (> [!CAUTION] / > [!WARNING]); otherwise a plain
@@ -19,7 +27,8 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	n := env.PR.Number
 	// A stable marker so a poster can find-and-edit its own comment in place
 	// instead of adding a new one on every render.
-	fmt.Fprintf(&b, "<!-- konflate:pr-%d -->\n", n)
+	b.WriteString(konflateMarker(n))
+	b.WriteByte('\n')
 	b.WriteString("### konflate — summary\n")
 
 	writeLink := func() {

@@ -48,26 +48,27 @@ func TestConfig_InboundGating(t *testing.T) {
 func TestWriteAccessors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name                       string
-		statusChecks               bool
-		writeToken                 string
-		appClientID, appKey        string
-		appInstallID               int64
-		wantWrite, wantSC, wantApp bool
+		name                               string
+		statusChecks, prComments           bool
+		writeToken                         string
+		appClientID, appKey                string
+		appInstallID                       int64
+		wantWrite, wantSC, wantPC, wantApp bool
 	}{
-		{"off by default (read-only)", false, "", "", "", 0, false, false, false},
-		{"toggle on but no credential → still read-only", true, "", "", "", 0, false, false, false},
-		{"write PAT enables write; status still needs the toggle", false, "pat", "", "", 0, true, false, false},
-		{"write PAT + toggle → status checks on", true, "pat", "", "", 0, true, true, false},
-		{"GitHub App key enables write", true, "", "", "-----BEGIN KEY-----", 0, true, true, false},
-		{"complete App → configured", true, "", "Iv1", "-----BEGIN KEY-----", 42, true, true, true},
-		{"App key without installation id → not configured", true, "", "Iv1", "-----BEGIN KEY-----", 0, true, true, false},
+		{"off by default (read-only)", false, false, "", "", "", 0, false, false, false, false},
+		{"toggles on but no credential → still read-only", true, true, "", "", "", 0, false, false, false, false},
+		{"write PAT, no toggles → write only", false, false, "pat", "", "", 0, true, false, false, false},
+		{"PAT + status toggle → status on, comments off", true, false, "pat", "", "", 0, true, true, false, false},
+		{"PAT + comment toggle → comments on, status off", false, true, "pat", "", "", 0, true, false, true, false},
+		{"GitHub App key enables write", true, false, "", "", "-----BEGIN KEY-----", 0, true, true, false, false},
+		{"complete App → configured", true, true, "", "Iv1", "-----BEGIN KEY-----", 42, true, true, true, true},
+		{"App key without installation id → not configured", true, false, "", "Iv1", "-----BEGIN KEY-----", 0, true, true, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			c := &Config{
-				StatusChecks: tt.statusChecks, WriteToken: tt.writeToken,
+				StatusChecks: tt.statusChecks, PRComments: tt.prComments, WriteToken: tt.writeToken,
 				AppClientID: tt.appClientID, AppPrivateKey: tt.appKey, AppInstallationID: tt.appInstallID,
 			}
 			if got := c.WriteEnabled(); got != tt.wantWrite {
@@ -75,6 +76,9 @@ func TestWriteAccessors(t *testing.T) {
 			}
 			if got := c.StatusChecksEnabled(); got != tt.wantSC {
 				t.Errorf("StatusChecksEnabled() = %v, want %v", got, tt.wantSC)
+			}
+			if got := c.PRCommentsEnabled(); got != tt.wantPC {
+				t.Errorf("PRCommentsEnabled() = %v, want %v", got, tt.wantPC)
 			}
 			if got := c.AppConfigured(); got != tt.wantApp {
 				t.Errorf("AppConfigured() = %v, want %v", got, tt.wantApp)

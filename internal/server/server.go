@@ -103,19 +103,41 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // statusContext is the name konflate's commit status appears under on the PR.
 const statusContext = "konflate"
 
-// statusWriteTimeout bounds a single forge status write so a slow or hung forge
-// can't park a write-back goroutine until shutdown (it's fire-and-forget off the
-// render path). Generous: a status POST is a small request.
-const statusWriteTimeout = 30 * time.Second
+// forgeWriteTimeout bounds a single forge write (a status or a comment) so a slow
+// or hung forge can't park a write-back goroutine until shutdown — these run
+// fire-and-forget off the render path. Generous: each is a small API call.
+const forgeWriteTimeout = 30 * time.Second
 
-// reportStatus writes konflate's commit status for a terminal render outcome,
-// when status write-back is enabled. It runs the forge write on a goroutine —
-// it must never block the render queue — and logs (never fails) on error. Wired
-// to the queue only when StatusChecksEnabled (see Run).
-func (s *Server) reportStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
+// reportOutcome is the queue's terminal-outcome hook: it writes konflate's result
+// back to the forge — a commit status and/or a summary comment, per the enabled
+// toggles. Wired only when at least one is enabled and a Writer was built (see Run).
+func (s *Server) reportOutcome(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
 	if s.writer == nil {
 		return
 	}
+	if s.cfg.StatusChecksEnabled() {
+		s.postStatus(pr, st, sig, errMsg)
+	}
+	if s.cfg.PRCommentsEnabled() {
+		s.postComment(pr, st)
+	}
+}
+
+// writeBack runs one forge write off the render path: on its own goroutine,
+// bounded by forgeWriteTimeout, logging (never failing) on error so a write-back
+// problem never blocks or fails a render.
+func (s *Server) writeBack(kind string, number int, fn func(ctx context.Context) error) {
+	go func() {
+		ctx, cancel := context.WithTimeout(s.runCtx, forgeWriteTimeout)
+		defer cancel()
+		if err := fn(ctx); err != nil {
+			s.log.Warn("write-back failed", "kind", kind, "pr", number, "error", err)
+		}
+	}()
+}
+
+// postStatus writes konflate's commit status for a terminal render outcome.
+func (s *Server) postStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
 	status := provider.Status{Context: statusContext, TargetURL: s.reviewURL(pr.Number)}
 	switch st {
 	case api.JobReady:
@@ -127,13 +149,28 @@ func (s *Server) reportStatus(pr api.PR, st api.JobStatus, sig *api.Signals, err
 	default:
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(s.runCtx, statusWriteTimeout)
-		defer cancel()
-		if err := s.writer.SetStatus(ctx, pr, status); err != nil {
-			s.log.Warn("status write-back failed", "pr", pr.Number, "error", err)
-		}
-	}()
+	s.writeBack("status", pr.Number, func(ctx context.Context) error {
+		return s.writer.SetStatus(ctx, pr, status)
+	})
+}
+
+// postComment posts (or updates in place) the rendered summary as a PR comment.
+// Only on a successful render: the comment exists to carry the summary, and a
+// failed render is already surfaced by the commit status — so konflate doesn't
+// create a "render failed" comment on a PR it could never render.
+func (s *Server) postComment(pr api.PR, st api.JobStatus) {
+	if st != api.JobReady {
+		return
+	}
+	env, ok := s.store.get(pr.Number)
+	if !ok || env.Diff == nil {
+		return
+	}
+	body := summaryMarkdown(env, s.reviewURL(pr.Number), s.cfg.Forge.Kind == config.ForgeGitHub)
+	marker := konflateMarker(pr.Number)
+	s.writeBack("comment", pr.Number, func(ctx context.Context) error {
+		return s.writer.UpsertComment(ctx, pr, marker, body)
+	})
 }
 
 // reviewURL is konflate's review link for a PR, built from KONFLATE_PUBLIC_URL;
@@ -251,12 +288,12 @@ func (s *Server) Run(ctx context.Context) error {
 	g, gctx := errgroup.WithContext(ctx)
 	s.runCtx = gctx
 
-	// Wire status write-back into the queue only when it's enabled and a Writer
+	// Wire write-back into the queue only when something is enabled and a Writer
 	// was built; otherwise report stays nil and the queue skips it — konflate
 	// posts nothing to the forge (the read-only default).
 	var report reportFunc
-	if s.cfg.StatusChecksEnabled() && s.writer != nil {
-		report = s.reportStatus
+	if s.writer != nil && (s.cfg.StatusChecksEnabled() || s.cfg.PRCommentsEnabled()) {
+		report = s.reportOutcome
 	}
 	s.queue = newQueue(
 		gctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
