@@ -101,8 +101,11 @@ type Meta struct {
 // Event is a websocket message announcing a change to a PR's diff job, so the
 // UI can update that PR without polling.
 type Event struct {
-	Type   string    `json:"type"`             // "status" (job state changed) or "removed" (PR no longer open)
+	Type   string    `json:"type"`             // "status" (job state changed), "removed" (PR no longer open), or "checks" (CI rollup changed)
 	Number int       `json:"number"`           // the affected PR
 	Status JobStatus `json:"status,omitempty"` // set for "status" events
 	Error  string    `json:"error,omitempty"`
+	// Checks is set on "checks" events — the PR head's new CI rollup (State may be
+	// CheckNone, which clears the indicator). Absent on other event types.
+	Checks *CheckRollup `json:"checks,omitempty"`
 }

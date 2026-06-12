@@ -23,6 +23,10 @@ type job struct {
 	status  api.JobStatus
 	result  *api.DiffResult
 	signals *api.Signals
+	// checks is the PR head's CI rollup (the forge's red/amber/green), refreshed
+	// on the poll (and, later, status webhooks) independently of the diff job.
+	// nil = no checks reported or not yet fetched.
+	checks  *api.CheckRollup
 	errMsg  string
 	updated time.Time
 	// closedAt is set once the PR has left the forge's open set (merged); zero
@@ -166,6 +170,35 @@ func (s *store) upsertPR(pr api.PR, hidden bool) {
 	j.hidden = hidden
 	j.closedAt = time.Time{} // seen in the open set again (covers reopen)
 	j.updated = s.now()
+}
+
+// setChecks updates a PR's CI rollup, reporting whether it actually changed so
+// the caller only broadcasts real transitions. A CheckNone rollup clears it
+// (stored as nil, so the list omits the field). No-op for an unknown PR.
+func (s *store) setChecks(number int, r api.CheckRollup) (changed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j := s.jobs[number]
+	if j == nil {
+		return false
+	}
+	var next *api.CheckRollup
+	if r.State != api.CheckNone {
+		next = &r
+	}
+	if checksEqual(j.checks, next) {
+		return false
+	}
+	j.checks = next
+	return true
+}
+
+// checksEqual compares two rollup pointers by value (both nil → equal).
+func checksEqual(a, b *api.CheckRollup) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // setStatus transitions a PR to status, recording its metadata if new. A PR
@@ -433,7 +466,7 @@ func (s *store) list() []api.PRStatus {
 		}
 		out = append(out, api.PRStatus{
 			PR: j.pr, Status: j.status, Error: j.errMsg, RefreshError: j.refreshErr,
-			UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals, Hidden: j.hidden,
+			UpdatedAt: j.updated, ClosedAt: closedAt, Signals: j.signals, Checks: j.checks, Hidden: j.hidden,
 		})
 	}
 	slices.SortFunc(out, func(a, b api.PRStatus) int { return cmp.Compare(b.Number, a.Number) }) // newest first

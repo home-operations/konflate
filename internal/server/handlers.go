@@ -518,6 +518,27 @@ func (s *Server) refreshList(ctx context.Context) {
 	// line per PR: at startup every PR is "new", which would be a burst of
 	// near-identical lines on a busy instance. The per-PR detail stays at debug.
 	s.log.Info("refresh listed", "prs", len(prs), "new", added, "advanced", advanced, "unhidden", unhidden)
+	s.refreshChecks(ctx, prs)
+}
+
+// refreshChecks fetches each open PR's CI rollup from the forge and stores it,
+// broadcasting only the rollups that actually changed so the list updates live
+// without a reload. This is the 30m poll's check pass; a status webhook (later)
+// refreshes a single PR the same way. Errors are logged per PR and never abort
+// the refresh — a forge that rate-limits the checks endpoint must not stop PRs
+// from listing.
+func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
+	for _, pr := range prs {
+		rollup, err := s.prov.Checks(ctx, pr)
+		if err != nil {
+			s.log.Debug("checks fetch failed", "pr", pr.Number, "error", err)
+			continue
+		}
+		if s.store.setChecks(pr.Number, rollup) {
+			r := rollup
+			s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
+		}
+	}
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is
