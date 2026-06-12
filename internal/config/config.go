@@ -353,6 +353,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
+	// A GitHub App write credential needs both halves. Reject a half-set pair
+	// loudly at startup: a lone KONFLATE_APP_CLIENT_ID would otherwise leave
+	// WriteEnabled false and silently keep write-back off (the operator believes
+	// it's live), and a lone key would only surface deep in the writer. GitHub-only
+	// in effect, but the fields are forge-agnostic so the check is too.
+	if (cfg.AppClientID == "") != (cfg.AppPrivateKey == "") {
+		return nil, fmt.Errorf("config: a GitHub App write credential needs both " +
+			"KONFLATE_APP_CLIENT_ID and KONFLATE_APP_PRIVATE_KEY (only one is set)")
+	}
+
 	// Compile the PR filter once, here, so a malformed expression fails at
 	// startup with a clear message rather than silently dropping every PR. An
 	// empty expression falls back to DefaultPRFilter, so cfg.PRFilter is always

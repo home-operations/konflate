@@ -12,10 +12,13 @@ import (
 	"hash/fnv"
 	"io"
 	"mime"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -269,11 +272,53 @@ func renderStatus(env api.DiffEnvelope) string {
 	}
 }
 
-// avatarClient fetches author avatars with a tight timeout; responses are
-// size-capped and must be images (see handleAvatar).
-var avatarClient = &http.Client{Timeout: 8 * time.Second}
+// avatarDialControl refuses to open a connection to a non-public address. It runs
+// for the initial dial and for every redirect hop, after DNS resolution, against
+// the concrete IP being dialed — so it also defeats DNS rebinding and a redirect
+// aimed at an internal host. Blocks loopback, RFC1918/ULA private ranges,
+// link-local (incl. the 169.254.169.254 cloud-metadata address), multicast, and
+// the unspecified address.
+func avatarDialControl(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return errors.New("avatar: unresolved dial address")
+	}
+	ip = ip.Unmap() // normalize ::ffff:a.b.c.d so the IPv4 checks below apply
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return errors.New("avatar: refusing to connect to a non-public address")
+	}
+	return nil
+}
+
+// avatarClient fetches author avatars with a tight timeout. It refuses to connect
+// to non-public addresses (avatarDialControl) and re-validates every redirect, so
+// a forge-returned avatar URL — the only kind handleAvatar will fetch, see the
+// HMAC gate — can't be steered to cloud metadata, loopback, or in-cluster services
+// via a redirect or DNS rebinding. Responses are size-capped and must be images.
+var avatarClient = &http.Client{
+	Timeout: 8 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("avatar: stopped after 5 redirects")
+		}
+		if req.URL.Scheme != schemeHTTPS {
+			return errors.New("avatar: refusing a non-https redirect")
+		}
+		return nil
+	},
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{Timeout: 5 * time.Second, Control: avatarDialControl}).DialContext,
+	},
+}
 
 const maxAvatarBytes = 2 << 20 // 2 MiB
+
+// schemeHTTPS is the only URL scheme konflate will fetch or link over.
+const schemeHTTPS = "https"
 
 // avatarProxyPath rewrites a raw forge avatar URL into a signed, same-origin
 // /api/avatar path. The HMAC (a per-process key) means handleAvatar will only
@@ -301,7 +346,7 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "invalid avatar signature")
 		return
 	}
-	if u, err := url.Parse(raw); err != nil || u.Scheme != "https" {
+	if u, err := url.Parse(raw); err != nil || u.Scheme != schemeHTTPS {
 		writeError(w, http.StatusBadRequest, "avatar must be an https URL")
 		return
 	}
