@@ -27,6 +27,10 @@ type commentTemplateData struct {
 	// Summary is konflate's built-in summary body (without the marker), so a custom
 	// template can wrap or extend the default with `{{ .Summary }}`.
 	Summary string
+	// Sections are the summary's individual blocks (.Sections.Impact, .Cautions,
+	// .Failures, .Images, .BlastRadius) as rendered Markdown, to place à la carte
+	// instead of the whole `{{ .Summary }}`. Empty fields when a block is absent.
+	Sections summarySections
 }
 
 // newCommentTemplate parses the operator's PR-comment template file, or returns
@@ -69,6 +73,7 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 		Diff:      env.Diff,
 		ReviewURL: reviewURL,
 		Summary:   summaryMarkdownBody(env, reviewURL, admonitions),
+		Sections:  summarySectionsFor(env.Diff, admonitions),
 	}
 	var b strings.Builder
 	if err := s.commentTmpl.Execute(&b, data); err != nil {

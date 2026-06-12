@@ -78,6 +78,30 @@ func TestCommentBody_CustomTemplateWithoutSummary(t *testing.T) {
 	}
 }
 
+func TestCommentBody_SectionsPlacedIndividually(t *testing.T) {
+	t.Parallel()
+	// A template that composes only two sections — the others must not leak in.
+	body := newCommentServer(t, "## Cautions\n{{ .Sections.Cautions }}\n\n## Images\n{{ .Sections.Images }}").
+		commentBody(sampleSummaryEnv())
+
+	if !strings.HasPrefix(body, konflateMarker(142)) {
+		t.Errorf("marker should be injected: %q", body)
+	}
+	if !strings.Contains(body, "[!CAUTION]") || !strings.Contains(body, "Deployment web/api") {
+		t.Errorf(".Sections.Cautions not rendered: %q", body)
+	}
+	if !strings.Contains(body, "Image changes") || !strings.Contains(body, "ghcr.io/rook/ceph") {
+		t.Errorf(".Sections.Images not rendered: %q", body)
+	}
+	// Sections are independent: nothing the template didn't ask for appears.
+	if strings.Contains(body, "added ·") {
+		t.Errorf("only Cautions+Images were placed, but the Impact line leaked in: %q", body)
+	}
+	if strings.Contains(body, "Render failures") {
+		t.Errorf("only Cautions+Images were placed, but Failures leaked in: %q", body)
+	}
+}
+
 func TestCommentBody_ExecuteErrorFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 	// .PR.Bogus parses but errors at execute → fall back to the default body.

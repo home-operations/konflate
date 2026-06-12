@@ -341,12 +341,23 @@ _Rendered `{{ .PR.HeadSHA }}` · [review →]({{ .ReviewURL }})_
 
 It renders against:
 
-| Field        | What                                                                                                               |
-| ------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `.PR`        | the pull request — `.PR.Number`, `.PR.Title`, `.PR.Author`, `.PR.HeadRef`, `.PR.HeadSHA`, `.PR.BaseRef`, `.PR.URL` |
-| `.Diff`      | the rendered diff — `.Diff.Impact.Resources`, `.Diff.Warnings`, `.Diff.Images`, `.Diff.Failures`, …                |
-| `.ReviewURL` | konflate's review link (from `KONFLATE_PUBLIC_URL`), or empty                                                      |
-| `.Summary`   | konflate's default summary body, so you can wrap or extend it with `{{ .Summary }}`                                |
+| Field        | What                                                                                                                                                                                                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.PR`        | the pull request — `.PR.Number`, `.PR.Title`, `.PR.Author`, `.PR.HeadRef`, `.PR.HeadSHA`, `.PR.BaseRef`, `.PR.URL`                                                                                                                                                                |
+| `.Diff`      | the rendered diff — `.Diff.Impact.Resources`, `.Diff.Warnings`, `.Diff.Images`, `.Diff.Failures`, …                                                                                                                                                                               |
+| `.ReviewURL` | konflate's review link (from `KONFLATE_PUBLIC_URL`), or empty                                                                                                                                                                                                                     |
+| `.Summary`   | konflate's default summary body, so you can wrap or extend it with `{{ .Summary }}`                                                                                                                                                                                               |
+| `.Sections`  | the summary's blocks _individually_, as rendered Markdown — `.Sections.Impact`, `.Sections.Cautions`, `.Sections.Failures`, `.Sections.Images`, `.Sections.BlastRadius` — to place à la carte instead of the whole `.Summary`. Each is empty when that block has nothing to show. |
+
+So you can drop the cautions and image changes wherever you like and skip the rest:
+
+```gotmpl
+{{ if .Sections.Cautions }}> Heads up:
+{{ .Sections.Cautions }}
+{{ end }}
+**Images bumped on #{{ .PR.Number }}**
+{{ .Sections.Images }}
+```
 
 konflate **injects its hidden marker automatically**, so the comment is still found and edited in place — your template needn't include it. The template is parsed once at startup; one that fails to parse, or to render for a given PR, falls back to the built-in summary (and logs) rather than dropping the comment.
 
