@@ -135,6 +135,15 @@ spec:
             - name: KONFLATE_STATUS_CHECKS
               value: "true"
             {{- end }}
+            {{- if .Values.config.prComments }}
+            - name: KONFLATE_PR_COMMENTS
+              value: "true"
+            {{- end }}
+            {{- if .Values.config.prCommentTemplate }}
+            # A custom comment template — mounted from the chart-managed ConfigMap below.
+            - name: KONFLATE_PR_COMMENT_TEMPLATE_FILE
+              value: /etc/konflate/pr-comment.md.gotmpl
+            {{- end }}
             {{- with .Values.config.publicUrl }}
             - name: KONFLATE_PUBLIC_URL
               value: {{ tpl . $ | quote }}
@@ -186,6 +195,11 @@ spec:
               mountPath: /var/cache/konflate
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.config.prCommentTemplate }}
+            - name: pr-comment-template
+              mountPath: /etc/konflate
+              readOnly: true
+            {{- end }}
             {{- with .Values.volumeMounts }}
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}
@@ -199,6 +213,11 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.config.prCommentTemplate }}
+        - name: pr-comment-template
+          configMap:
+            name: {{ include "konflate.fullname" . }}-pr-comment-template
+        {{- end }}
         {{- with .Values.volumes }}
         {{- tpl (toYaml .) $ | nindent 8 }}
         {{- end }}

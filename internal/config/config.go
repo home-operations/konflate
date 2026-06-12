@@ -72,8 +72,21 @@ type Config struct {
 
 	// StatusChecks, when true AND a write credential is set, makes konflate report
 	// a commit status on each rendered PR head linking to the konflate review (see
-	// StatusChecksEnabled). The PR-comment write-back will gate the same way.
+	// StatusChecksEnabled).
 	StatusChecks bool `env:"KONFLATE_STATUS_CHECKS" envDefault:"false"`
+
+	// PRComments, when true AND a write credential is set, makes konflate post (and
+	// then update in place, keyed by a hidden marker) a PR comment carrying the
+	// rendered summary on each successful render (see PRCommentsEnabled). Shares the
+	// write credential with StatusChecks; the two are independent toggles.
+	PRComments bool `env:"KONFLATE_PR_COMMENTS" envDefault:"false"`
+
+	// PRCommentTemplateFile is an optional path to a Go text/template that renders
+	// the PR-comment body, replacing the built-in summary. It's parsed once at
+	// startup; the konflate marker is injected automatically, so the template need
+	// not include it. Empty uses the built-in default. See the server's
+	// commentTemplateData for the values exposed to the template.
+	PRCommentTemplateFile string `env:"KONFLATE_PR_COMMENT_TEMPLATE_FILE"`
 
 	// WriteToken is a forge token used only for write-back (commit statuses, and
 	// later PR comments) — kept separate from Token so it can be scoped to just the
@@ -310,6 +323,10 @@ func (c *Config) WriteEnabled() bool { return c.WriteToken != "" || c.AppPrivate
 // StatusChecksEnabled reports whether konflate should report a commit status on
 // each rendered PR head: the toggle is on and a write credential is configured.
 func (c *Config) StatusChecksEnabled() bool { return c.StatusChecks && c.WriteEnabled() }
+
+// PRCommentsEnabled reports whether konflate should post/update a PR comment with
+// the rendered summary: the toggle is on and a write credential is configured.
+func (c *Config) PRCommentsEnabled() bool { return c.PRComments && c.WriteEnabled() }
 
 // AppConfigured reports whether a complete GitHub App write credential is set
 // (client id, private key, and installation id). A partial App config — e.g. a

@@ -10,8 +10,8 @@
 #     hosts:
 #       - host: konflate.{{ .Values.global.domain }}
 #
-# Passed through verbatim (NOT tpl'd): config.mergeCommand — it is itself a Go
-# text/template konflate renders per-PR with .Number/.Repo — plus plain numbers and
+# Passed through verbatim (NOT tpl'd): config.mergeCommand and config.prCommentTemplate
+# — each is itself a Go text/template konflate renders per-PR — plus plain numbers and
 # booleans. To emit a literal brace, escape it: write `{{ "{{" }}` for `{{`.
 
 # konflate keeps its PR/diff state in memory and serves it from one instance
@@ -151,7 +151,11 @@ config:
 
   # -- Opt-in: post a `konflate` commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.
   statusChecks: false
-  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status links back to it. Empty = the status is posted without a link.
+  # -- Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.
+  prComments: false
+  # -- Optional Go text/template for the PR-comment body, replacing the built-in summary. When set, the chart mounts it (a ConfigMap) and points `KONFLATE_PR_COMMENT_TEMPLATE_FILE` at it. The konflate marker is injected automatically. Context: `.PR`, `.Diff`, `.ReviewURL`, `.Summary` (the default body). Passed verbatim (NOT tpl'd) — it's konflate's own template. See the README.
+  prCommentTemplate: ""
+  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.
   publicUrl: ""
   # -- GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey` + `appInstallationId`, konflate mints short-lived installation tokens instead of carrying a standing PAT.
   appClientId: ""

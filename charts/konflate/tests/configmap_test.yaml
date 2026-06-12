@@ -1,0 +1,31 @@
+suite: configmap
+templates:
+  - configmap.tpl
+set:
+  config.repo: github://owner/repo
+tests:
+  - it: renders no ConfigMap by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the PR-comment template ConfigMap, verbatim, when set
+    set:
+      config.prCommentTemplate: |
+        ## {{ .PR.Title }} (#{{ .PR.Number }})
+        {{ .Summary }}
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-konflate-pr-comment-template
+      # Passed through verbatim — the Go template markers survive (not tpl'd by Helm).
+      - matchRegex:
+          path: data["pr-comment.md.gotmpl"]
+          pattern: 'PR\.Title'
+      - matchRegex:
+          path: data["pr-comment.md.gotmpl"]
+          pattern: '\.Summary'

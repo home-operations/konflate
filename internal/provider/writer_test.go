@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -53,14 +54,9 @@ func TestGitHubWriter_SetStatus(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	raw := srv.URL + "/"
-	client, err := github.NewClient(github.WithURLs(&raw, &raw))
-	if err != nil {
-		t.Fatalf("github.NewClient: %v", err)
-	}
-	wr := &githubWriter{client: client, owner: "acme", repo: "web"}
+	wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
 
-	err = wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+	err := wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
 		State: StatusSuccess, Description: "rendered", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
 	})
 	if err != nil {
@@ -232,6 +228,179 @@ func TestGitlabWriter_SetStatus(t *testing.T) {
 		got.TargetURL != "https://k.example/#/pr/7" || got.Description != "rendered" {
 		t.Errorf("status payload = %+v", got)
 	}
+}
+
+// newGitHubTestClient builds a go-github client pointed at a test server.
+func newGitHubTestClient(t *testing.T, baseURL string) *github.Client {
+	t.Helper()
+	raw := baseURL + "/"
+	client, err := github.NewClient(github.WithURLs(&raw, &raw))
+	if err != nil {
+		t.Fatalf("github.NewClient: %v", err)
+	}
+	return client
+}
+
+// commentSink records what a forge comment API received during a test.
+type commentSink struct {
+	created, edited bool
+	body            string
+}
+
+// commentCapture answers the three calls UpsertComment makes against any forge:
+// GET lists comments (listJSON), POST creates one, PUT/PATCH edits one — recording
+// the create/edit and the body sent. A non-comment GET (e.g. a stray probe) gets
+// an empty object so the client still constructs cleanly.
+func commentCapture(listJSON string, sink *commentSink) http.HandlerFunc {
+	decodeBody := func(r *http.Request) string {
+		var c struct {
+			Body string `json:"body"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&c)
+		return c.Body
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			if strings.Contains(r.URL.Path, "comment") || strings.Contains(r.URL.Path, "/notes") {
+				_, _ = w.Write([]byte(listJSON))
+			} else {
+				_, _ = w.Write([]byte(`{}`)) // not the comment list (e.g. a probe)
+			}
+		case http.MethodPost:
+			sink.created = true
+			sink.body = decodeBody(r)
+			_, _ = w.Write([]byte(`{"id":1}`))
+		case http.MethodPut, http.MethodPatch:
+			sink.edited = true
+			sink.body = decodeBody(r)
+			_, _ = w.Write([]byte(`{"id":99}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}
+}
+
+const upsertMarker = "<!-- konflate:pr-7 -->"
+
+// markerList is a one-comment listing (id 99) whose body carries the marker.
+func markerList() string {
+	return fmt.Sprintf(`[{"id":99,"body":%q}]`, upsertMarker+"\nold")
+}
+
+func assertCreated(t *testing.T, sink commentSink) {
+	t.Helper()
+	if !sink.created || sink.edited {
+		t.Fatalf("want a created comment, got created=%v edited=%v", sink.created, sink.edited)
+	}
+	if !strings.Contains(sink.body, upsertMarker) {
+		t.Errorf("created body missing the marker: %q", sink.body)
+	}
+}
+
+func assertEdited(t *testing.T, sink commentSink) {
+	t.Helper()
+	if !sink.edited || sink.created {
+		t.Fatalf("want an edited comment, got created=%v edited=%v", sink.created, sink.edited)
+	}
+	if !strings.Contains(sink.body, "new") {
+		t.Errorf("edited body = %q, want it to contain the updated text", sink.body)
+	}
+}
+
+func TestGitHubWriter_UpsertComment(t *testing.T) {
+	t.Parallel()
+	t.Run("creates when absent", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(`[]`, &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink)
+	})
+	t.Run("edits when present", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertEdited(t, sink)
+	})
+}
+
+func TestGitlabWriter_UpsertComment(t *testing.T) {
+	t.Parallel()
+	newClient := func(t *testing.T, url string) *gitlab.Client {
+		t.Helper()
+		c, err := gitlab.NewClient("tok", gitlab.WithBaseURL(url))
+		if err != nil {
+			t.Fatalf("gitlab.NewClient: %v", err)
+		}
+		return c
+	}
+	t.Run("creates when absent", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(`[]`, &sink))
+		t.Cleanup(srv.Close)
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink)
+	})
+	t.Run("edits when present", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertEdited(t, sink)
+	})
+}
+
+func TestForgejoWriter_UpsertComment(t *testing.T) {
+	t.Parallel()
+	newClient := func(t *testing.T, url string) *forgejo.Client {
+		t.Helper()
+		c, err := forgejo.NewClient(url, forgejo.SetForgejoVersion(forgejo.Version()), forgejo.SetToken("tok"))
+		if err != nil {
+			t.Fatalf("forgejo.NewClient: %v", err)
+		}
+		return c
+	}
+	t.Run("creates when absent", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(`[]`, &sink))
+		t.Cleanup(srv.Close)
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertCreated(t, sink)
+	})
+	t.Run("edits when present", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web"}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertEdited(t, sink)
+	})
 }
 
 func TestGitlabBuildState(t *testing.T) {

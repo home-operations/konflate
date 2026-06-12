@@ -180,6 +180,16 @@ tests:
           path: spec.template.spec.containers[0].env
           any: true
           content:
+            name: KONFLATE_PR_COMMENTS
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_PR_COMMENT_TEMPLATE_FILE
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
             name: KONFLATE_PUBLIC_URL
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -219,6 +229,38 @@ tests:
           content:
             name: KONFLATE_APP_INSTALLATION_ID
             value: "12345678"
+
+  - it: emits KONFLATE_PR_COMMENTS when prComments is true
+    set:
+      config.prComments: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PR_COMMENTS
+            value: "true"
+
+  - it: mounts the comment template and points its env at the mount when prCommentTemplate is set
+    set:
+      config.prCommentTemplate: "hi #{{ .PR.Number }}"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_PR_COMMENT_TEMPLATE_FILE
+            value: /etc/konflate/pr-comment.md.gotmpl
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: pr-comment-template
+            mountPath: /etc/konflate
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: pr-comment-template
+            configMap:
+              name: RELEASE-NAME-konflate-pr-comment-template
 
   - it: wires the chart Secret via envFrom when only a write credential is set
     set:

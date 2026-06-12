@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/bradleyfalzon/ghinstallation/v2"
@@ -33,12 +34,17 @@ type Status struct {
 	Context     string // the status name on the PR (e.g. "konflate")
 }
 
-// Writer reports konflate's own results back to the forge — commit statuses now,
-// PR comments later. It is deliberately separate from the read-only Provider and
-// is built only when a write credential is configured (NewWriter returns a nil
-// Writer otherwise), so the read path can never accidentally write.
+// Writer reports konflate's own results back to the forge — a commit status on
+// the PR head and/or a summary comment on the PR. It is deliberately separate
+// from the read-only Provider and is built only when a write credential is
+// configured (NewWriter returns a nil Writer otherwise), so the read path can
+// never accidentally write.
 type Writer interface {
+	// SetStatus posts (or overwrites) konflate's commit status on the PR head.
 	SetStatus(ctx context.Context, pr api.PR, st Status) error
+	// UpsertComment posts body as a PR comment, or edits konflate's existing
+	// comment in place — the one whose body contains marker — if there is one.
+	UpsertComment(ctx context.Context, pr api.PR, marker, body string) error
 }
 
 // NewWriter builds the forge Writer from the configured write credential, or a
@@ -176,6 +182,27 @@ func (w *githubWriter) SetStatus(ctx context.Context, pr api.PR, st Status) erro
 	return nil
 }
 
+func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, body string) error {
+	// Find konflate's own comment (the one carrying the hidden marker) and edit it
+	// in place; otherwise post a new one. ListCommentsIter paginates transparently.
+	for c, err := range w.client.Issues.ListCommentsIter(ctx, w.owner, w.repo, pr.Number, nil) {
+		if err != nil {
+			return fmt.Errorf("github: list comments #%d: %w", pr.Number, err)
+		}
+		if c.Body != nil && strings.Contains(*c.Body, marker) {
+			_, _, err = w.client.Issues.EditComment(ctx, w.owner, w.repo, c.GetID(), &github.IssueComment{Body: &body})
+			if err != nil {
+				return fmt.Errorf("github: edit comment #%d: %w", pr.Number, err)
+			}
+			return nil
+		}
+	}
+	if _, _, err := w.client.Issues.CreateComment(ctx, w.owner, w.repo, pr.Number, &github.IssueComment{Body: &body}); err != nil {
+		return fmt.Errorf("github: create comment #%d: %w", pr.Number, err)
+	}
+	return nil
+}
+
 // --- Forgejo ---
 
 type forgejoWriter struct {
@@ -210,6 +237,35 @@ func (w *forgejoWriter) SetStatus(_ context.Context, pr api.PR, st Status) error
 	return nil
 }
 
+func (w *forgejoWriter) UpsertComment(_ context.Context, pr api.PR, marker, body string) error {
+	// The Forgejo SDK can't take a context (see provider ListPRs).
+	idx := int64(pr.Number)
+	opts := forgejo.ListIssueCommentOptions{ListOptions: forgejo.ListOptions{PageSize: 50}}
+	for {
+		comments, resp, err := w.client.ListIssueComments(w.owner, w.repo, idx, opts)
+		if err != nil {
+			return fmt.Errorf("forgejo: list comments #%d: %w", pr.Number, err)
+		}
+		for _, c := range comments {
+			if strings.Contains(c.Body, marker) {
+				_, _, err = w.client.EditIssueComment(w.owner, w.repo, c.ID, forgejo.EditIssueCommentOption{Body: body})
+				if err != nil {
+					return fmt.Errorf("forgejo: edit comment #%d: %w", pr.Number, err)
+				}
+				return nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	if _, _, err := w.client.CreateIssueComment(w.owner, w.repo, idx, forgejo.CreateIssueCommentOption{Body: body}); err != nil {
+		return fmt.Errorf("forgejo: create comment #%d: %w", pr.Number, err)
+	}
+	return nil
+}
+
 // --- GitLab ---
 
 type gitlabWriter struct {
@@ -237,6 +293,36 @@ func (w *gitlabWriter) SetStatus(ctx context.Context, pr api.PR, st Status) erro
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("gitlab: set status !%d: %w", pr.Number, err)
+	}
+	return nil
+}
+
+func (w *gitlabWriter) UpsertComment(ctx context.Context, pr api.PR, marker, body string) error {
+	mr := int64(pr.Number)
+	opts := &gitlab.ListMergeRequestNotesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}
+	for {
+		notes, resp, err := w.client.Notes.ListMergeRequestNotes(w.project, mr, opts, gitlab.WithContext(ctx))
+		if err != nil {
+			return fmt.Errorf("gitlab: list notes !%d: %w", pr.Number, err)
+		}
+		for _, n := range notes {
+			if strings.Contains(n.Body, marker) {
+				_, _, err = w.client.Notes.UpdateMergeRequestNote(w.project, mr, n.ID,
+					&gitlab.UpdateMergeRequestNoteOptions{Body: &body}, gitlab.WithContext(ctx))
+				if err != nil {
+					return fmt.Errorf("gitlab: update note !%d: %w", pr.Number, err)
+				}
+				return nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	if _, _, err := w.client.Notes.CreateMergeRequestNote(w.project, mr,
+		&gitlab.CreateMergeRequestNoteOptions{Body: &body}, gitlab.WithContext(ctx)); err != nil {
+		return fmt.Errorf("gitlab: create note !%d: %w", pr.Number, err)
 	}
 	return nil
 }
