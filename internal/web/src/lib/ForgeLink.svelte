@@ -13,8 +13,11 @@
     number: number;
     size?: number;
     showNumber?: boolean;
+    // The review title shows the number as text after the name and drops the
+    // glyph; the list rows keep the glyph and hide the number.
+    glyph?: boolean;
   }
-  let { url, number, size = 14, showNumber = true }: Props = $props();
+  let { url, number, size = 14, showNumber = true, glyph = true }: Props = $props();
 
   // Only link an absolute http(s) url; otherwise still show the glyph, unlinked.
   const valid = $derived(/^https?:\/\//i.test(url));
@@ -33,10 +36,10 @@
     title={`Open PR #${number} on ${forgeName}`}
     aria-label={`Open PR #${number} on ${forgeName}`}
   >
-    <Icon path={mdiSourcePull} {size} />{#if showNumber} #{number}{/if}
+    {#if glyph}<Icon path={mdiSourcePull} {size} />{/if}{#if showNumber}#{number}{/if}
   </a>
 {:else}
   <span class="forge-link forge-link-static" class:icon-only={!showNumber}
-    ><Icon path={mdiSourcePull} {size} />{#if showNumber} #{number}{/if}</span
+    >{#if glyph}<Icon path={mdiSourcePull} {size} />{/if}{#if showNumber}#{number}{/if}</span
   >
 {/if}

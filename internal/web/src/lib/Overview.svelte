@@ -3,14 +3,7 @@
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import {
-    mdiAlert,
-    mdiPackageVariantClosed,
-    mdiAlertCircleOutline,
-    mdiSitemapOutline,
-    mdiChevronDown,
-    mdiChevronRight,
-  } from './icons';
+  import { mdiChevronDown, mdiChevronRight } from './icons';
 
   const d = $derived(store.diff);
 
@@ -51,12 +44,8 @@
 </script>
 
 {#snippet warningBody(w: { level: string; resource: string; detail: string })}
-  <span class="warning-badge">
-    <Icon path={mdiAlert} size={12} />
-    {w.level}
-  </span>
-  <span class="warning-res">{w.resource}</span>
-  <span class="warning-detail">{w.detail}</span>
+  <span class="flag-title">{w.resource}</span>
+  <span class="flag-detail">{w.detail}</span>
 {/snippet}
 
 <!-- d can briefly be null while a new diff loads (ensureDiff clears it); the
@@ -70,32 +59,29 @@
        things a reviewer must act on lead and don't get buried. -->
   <div class="ov-grid">
     {#if d.failures?.length}
-      <section class="ov-section">
-        <h3>
-          <Icon path={mdiAlertCircleOutline} size={15} /> Render failures
-          <span class="ov-count">{d.failures.length}</span>
-        </h3>
+      <section class="ov-section fail-section">
+        <h3>Render failures <span class="ov-count">{d.failures.length}</span></h3>
         {#each d.failures as f}
-          <div class="failure">
-            <span class="failure-parent">{f.parent}</span>
-            <div class="failure-msg">{f.message}</div>
+          <div class="flag">
+            <span class="flag-title">{f.parent}</span>
+            <span class="flag-detail">{f.message}</span>
           </div>
         {/each}
       </section>
     {/if}
 
     {#if d.warnings?.length}
-      <section class="ov-section">
+      <section class="ov-section caution-section">
         <h3>Cautions <span class="ov-count">{d.warnings.length}</span></h3>
         {#each d.warnings as w}
           {@const target = warningTarget(w.resource)}
           <!-- Cautions whose resource rendered into the diff deep-link to it. -->
           {#if target}
-            <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
+            <button class="flag flag-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
               {@render warningBody(w)}
             </button>
           {:else}
-            <div class="warning {w.level}">{@render warningBody(w)}</div>
+            <div class="flag {w.level}">{@render warningBody(w)}</div>
           {/if}
         {/each}
       </section>
@@ -107,10 +93,7 @@
          full transitive closure. Absent when nothing changed depends-on anything. -->
     {#if d.blastRadius?.length}
       <section class="ov-section">
-        <h3>
-          <Icon path={mdiSitemapOutline} size={15} /> Blast radius
-          <span class="ov-count">{d.blastRadius.length}</span>
-        </h3>
+        <h3>Blast radius <span class="ov-count">{d.blastRadius.length}</span></h3>
         {#each d.blastRadius as br}
           <div class="blast">
             <span class="blast-parent">{br.parent}</span>
@@ -130,28 +113,26 @@
         {#if imagesCollapsible}
           <button class="ov-head" aria-expanded={imagesOpen} onclick={() => (imagesOpen = !imagesOpen)}>
             <Icon path={imagesOpen ? mdiChevronDown : mdiChevronRight} size={14} />
-            <Icon path={mdiPackageVariantClosed} size={15} /> Image changes
+            Image changes
             <span class="ov-count">{d.images.length}</span>
           </button>
         {:else}
-          <h3>
-            <Icon path={mdiPackageVariantClosed} size={15} /> Image changes
-            <span class="ov-count">{d.images.length}</span>
-          </h3>
+          <h3>Image changes <span class="ov-count">{d.images.length}</span></h3>
         {/if}
         {#if !imagesCollapsible || imagesOpen}
           <ul class="img-list">
             {#each d.images as img}
               <li class="img-change">
-                <div class="img-head">
+                <!-- Name, from → to and copy share one line; ∅ = no reference on
+                     that side (image added/removed) and the tooltip spells it out. -->
+                <div class="img-top">
                   <span class="img-name">{img.name}</span>
+                  <span class="img-delta">
+                    <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
+                    <span class="img-arrow">→</span>
+                    <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
+                  </span>
                   {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
-                </div>
-                <!-- ∅ = no reference on that side (image added/removed); tooltip spells it out. -->
-                <div class="img-delta">
-                  <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
-                  <span class="img-arrow">→</span>
-                  <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
                 </div>
                 {#if img.refs?.length}
                   <div class="img-refs">{img.refs.join(', ')}</div>
