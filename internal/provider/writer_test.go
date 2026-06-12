@@ -336,6 +336,13 @@ func assertEdited(t *testing.T, sink commentSink) {
 	}
 }
 
+func assertNoop(t *testing.T, sink commentSink) {
+	t.Helper()
+	if sink.created || sink.edited {
+		t.Fatalf("want no write for an unchanged body, got created=%v edited=%v", sink.created, sink.edited)
+	}
+}
+
 func TestGitHubWriter_UpsertComment(t *testing.T) {
 	t.Parallel()
 	t.Run("creates when absent", func(t *testing.T) {
@@ -370,6 +377,18 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted comment
+	})
+	t.Run("leaves an unchanged comment untouched", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		// Same body as the listed comment — konflate must skip the no-op edit.
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertNoop(t, sink)
 	})
 }
 
@@ -416,6 +435,17 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted note
 	})
+	t.Run("leaves an unchanged note untouched", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertNoop(t, sink)
+	})
 }
 
 func TestForgejoWriter_UpsertComment(t *testing.T) {
@@ -460,6 +490,17 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted comment
+	})
+	t.Run("leaves an unchanged comment untouched", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(markerList(), &sink))
+		t.Cleanup(srv.Close)
+		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertNoop(t, sink)
 	})
 }
 
