@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/golang-jwt/jwt/v4"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
@@ -143,6 +144,93 @@ func TestNewGitHubWriteClient(t *testing.T) {
 				t.Errorf("error = %q, want substring %q", err.Error(), tc.wantErr)
 			}
 		})
+	}
+}
+
+// statusCapture is an httptest handler that records the POST body and path of a
+// commit-status write while answering anything else (e.g. an SDK version probe)
+// with an empty JSON object, so the Forgejo/GitLab clients construct and call
+// cleanly without a live forge.
+func statusCapture(body any, path *string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/statuses/") {
+			*path = r.URL.Path
+			_ = json.NewDecoder(r.Body).Decode(body)
+			_, _ = w.Write([]byte(`{"id":1}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}
+}
+
+func TestForgejoWriter_SetStatus(t *testing.T) {
+	t.Parallel()
+	const sha = "deadbeefcafe"
+	var got struct {
+		State       string `json:"state"`
+		TargetURL   string `json:"target_url"`
+		Description string `json:"description"`
+		Context     string `json:"context"`
+	}
+	var gotPath string
+	srv := httptest.NewServer(statusCapture(&got, &gotPath))
+	t.Cleanup(srv.Close)
+
+	client, err := forgejo.NewClient(srv.URL,
+		forgejo.SetForgejoVersion(forgejo.Version()), forgejo.SetToken("tok"))
+	if err != nil {
+		t.Fatalf("forgejo.NewClient: %v", err)
+	}
+	wr := &forgejoWriter{client: client, owner: "acme", repo: "web"}
+
+	err = wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+		State: StatusFailure, Description: "render failed", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
+	})
+	if err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+	if !strings.HasSuffix(gotPath, "/repos/acme/web/statuses/"+sha) {
+		t.Errorf("path = %q, want suffix /repos/acme/web/statuses/%s", gotPath, sha)
+	}
+	if got.State != "failure" || got.Context != "konflate" ||
+		got.TargetURL != "https://k.example/#/pr/7" || got.Description != "render failed" {
+		t.Errorf("status payload = %+v", got)
+	}
+}
+
+func TestGitlabWriter_SetStatus(t *testing.T) {
+	t.Parallel()
+	const sha = "deadbeefcafe"
+	var got struct {
+		State       string `json:"state"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		TargetURL   string `json:"target_url"`
+	}
+	var gotPath string
+	srv := httptest.NewServer(statusCapture(&got, &gotPath))
+	t.Cleanup(srv.Close)
+
+	client, err := gitlab.NewClient("tok", gitlab.WithBaseURL(srv.URL))
+	if err != nil {
+		t.Fatalf("gitlab.NewClient: %v", err)
+	}
+	wr := &gitlabWriter{client: client, project: "acme/web"}
+
+	err = wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+		State: StatusSuccess, Description: "rendered", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
+	})
+	if err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+	if !strings.Contains(gotPath, "/statuses/"+sha) {
+		t.Errorf("path = %q, want to contain /statuses/%s", gotPath, sha)
+	}
+	// GitLab surfaces the status under its "name", and uses "success" for ok.
+	if got.State != "success" || got.Name != "konflate" ||
+		got.TargetURL != "https://k.example/#/pr/7" || got.Description != "rendered" {
+		t.Errorf("status payload = %+v", got)
 	}
 }
 
