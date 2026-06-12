@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.12](https://github.com/home-operations/konflate/compare/0.2.11...0.2.12) (2026-06-12)
+
+
+### Features
+
+* **chart:** availability knobs (PDB, priorityClass, grace, startup probe) ([#189](https://github.com/home-operations/konflate/issues/189)) ([8c113b2](https://github.com/home-operations/konflate/commit/8c113b2b1036057499608988118f927aaada72b1))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.38.0 → v2.39.0) ([#193](https://github.com/home-operations/konflate/issues/193)) ([6f5c8d6](https://github.com/home-operations/konflate/commit/6f5c8d6bf19fc9575d18b2fc46c46d5f2d1ee536))
+* **ui:** declutter the diff overview and review header ([#197](https://github.com/home-operations/konflate/issues/197)) ([bbd1f7b](https://github.com/home-operations/konflate/commit/bbd1f7b931ef24b67c20367037006d5959f481f3))
+* **writeback:** auto-detect the GitHub App installation ([#196](https://github.com/home-operations/konflate/issues/196)) ([0ee3b04](https://github.com/home-operations/konflate/commit/0ee3b04681fa421a9bb4ece4b5cfe0b50bc7b019))
+* **writeback:** verify the write credential at startup ([#195](https://github.com/home-operations/konflate/issues/195)) ([72bbd38](https://github.com/home-operations/konflate/commit/72bbd38402b5c1afd61c41dc033877475c889ea3))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.4 → v0.4.5) ([#192](https://github.com/home-operations/konflate/issues/192)) ([c3f2f71](https://github.com/home-operations/konflate/commit/c3f2f71875f77464f80c7ff78226e934263ea88a))
+* **security:** harden write-back and the avatar proxy ([#198](https://github.com/home-operations/konflate/issues/198)) ([981f115](https://github.com/home-operations/konflate/commit/981f115e5893be6186938a110b43017d87de1104))
+
 ## [0.2.11](https://github.com/home-operations/konflate/compare/0.2.10...0.2.11) (2026-06-12)
 
 
