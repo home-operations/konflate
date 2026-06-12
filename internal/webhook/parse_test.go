@@ -14,6 +14,46 @@ func hdr(k, v string) http.Header {
 	return h
 }
 
+func TestParse_StatusEvents(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		forge   config.ForgeKind
+		header  http.Header
+		body    string
+		wantSHA string
+	}{
+		{"github status", config.ForgeGitHub, hdr("X-GitHub-Event", "status"),
+			`{"sha":"abc123","state":"success"}`, "abc123"},
+		{"github check_run", config.ForgeGitHub, hdr("X-GitHub-Event", "check_run"),
+			`{"check_run":{"head_sha":"def456"}}`, "def456"},
+		{"github check_suite", config.ForgeGitHub, hdr("X-GitHub-Event", "check_suite"),
+			`{"check_suite":{"head_sha":"aaa111"}}`, "aaa111"},
+		{"forgejo status via commit.sha", config.ForgeForgejo, hdr("X-Gitea-Event", "status"),
+			`{"commit":{"sha":"bbb222"}}`, "bbb222"},
+		{"gitlab pipeline", config.ForgeGitLab, nil,
+			`{"object_kind":"pipeline","object_attributes":{"sha":"ccc333"}}`, "ccc333"},
+		{"gitlab job", config.ForgeGitLab, nil,
+			`{"object_kind":"build","sha":"ddd444"}`, "ddd444"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ev := Parse(tt.forge, tt.header, []byte(tt.body))
+			if ev.HeadSHA != tt.wantSHA {
+				t.Errorf("HeadSHA = %q, want %q", ev.HeadSHA, tt.wantSHA)
+			}
+			if ev.Relist || ev.PR != 0 {
+				t.Errorf("a status event must not relist or carry a PR, got %+v", ev)
+			}
+		})
+	}
+	// A status event with no SHA degrades to a relist (the safe fallback).
+	if ev := Parse(config.ForgeGitHub, hdr("X-GitHub-Event", "status"), []byte(`{}`)); !ev.Relist || ev.HeadSHA != "" {
+		t.Errorf("empty status payload should relist, got %+v", ev)
+	}
+}
+
 func TestParse(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

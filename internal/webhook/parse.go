@@ -20,6 +20,11 @@ type Event struct {
 	// Relist is true when the set of open PRs may have changed (opened, closed,
 	// reopened, merged) — the caller should re-list rather than re-render one.
 	Relist bool
+	// HeadSHA is set for a CI-status event (commit status / check run / check
+	// suite / pipeline / job): the commit the status is for. The caller maps it
+	// to the open PR with that head and refreshes only its check rollup — no
+	// re-list, no re-render. Empty for PR and relist events.
+	HeadSHA string
 }
 
 // Parse extracts the affected PR from a verified webhook body. Anything it
@@ -29,11 +34,25 @@ func Parse(forge config.ForgeKind, header http.Header, body []byte) Event {
 	body = unwrapFormPayload(header, body)
 	switch forge {
 	case config.ForgeGitHub:
-		return parsePullRequest(header.Get("X-GitHub-Event") == "pull_request", body)
+		switch header.Get("X-GitHub-Event") {
+		case "pull_request":
+			return parsePullRequest(true, body)
+		case "status", "check_run", "check_suite":
+			return parseStatus(body)
+		default:
+			return Event{Relist: true}
+		}
 	case config.ForgeForgejo:
-		return parsePullRequest(header.Get("X-Gitea-Event") == "pull_request", body)
+		switch header.Get("X-Gitea-Event") {
+		case "pull_request":
+			return parsePullRequest(true, body)
+		case "status":
+			return parseStatus(body)
+		default:
+			return Event{Relist: true}
+		}
 	case config.ForgeGitLab:
-		return parseMergeRequest(body)
+		return parseGitLab(body)
 	}
 	return Event{Relist: true}
 }
@@ -96,4 +115,72 @@ func parseMergeRequest(body []byte) Event {
 		PR:     p.ObjectAttributes.IID,
 		Relist: slices.Contains([]string{"open", "reopen", "close", "merge"}, p.ObjectAttributes.Action),
 	}
+}
+
+// parseStatus pulls the head commit SHA from a CI-status event — GitHub
+// status/check_run/check_suite and Forgejo/Gitea status share enough shape that
+// one parser covers them: the SHA lives at .sha, .check_run.head_sha,
+// .check_suite.head_sha, or .commit.{sha,id}. The caller maps the SHA to the
+// open PR with that head and refreshes only its check rollup; an opaque payload
+// (no SHA) degrades to a relist, which is always safe.
+func parseStatus(body []byte) Event {
+	var p struct {
+		SHA      string `json:"sha"`
+		CheckRun struct {
+			HeadSHA string `json:"head_sha"`
+		} `json:"check_run"`
+		CheckSuite struct {
+			HeadSHA string `json:"head_sha"`
+		} `json:"check_suite"`
+		Commit struct {
+			ID  string `json:"id"`
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return Event{Relist: true}
+	}
+	sha := cmp.Or(p.SHA, p.CheckRun.HeadSHA, p.CheckSuite.HeadSHA, p.Commit.SHA, p.Commit.ID)
+	if sha == "" {
+		return Event{Relist: true}
+	}
+	return Event{HeadSHA: sha}
+}
+
+// parseGitLab routes GitLab payloads by object_kind: a merge request affects the
+// open set (parseMergeRequest); a pipeline or job (build) carries the commit SHA
+// whose PR's checks we refresh; anything else relists.
+func parseGitLab(body []byte) Event {
+	var probe struct {
+		Kind string `json:"object_kind"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return Event{Relist: true}
+	}
+	switch probe.Kind {
+	case "merge_request":
+		return parseMergeRequest(body)
+	case "pipeline":
+		var p struct {
+			ObjectAttributes struct {
+				SHA string `json:"sha"`
+			} `json:"object_attributes"`
+		}
+		if json.Unmarshal(body, &p) == nil && p.ObjectAttributes.SHA != "" {
+			return Event{HeadSHA: p.ObjectAttributes.SHA}
+		}
+	case "build": // GitLab's Job Hook
+		var p struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				SHA string `json:"sha"`
+			} `json:"commit"`
+		}
+		if json.Unmarshal(body, &p) == nil {
+			if sha := cmp.Or(p.SHA, p.Commit.SHA); sha != "" {
+				return Event{HeadSHA: sha}
+			}
+		}
+	}
+	return Event{Relist: true}
 }

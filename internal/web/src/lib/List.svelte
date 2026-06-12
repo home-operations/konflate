@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PRStatus } from './types';
+  import type { PRStatus, CheckRollup } from './types';
   import {
     store,
     filteredPRs,
@@ -36,11 +36,26 @@
     mdiChevronDown,
     mdiChevronUp,
     mdiCheckCircleOutline,
+    mdiCheckCircle,
+    mdiCloseCircleOutline,
+    mdiCircleOutline,
     mdiTrayFull,
     mdiUnfoldMoreHorizontal,
     mdiUnfoldLessHorizontal,
     mdiArrowUp,
   } from './icons';
+
+  // A PR-head CI rollup → an icon + tooltip. success/failure/pending map to the
+  // ok/danger/warn-tinted check / x / hollow-circle; pr.checks is absent when no
+  // checks ran, so the indicator only shows for a real state.
+  function checkIcon(state: string): string {
+    return state === 'success' ? mdiCheckCircle : state === 'failure' ? mdiCloseCircleOutline : mdiCircleOutline;
+  }
+  function checkTitle(c: CheckRollup): string {
+    if (c.state === 'success') return `Checks passed (${c.passed}/${c.total})`;
+    if (c.state === 'failure') return `Checks failing — ${c.failed} of ${c.total} failed`;
+    return `Checks running (${c.passed}/${c.total} done)`;
+  }
 
   // Two filter stages: the text query narrows `prs` (which the summary pills
   // count, so the counts hold steady while a pill is active), then the active
@@ -288,6 +303,11 @@
           <span class="labels"><Icon path={mdiTagOutline} size={12} />{#each pr.labels.slice(0, 4) as l}<span class="label">{#if labelColor(l)}<span class="label-dot" style:background-color={labelColor(l)}></span>{/if}{l.name}</span>{/each}</span>
         {/if}
         <span class="spacer"></span>
+        {#if pr.checks}
+          <span class="check check-{pr.checks.state}" title={checkTitle(pr.checks)}>
+            <Icon path={checkIcon(pr.checks.state)} size={14} />
+          </span>
+        {/if}
         {#if pr.signals}
           <span class="badges">
             {#if pr.refreshError}

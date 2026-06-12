@@ -23,6 +23,7 @@ export {
   mdiCheckCircle,
   mdiCheckCircleOutline,
   mdiCircleOutline,
+  mdiCloseCircleOutline,
   mdiClose,
   mdiHistory,
   mdiKeyboardOutline,

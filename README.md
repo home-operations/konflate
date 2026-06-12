@@ -322,6 +322,17 @@ konflate verifies the signature with the per-forge scheme automatically:
 | Forgejo | `X-Gitea-Signature`   | HMAC-SHA256, bare hex               |
 | GitLab  | `X-Gitlab-Token`      | constant-time compare of the secret |
 
+Select these events when creating the webhook. Pull-request events keep the PR
+list and diffs live; CI-status events drive the per-PR check indicator — without
+them the indicator still updates on the `KONFLATE_REFRESH_INTERVAL` poll, just
+not instantly:
+
+| Forge   | Pull-request events  | CI-status events                                    |
+| ------- | -------------------- | --------------------------------------------------- |
+| GitHub  | Pull requests        | Statuses, Check runs, Check suites                  |
+| Forgejo | Pull Request         | Commit status (+ Workflow Run / Job for Actions CI) |
+| GitLab  | Merge request events | Pipeline events (+ Job events)                      |
+
 Rate limiting is intentionally **not** built in — put konflate behind your
 reverse proxy / ingress and rate-limit there.
 

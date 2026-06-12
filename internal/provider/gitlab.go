@@ -65,6 +65,38 @@ func (p *gitlabProvider) GetPR(ctx context.Context, number int) (api.PR, error) 
 	return gitlabToPR(&mr.BasicMergeRequest), nil
 }
 
+// Checks rolls up the head commit's CI statuses — GitLab pipeline jobs surface
+// as commit statuses. An allow_failure job that failed doesn't count against the
+// rollup; canceled and manual jobs are neither pass nor fail (they don't count).
+func (p *gitlabProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup, error) {
+	if pr.HeadSHA == "" {
+		return api.CheckRollup{}, nil
+	}
+	statuses, _, err := p.client.Commits.GetCommitStatuses(p.project, pr.HeadSHA,
+		&gitlab.GetCommitStatusesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, gitlab.WithContext(ctx))
+	if err != nil {
+		return api.CheckRollup{}, fmt.Errorf("gitlab: commit statuses !%d: %w", pr.Number, err)
+	}
+	var passed, failed, pending int
+	for _, s := range statuses {
+		switch s.Status {
+		case stateSuccess, "skipped":
+			passed++
+		case "failed":
+			if s.AllowFailure {
+				passed++
+			} else {
+				failed++
+			}
+		case "canceled", "manual":
+			// neither pass nor fail — leave out of the rollup
+		default: // created, waiting_for_resource, preparing, pending, running, scheduled
+			pending++
+		}
+	}
+	return api.Rollup(passed, failed, pending), nil
+}
+
 func gitlabToPR(mr *gitlab.BasicMergeRequest) api.PR {
 	author, avatar := "", ""
 	if mr.Author != nil {

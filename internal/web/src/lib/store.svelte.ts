@@ -460,6 +460,13 @@ function onEvent(ev: WSEvent): void {
     store.prs = store.prs.filter((p) => p.number !== ev.number);
     return;
   }
+  // A CI rollup changed (poll or status webhook): update just that PR's checks,
+  // clearing them when the new state is none (so the indicator disappears).
+  if (ev.type === 'checks') {
+    const pr = store.prs.find((p) => p.number === ev.number);
+    if (pr) pr.checks = ev.checks.state ? ev.checks : undefined;
+    return;
+  }
   // ev is narrowed to the 'status' variant here — status is guaranteed present.
   const pr = store.prs.find((p) => p.number === ev.number);
   if (pr) {

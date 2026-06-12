@@ -31,6 +31,7 @@ export const samplePRs: PRStatus[] = [
     updatedAt: '2026-06-04T12:00:00Z',
     signals: { resources: 3, caution: 2, images: 1, failures: 1 },
     mergeCommand: 'gh pr merge 142 --repo acme/home-ops',
+    checks: { state: 'success', total: 4, passed: 4, failed: 0 },
   },
   {
     number: 138,
@@ -48,6 +49,7 @@ export const samplePRs: PRStatus[] = [
     status: 'running',
     updatedAt: '2026-06-04T11:30:00Z',
     mergeCommand: 'gh pr merge 138 --repo acme/home-ops',
+    checks: { state: 'pending', total: 3, passed: 1, failed: 0 },
   },
   {
     number: 131,
@@ -66,6 +68,7 @@ export const samplePRs: PRStatus[] = [
     error: 'render failed',
     updatedAt: '2026-06-04T10:00:00Z',
     mergeCommand: 'gh pr merge 131 --repo acme/home-ops',
+    checks: { state: 'failure', total: 2, passed: 1, failed: 1 },
   },
   {
     number: 128,

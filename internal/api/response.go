@@ -28,6 +28,11 @@ type PRStatus struct {
 	// Signals is a compact summary of the rendered diff, populated once the job
 	// is ready, so the PR list can show triage badges without loading each diff.
 	Signals *Signals `json:"signals,omitempty"`
+	// Checks is the rolled-up CI status of the PR head (the forge's red/amber/
+	// green), refreshed on the poll and on status webhooks — independent of the
+	// diff job. Nil when no checks were reported or the fetch failed, so the list
+	// shows no indicator rather than a misleading one.
+	Checks *CheckRollup `json:"checks,omitempty"`
 	// MergeCommand is the rendered "copy to merge" CLI command, set only for open
 	// PRs when the feature is enabled. konflate never runs it — the reviewer
 	// pastes it into their own shell.
@@ -96,8 +101,11 @@ type Meta struct {
 // Event is a websocket message announcing a change to a PR's diff job, so the
 // UI can update that PR without polling.
 type Event struct {
-	Type   string    `json:"type"`             // "status" (job state changed) or "removed" (PR no longer open)
+	Type   string    `json:"type"`             // "status" (job state changed), "removed" (PR no longer open), or "checks" (CI rollup changed)
 	Number int       `json:"number"`           // the affected PR
 	Status JobStatus `json:"status,omitempty"` // set for "status" events
 	Error  string    `json:"error,omitempty"`
+	// Checks is set on "checks" events — the PR head's new CI rollup (State may be
+	// CheckNone, which clears the indicator). Absent on other event types.
+	Checks *CheckRollup `json:"checks,omitempty"`
 }

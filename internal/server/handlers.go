@@ -446,18 +446,22 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-render only the affected PR for content events; re-list when the
-	// open-PR set may have changed (opened/closed/...) or the payload is opaque.
-	if ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); ev.PR > 0 && !ev.Relist {
+	// Route the verified event: a CI-status event refreshes just the matching
+	// PR's check rollup; a content event re-renders the affected PR; an open-set
+	// change (opened/closed/...) or an opaque payload re-lists.
+	switch ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); {
+	case ev.HeadSHA != "":
+		go s.refreshChecksForSHA(s.runCtx, ev.HeadSHA)
+	case ev.PR > 0 && !ev.Relist:
 		go func() {
 			if err := s.refreshPR(s.runCtx, ev.PR, "webhook"); err != nil {
 				s.log.Warn("webhook: refresh PR failed", "pr", ev.PR, "error", err)
 			}
 		}()
-	} else {
-		// Coalesce: a chatty webhook (every check_run/status/push delivered) would
-		// otherwise spawn a goroutine + full ListPRs per event. requestRelist folds
-		// the burst into at most one in-flight relist plus one trailing run.
+	default:
+		// Coalesce: a chatty webhook (every push/opened delivered) would otherwise
+		// spawn a goroutine + full ListPRs per event. requestRelist folds the burst
+		// into at most one in-flight relist plus one trailing run.
 		s.requestRelist()
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{keyStatus: "accepted"})
@@ -518,6 +522,48 @@ func (s *Server) refreshList(ctx context.Context) {
 	// line per PR: at startup every PR is "new", which would be a burst of
 	// near-identical lines on a busy instance. The per-PR detail stays at debug.
 	s.log.Info("refresh listed", "prs", len(prs), "new", added, "advanced", advanced, "unhidden", unhidden)
+	s.refreshChecks(ctx, prs)
+}
+
+// refreshChecks fetches each open PR's CI rollup from the forge and stores it,
+// broadcasting only the rollups that actually changed so the list updates live
+// without a reload. This is the 30m poll's check pass; a status webhook (later)
+// refreshes a single PR the same way. Errors are logged per PR and never abort
+// the refresh — a forge that rate-limits the checks endpoint must not stop PRs
+// from listing.
+func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
+	for _, pr := range prs {
+		rollup, err := s.prov.Checks(ctx, pr)
+		if err != nil {
+			s.log.Debug("checks fetch failed", "pr", pr.Number, "error", err)
+			continue
+		}
+		if s.store.setChecks(pr.Number, rollup) {
+			r := rollup
+			s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
+		}
+	}
+}
+
+// refreshChecksForSHA handles a CI-status webhook: it finds the open PR whose
+// head is at sha and refreshes only that PR's check rollup, broadcasting if it
+// changed. A SHA matching no open PR (a status for a non-PR branch, or a PR we
+// don't track) is a no-op — deliberately no relist, so a chatty CI can't trigger
+// a forge re-list per delivered event.
+func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
+	pr, ok := s.store.prByHeadSHA(sha)
+	if !ok {
+		return
+	}
+	rollup, err := s.prov.Checks(ctx, pr)
+	if err != nil {
+		s.log.Debug("webhook checks fetch failed", "pr", pr.Number, "error", err)
+		return
+	}
+	if s.store.setChecks(pr.Number, rollup) {
+		r := rollup
+		s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
+	}
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is

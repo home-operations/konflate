@@ -24,6 +24,16 @@ async function stubApi(page: Page, meta: Meta = defaultMeta) {
   });
 }
 
+test('PR list shows the forge CI check status per PR (green / amber / red)', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+  const card = (n: number) => page.locator(`.card-shell[data-pr="${n}"]`);
+  await card(142).waitFor();
+  await expect(card(142).locator('.check-success')).toBeVisible(); // 4/4 passed
+  await expect(card(138).locator('.check-pending')).toBeVisible(); // still running
+  await expect(card(131).locator('.check-failure')).toBeVisible(); // one failed
+});
+
 test('list → review → single-page flow', async ({ page }) => {
   await stubApi(page);
   await page.goto('/');
