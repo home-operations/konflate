@@ -4,6 +4,7 @@
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   import { mdiChevronDown, mdiChevronRight } from './icons';
+  import type { BlastRadiusEntry } from './types';
 
   const d = $derived(store.diff);
 
@@ -40,6 +41,26 @@
   // with '@' (a tag can never contain ':', so a ':' in the version means digest).
   function imageRef(name: string, ver: string): string {
     return ver.includes(':') ? `${name}@${ver}` : `${name}:${ver}`;
+  }
+
+  // Blast-radius dependents are "Kind ns/name" and are always the parent's own
+  // kind (Flux dependsOn is same-kind), so name the kind once in the count and
+  // list the bare "ns/name" — no per-row "Kustomization"/"HelmRelease" repeat.
+  function blastKind(parent: string): string {
+    const sp = parent.indexOf(' ');
+    return sp < 0 ? '' : parent.slice(0, sp);
+  }
+  function bareRef(ref: string): string {
+    const sp = ref.indexOf(' ');
+    return sp < 0 ? ref : ref.slice(sp + 1);
+  }
+  // The count is the directly-named dependents — what the list below shows —
+  // not the transitive closure, so the number always matches the names beneath it.
+  function dependentsLabel(br: BlastRadiusEntry): string {
+    const n = br.direct.length;
+    const kind = blastKind(br.parent);
+    const noun = n === 1 ? 'dependent' : 'dependents';
+    return kind ? `${n} ${kind} ${noun}` : `${n} ${noun}`;
   }
 </script>
 
@@ -103,9 +124,9 @@
             {#each d.blastRadius as br}
               <div class="blast">
                 <span class="blast-parent">{br.parent}</span>
-                <span class="blast-count">{br.transitive} {br.transitive === 1 ? 'dependent' : 'dependents'}</span>
+                <span class="blast-count">{dependentsLabel(br)}</span>
                 {#if br.direct?.length}
-                  <div class="blast-deps">{br.direct.join(', ')}</div>
+                  <div class="blast-deps">{br.direct.map(bareRef).join(', ')}</div>
                 {/if}
               </div>
             {/each}
