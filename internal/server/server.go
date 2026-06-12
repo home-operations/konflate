@@ -103,6 +103,11 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // statusContext is the name konflate's commit status appears under on the PR.
 const statusContext = "konflate"
 
+// statusWriteTimeout bounds a single forge status write so a slow or hung forge
+// can't park a write-back goroutine until shutdown (it's fire-and-forget off the
+// render path). Generous: a status POST is a small request.
+const statusWriteTimeout = 30 * time.Second
+
 // reportStatus writes konflate's commit status for a terminal render outcome,
 // when status write-back is enabled. It runs the forge write on a goroutine —
 // it must never block the render queue — and logs (never fails) on error. Wired
@@ -123,7 +128,9 @@ func (s *Server) reportStatus(pr api.PR, st api.JobStatus, sig *api.Signals, err
 		return
 	}
 	go func() {
-		if err := s.writer.SetStatus(s.runCtx, pr, status); err != nil {
+		ctx, cancel := context.WithTimeout(s.runCtx, statusWriteTimeout)
+		defer cancel()
+		if err := s.writer.SetStatus(ctx, pr, status); err != nil {
 			s.log.Warn("status write-back failed", "pr", pr.Number, "error", err)
 		}
 	}()
@@ -155,13 +162,15 @@ func renderedStatusDescription(sig *api.Signals) string {
 }
 
 // truncateStatus clamps a status description to the forge limit (GitHub caps the
-// description at 140 characters).
+// description at 140 characters). It counts runes, not bytes, so a multibyte
+// character (an error message isn't guaranteed ASCII) is never split mid-rune.
 func truncateStatus(s string) string {
 	const max = 140
-	if len(s) <= max {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
+	return string(r[:max-1]) + "…"
 }
 
 // dropFilteredOnLoad re-applies the PR filter to everything restored from disk.
