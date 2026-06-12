@@ -234,15 +234,46 @@
     </div>
     <div class="diff-pane" bind:this={pane} style="--stuck: {stuckPx}px">
       <section class="diff-section" data-sel="summary">
-        <!-- Same sticky container as Diff.svelte's res-header (keep the two in
-             step), with a neutral status chip and a quiet title — the Summary
-             is a section like the others, not a resource. -->
-        <div class="res-header">
-          <span class="res-status">summary</span>
-          <span class="res-title res-title-quiet">Overview</span>
-          <!-- The "copy to merge" command rides on the right of the Summary's
-               header instead of its own full-width strip — one fewer bar, and it
-               fills the otherwise-empty right side. Open PRs with the feature on. -->
+        <!-- The rail's tree node already labels this section "Summary"; a second
+             "Summary" here read as a duplicate, so the header carries no title of
+             its own. It still mirrors Diff.svelte's res-header (sticky, same
+             height) to keep the level-bar aligned with the rail, and hosts the
+             copy-to-merge command on the right for open PRs with the feature on. -->
+        <div class="res-header summary-header">
+          <!-- The whole impact summary rides in the bar the title vacated: the
+               scope counts and the +added ~changed −removed delta on the left
+               (sticky, so they read at a glance), the copy-to-merge command on
+               the right. The .impact class is unchanged — it stays the marker
+               other views wait on. -->
+          {#if store.diff}
+            {@const d = store.diff}
+            <div class="impact">
+              <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
+              <span class="impact-pill"><strong>{d.impact.parents}</strong> parents</span>
+              <span class="impact-pill"><strong>{d.impact.crds}</strong> CRDs</span>
+              {#if d.impact.namespaces?.length}
+                <span class="impact-pill"
+                  ><strong>{d.impact.namespaces.length}</strong>
+                  {d.impact.namespaces.length === 1 ? 'namespace' : 'namespaces'}</span
+                >
+              {/if}
+              <span
+                class="impact-delta"
+                title="{d.summary.added} added, {d.summary.changed} changed, {d.summary.removed} removed"
+              >
+                <span class="d-seg add" class:zero={d.summary.added === 0}>+{d.summary.added}</span>
+                <span class="d-seg chg" class:zero={d.summary.changed === 0}>~{d.summary.changed}</span>
+                <span class="d-seg del" class:zero={d.summary.removed === 0}>−{d.summary.removed}</span>
+              </span>
+              {#if d.truncated}
+                <span
+                  class="impact-pill trunc"
+                  title="This diff exceeded the render cap; {d.truncated} resource diffs were not rendered."
+                  >{d.truncated} not shown</span
+                >
+              {/if}
+            </div>
+          {/if}
           {#if store.diffMergeCommand}
             <MergeCommand command={store.diffMergeCommand} />
           {/if}

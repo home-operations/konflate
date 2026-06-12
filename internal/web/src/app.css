@@ -188,7 +188,7 @@ a.repo:focus-visible .repo-ext {
 }
 /* One focus ring for every interactive element, matching .copy-btn's accent
    treatment. Inset so it never clips inside scroll containers. */
-:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .warning-link, .sum-pill):focus-visible {
+:is(.btn, .card, .card-expand, .forge-link, .expand-all, .scroll-top, .tree-item, .tree-summary, .expand-btn, .view-toggle button, .warning-link, .sum-pill, .ov-head):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -1109,11 +1109,16 @@ button.sum-pill:hover {
 .overview {
   padding: 14px;
 }
+/* The impact summary now rides in the sticky summary header (see Diffs.svelte),
+   left of the merge command — so it centers in the bar with no bottom margin and
+   can shrink/wrap when the bar is tight. The class name is unchanged: it's the
+   marker other views wait on. */
 .impact {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 14px;
+  min-width: 0;
 }
 .impact-pill {
   border: 1px solid var(--border);
@@ -1127,19 +1132,35 @@ button.sum-pill:hover {
 .impact-pill strong {
   color: var(--text);
 }
-/* Tint the add/changed/removed pills (the .add/.chg/.del classes carry the text
-   color) so the shape of the change reads at a glance; counts stay neutral. */
-.impact-pill.add {
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
-  background: color-mix(in srgb, var(--ok) 10%, var(--panel));
+/* The change shape in one pill: +added ~changed −removed. Each segment is tinted
+   only when non-zero (the .zero modifier mutes it) so a "+0" doesn't draw the eye
+   to nothing — the same intent the three separate pills used to carry. */
+.impact-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--panel-alt);
+  font-variant-numeric: tabular-nums;
 }
-.impact-pill.chg {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+.d-seg {
+  font-weight: 600;
 }
-.impact-pill.del {
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
-  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+.d-seg.add {
+  color: var(--ok);
+}
+.d-seg.chg {
+  color: var(--accent);
+}
+.d-seg.del {
+  color: var(--danger);
+}
+.d-seg.zero {
+  color: var(--muted);
+  font-weight: 400;
 }
 /* Truncation pill: the diff was capped — a soft "heads up, incomplete" in the
    amber accent, not the red lint severity. */
@@ -1148,9 +1169,19 @@ button.sum-pill:hover {
   border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
   background: color-mix(in srgb, var(--warn) 10%, var(--panel));
 }
-/* Overview sections sit flat on the pane — headed lists, not boxed cards. */
+/* Two columns on a wide pane: auto-fit collapses to one when narrow, and a lone
+   section spans the full width (empty tracks collapse). Keeps the summary's
+   sections from stacking into one tall scroll above the diffs. */
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px 18px;
+  align-items: start;
+}
+/* Overview sections sit flat on the pane — headed lists, not boxed cards. The
+   grid gap spaces them now, so no per-section margin. */
 .ov-section {
-  margin-bottom: 16px;
+  margin: 0;
 }
 .ov-section h3 {
   display: flex;
@@ -1162,6 +1193,39 @@ button.sum-pill:hover {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0 0 6px;
+}
+/* A collapsible section heading (Image changes when long): the same look as the
+   h3 above, but a button with a leading chevron. */
+.ov-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.ov-head:hover {
+  color: var(--text);
+}
+/* The per-section item count: a quiet pill carried in the heading. */
+.ov-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
 }
 /* One line per warning: level badge, resource, detail share a baseline and
    wrap only when they must. */
@@ -1577,6 +1641,11 @@ tr.search-hit > td {
   background: var(--panel);
   z-index: 1;
 }
+/* The summary header has no title (the rail labels it): the change delta sits
+   left in the space the title vacated, the copy-to-merge command on the right. */
+.summary-header {
+  justify-content: space-between;
+}
 .res-title {
   /* The diff body (table.diff) carries the only monospace; this header is a
      resource identifier shown as a label, so it stays in the UI (sans) font —
@@ -1585,10 +1654,8 @@ tr.search-hit > td {
   flex: 1 1 auto;
   word-break: break-all;
 }
-/* The resource kind reads quieter than the ns/name it qualifies; the Summary
-   header's quiet "Overview" title shares the muted treatment (a label). */
-.res-kind,
-.res-title-quiet {
+/* The resource kind reads quieter than the ns/name it qualifies. */
+.res-kind {
   color: var(--muted);
   font-weight: 500;
 }

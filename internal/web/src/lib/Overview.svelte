@@ -3,9 +3,24 @@
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlert, mdiPackageVariantClosed, mdiAlertCircleOutline, mdiSitemapOutline } from './icons';
+  import {
+    mdiAlert,
+    mdiPackageVariantClosed,
+    mdiAlertCircleOutline,
+    mdiSitemapOutline,
+    mdiChevronDown,
+    mdiChevronRight,
+  } from './icons';
 
   const d = $derived(store.diff);
+
+  // Image changes can run long on a big bump; collapse the list past this many so
+  // it doesn't push the higher-signal cautions/failures down the pane. The count
+  // stays in the header and one click expands it; shorter lists render open.
+  // Diffs remounts per PR, so imagesOpen resets with each diff.
+  const imageCollapseThreshold = 6;
+  let imagesOpen = $state(false);
+  const imagesCollapsible = $derived((d?.images?.length ?? 0) > imageCollapseThreshold);
 
   // A warning's resource ("Kind ns/name") matches the diff resource's title, so
   // a warning can deep-link to the diff it flags. Null when the resource didn't
@@ -48,97 +63,105 @@
      parent unmounts this view in the same flush, but guard rather than assert. -->
 {#if d}
 <div class="overview">
-  <div class="impact">
-    <span class="impact-pill"><strong>{d.impact.resources}</strong> resources</span>
-    <span class="impact-pill"><strong>{d.impact.parents}</strong> parents</span>
-    <span class="impact-pill"><strong>{d.impact.crds}</strong> CRDs</span>
-    {#if d.impact.namespaces?.length}
-      <span class="impact-pill"><strong>{d.impact.namespaces.length}</strong> namespaces</span>
+  <!-- The impact summary (scope counts + change delta) now rides in the sticky
+       summary header (see Diffs.svelte); this content is just the sections. -->
+  <!-- Two columns on a wide pane (see .ov-grid). Flags first — render failures,
+       then cautions — then the informational blast radius and image list, so the
+       things a reviewer must act on lead and don't get buried. -->
+  <div class="ov-grid">
+    {#if d.failures?.length}
+      <section class="ov-section">
+        <h3>
+          <Icon path={mdiAlertCircleOutline} size={15} /> Render failures
+          <span class="ov-count">{d.failures.length}</span>
+        </h3>
+        {#each d.failures as f}
+          <div class="failure">
+            <span class="failure-parent">{f.parent}</span>
+            <div class="failure-msg">{f.message}</div>
+          </div>
+        {/each}
+      </section>
     {/if}
-    <!-- Zero counts stay neutral; a tinted "+0" is noise. -->
-    <span class="impact-pill" class:add={d.summary.added > 0}>+{d.summary.added} added</span>
-    <span class="impact-pill" class:chg={d.summary.changed > 0}>{d.summary.changed} changed</span>
-    <span class="impact-pill" class:del={d.summary.removed > 0}>−{d.summary.removed} removed</span>
-    <!-- The diff was capped: counts above are the true totals, but this many
-         resources were not rendered. The review here is partial. -->
-    {#if d.truncated}
-      <span class="impact-pill trunc" title="This diff exceeded the render cap; {d.truncated} resource diffs were not rendered."
-        >{d.truncated} not shown</span
-      >
-    {/if}
-  </div>
 
-  <!-- Blast radius: for each changed/failed app, how many downstream apps
-       declare a transitive spec.dependsOn on it — the reconciliation reach a
-       raw file diff can't show. Direct dependents are named; the count is the
-       full transitive closure. Absent when nothing changed depends-on anything. -->
-  {#if d.blastRadius?.length}
-    <section class="ov-section">
-      <h3><Icon path={mdiSitemapOutline} size={15} /> Blast radius</h3>
-      {#each d.blastRadius as br}
-        <div class="blast">
-          <span class="blast-parent">{br.parent}</span>
-          <span class="blast-count">{br.transitive} {br.transitive === 1 ? 'dependent' : 'dependents'}</span>
-          {#if br.direct?.length}
-            <div class="blast-deps">{br.direct.join(', ')}</div>
+    {#if d.warnings?.length}
+      <section class="ov-section">
+        <h3>Cautions <span class="ov-count">{d.warnings.length}</span></h3>
+        {#each d.warnings as w}
+          {@const target = warningTarget(w.resource)}
+          <!-- Cautions whose resource rendered into the diff deep-link to it. -->
+          {#if target}
+            <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
+              {@render warningBody(w)}
+            </button>
+          {:else}
+            <div class="warning {w.level}">{@render warningBody(w)}</div>
           {/if}
-        </div>
-      {/each}
-    </section>
-  {/if}
+        {/each}
+      </section>
+    {/if}
 
-  {#if d.warnings?.length}
-    <section class="ov-section">
-      <h3>Cautions</h3>
-      {#each d.warnings as w}
-        {@const target = warningTarget(w.resource)}
-        <!-- Cautions whose resource rendered into the diff deep-link to it. -->
-        {#if target}
-          <button class="warning warning-link {w.level}" title="View the resource diff" onclick={() => openWarning(target)}>
-            {@render warningBody(w)}
+    <!-- Blast radius: for each changed/failed app, how many downstream apps
+         declare a transitive spec.dependsOn on it — the reconciliation reach a
+         raw file diff can't show. Direct dependents are named; the count is the
+         full transitive closure. Absent when nothing changed depends-on anything. -->
+    {#if d.blastRadius?.length}
+      <section class="ov-section">
+        <h3>
+          <Icon path={mdiSitemapOutline} size={15} /> Blast radius
+          <span class="ov-count">{d.blastRadius.length}</span>
+        </h3>
+        {#each d.blastRadius as br}
+          <div class="blast">
+            <span class="blast-parent">{br.parent}</span>
+            <span class="blast-count">{br.transitive} {br.transitive === 1 ? 'dependent' : 'dependents'}</span>
+            {#if br.direct?.length}
+              <div class="blast-deps">{br.direct.join(', ')}</div>
+            {/if}
+          </div>
+        {/each}
+      </section>
+    {/if}
+
+    {#if d.images?.length}
+      <section class="ov-section">
+        <!-- A long image list collapses behind its count (imageCollapseThreshold)
+             so it doesn't crowd out the flags above; a short one renders open. -->
+        {#if imagesCollapsible}
+          <button class="ov-head" aria-expanded={imagesOpen} onclick={() => (imagesOpen = !imagesOpen)}>
+            <Icon path={imagesOpen ? mdiChevronDown : mdiChevronRight} size={14} />
+            <Icon path={mdiPackageVariantClosed} size={15} /> Image changes
+            <span class="ov-count">{d.images.length}</span>
           </button>
         {:else}
-          <div class="warning {w.level}">{@render warningBody(w)}</div>
+          <h3>
+            <Icon path={mdiPackageVariantClosed} size={15} /> Image changes
+            <span class="ov-count">{d.images.length}</span>
+          </h3>
         {/if}
-      {/each}
-    </section>
-  {/if}
-
-  {#if d.images?.length}
-    <section class="ov-section">
-      <h3><Icon path={mdiPackageVariantClosed} size={15} /> Image changes</h3>
-      <ul class="img-list">
-        {#each d.images as img}
-          <li class="img-change">
-            <div class="img-head">
-              <span class="img-name">{img.name}</span>
-              {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
-            </div>
-            <!-- ∅ = no reference on that side (image added/removed); tooltip spells it out. -->
-            <div class="img-delta">
-              <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
-              <span class="img-arrow">→</span>
-              <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
-            </div>
-            {#if img.refs?.length}
-              <div class="img-refs">{img.refs.join(', ')}</div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
-
-  {#if d.failures?.length}
-    <section class="ov-section">
-      <h3><Icon path={mdiAlertCircleOutline} size={15} /> Render failures</h3>
-      {#each d.failures as f}
-        <div class="failure">
-          <span class="failure-parent">{f.parent}</span>
-          <div class="failure-msg">{f.message}</div>
-        </div>
-      {/each}
-    </section>
-  {/if}
+        {#if !imagesCollapsible || imagesOpen}
+          <ul class="img-list">
+            {#each d.images as img}
+              <li class="img-change">
+                <div class="img-head">
+                  <span class="img-name">{img.name}</span>
+                  {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
+                </div>
+                <!-- ∅ = no reference on that side (image added/removed); tooltip spells it out. -->
+                <div class="img-delta">
+                  <span class="img-ver from" title={img.from || 'not present before this change'}>{shortVer(img.from)}</span>
+                  <span class="img-arrow">→</span>
+                  <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
+                </div>
+                {#if img.refs?.length}
+                  <div class="img-refs">{img.refs.join(', ')}</div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
+  </div>
 </div>
 {/if}
