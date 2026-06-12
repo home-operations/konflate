@@ -105,10 +105,17 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 // statusContext is the name konflate's commit status appears under on the PR.
 const statusContext = "konflate"
 
-// forgeWriteTimeout bounds a single forge write (a status or a comment) so a slow
-// or hung forge can't park a write-back goroutine until shutdown — these run
-// fire-and-forget off the render path. Generous: each is a small API call.
-const forgeWriteTimeout = 30 * time.Second
+// Write-back tuning. forgeWriteTimeout is the overall budget for one write
+// (across all attempts) so a slow or hung forge can't park a fire-and-forget
+// goroutine until shutdown. A brief forge outage is retried a few times with
+// exponential backoff rather than dropped — both writes are idempotent
+// (SetStatus overwrites; UpsertComment edits its own comment), so a retry after a
+// partial failure can't double-post. Beyond that the next render retries anyway.
+const (
+	forgeWriteTimeout  = 30 * time.Second // budget for one write-back, all attempts
+	forgeWriteAttempts = 3                // tries before giving up
+	forgeWriteBackoff  = time.Second      // base backoff, doubled each retry (1s, 2s, …)
+)
 
 // reportOutcome is the queue's terminal-outcome hook: it writes konflate's result
 // back to the forge — a commit status and/or a summary comment, per the enabled
@@ -126,16 +133,47 @@ func (s *Server) reportOutcome(pr api.PR, st api.JobStatus, sig *api.Signals, er
 }
 
 // writeBack runs one forge write off the render path: on its own goroutine,
-// bounded by forgeWriteTimeout, logging (never failing) on error so a write-back
-// problem never blocks or fails a render.
+// retried with backoff and bounded by forgeWriteTimeout, logging (never failing)
+// on giving up so a write-back problem never blocks or fails a render.
 func (s *Server) writeBack(kind string, number int, fn func(ctx context.Context) error) {
 	go func() {
 		ctx, cancel := context.WithTimeout(s.runCtx, forgeWriteTimeout)
 		defer cancel()
-		if err := fn(ctx); err != nil {
-			s.log.Warn("write-back failed", "kind", kind, "pr", number, "error", err)
+		err := retryWrite(ctx, forgeWriteAttempts, forgeWriteBackoff, func() error { return fn(ctx) })
+		if err != nil {
+			s.log.Warn("write-back failed", "kind", kind, "pr", number, "attempts", forgeWriteAttempts, "error", err)
 		}
 	}()
+}
+
+// retryWrite runs fn up to attempts times, returning as soon as it succeeds and
+// backing off exponentially (base, 2·base, …) between tries. The backoff respects
+// ctx — a cancelled or expired ctx stops further tries and returns fn's last
+// error. It retries any error: both write-backs are idempotent, and classifying
+// transient vs permanent across three forge SDKs would couple this to their error
+// types for little gain (a permanent error just wastes a couple of bounded tries).
+func retryWrite(ctx context.Context, attempts int, base time.Duration, fn func() error) error {
+	var err error
+	for attempt := 1; ; attempt++ {
+		if err = fn(); err == nil || attempt >= attempts {
+			return err
+		}
+		if !sleepCtx(ctx, base<<(attempt-1)) {
+			return err // ctx done during backoff — give up with the last error
+		}
+	}
+}
+
+// sleepCtx sleeps for d, or returns false early if ctx is done first.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
 }
 
 // postStatus writes konflate's commit status for a terminal render outcome.
