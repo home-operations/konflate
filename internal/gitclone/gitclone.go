@@ -212,15 +212,11 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 	if err == nil || !mirrorCorrupt(err) {
 		return head, base, err
 	}
-	// The persistent mirror's object store is inconsistent — a ref-reachable
-	// object is missing or unreadable, so the repack walk (or a later read) fails.
-	// go-git's incremental fetch can't repair it: it advertises the broken refs as
-	// haves, so the forge replies "up to date" and never re-sends the missing
-	// ancestors. Discard the mirror and re-seed from a clean clone, then retry
-	// once. Transient failures (network/auth/ctx) and an expected gone head ref are
-	// excluded by mirrorCorrupt, so this only fires on real object-store damage.
-	// Safe under the write lock: it excludes the read lock Trees holds while
-	// extracting, so no render is mid-read of the store we're removing.
+	// The object store is damaged. go-git's incremental fetch can't repair it — it
+	// advertises the broken refs as haves, so the forge never re-sends the missing
+	// objects — so discard the mirror, re-seed from a clean clone, and retry once.
+	// Removing the dir is safe here: the write lock excludes the read lock Trees
+	// holds while extracting.
 	slog.Default().Warn("rebuilding corrupt git mirror", "error", err, "dir", m.bareDir)
 	if rmErr := os.RemoveAll(m.bareDir); rmErr != nil {
 		return nil, nil, fmt.Errorf("gitclone: rebuild mirror: %w", rmErr)
@@ -285,43 +281,36 @@ func (m *Mirror) fetchLocked(ctx context.Context, headRef, baseRef string, auth 
 }
 
 // mirrorCorrupt reports whether err means the bare mirror's object store is
-// damaged — a missing object, or a corrupt pack/index — so the mirror should be
-// discarded and re-cloned rather than reused. This is distinct from a transient
-// failure (network/ctx) or an expected one (a gone head ref), which must not
-// trigger a wasteful re-clone, so those are excluded first.
+// damaged — a missing object or a corrupt pack/index — and so should be
+// re-cloned rather than reused. Transient (network/ctx) and expected (gone head
+// ref) failures are excluded first, so a re-clone never fires on a passing blip.
 //
-// Damage is matched on go-git's exported error sentinels via errors.Is, not on
-// guessed message text — those sentinels are stable API, the strings are not.
-// The one exception is the repack ref walk (go-git object_walker.go), which
-// renders ErrObjectNotFound with %v, breaking the error chain; that exact wedge
-// ("repack mirror: getting object <sha> failed: object not found") is the
-// reported failure, so it gets a single explicit text fallback.
+// Damage is matched on go-git's exported sentinels via errors.Is: the sentinels
+// are stable API, the messages aren't. The lone text fallback is for the repack
+// ref walk, which renders ErrObjectNotFound with %v (object_walker.go) and so
+// breaks the chain errors.Is needs — that flattened form is the reported wedge.
 func mirrorCorrupt(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Expected (gone head ref) or caller-driven (deadline/cancel): not corruption.
+	// Expected (gone head ref) or caller-driven (deadline/cancel): not damage.
 	if errors.Is(err, ErrHeadRefGone) ||
 		errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	// A transport/network failure (a flaky forge link) is transient, not damage —
-	// and a mid-fetch truncation can surface as a malformed pack, which we'd
-	// otherwise rebuild on. Exclude it first so a network blip never re-clones.
+	// A network failure is transient, not damage — and a mid-fetch truncation can
+	// surface as a malformed pack. Exclude it first so a blip never re-clones.
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return false
 	}
-	// Damaged object store, matched structurally on go-git's sentinels: a missing
-	// object, or a corrupt pack/index file (truncated write, bad checksum, …).
 	if errors.Is(err, plumbing.ErrObjectNotFound) ||
 		errors.Is(err, packfile.ErrMalformedPackFile) ||
 		errors.Is(err, idxfile.ErrMalformedIdxFile) {
 		return true
 	}
-	// The repack ref walk flattens ErrObjectNotFound with %v (see doc comment),
-	// so errors.Is above can't see it — match its text as the one fallback.
+	// The repack walk flattens ErrObjectNotFound with %v, so errors.Is misses it.
 	return strings.Contains(err.Error(), plumbing.ErrObjectNotFound.Error())
 }
 
