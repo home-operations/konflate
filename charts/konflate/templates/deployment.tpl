@@ -83,6 +83,10 @@ spec:
             - name: KONFLATE_RENDER_FORK_PRS
               value: "true"
             {{- end }}
+            {{- if .Values.config.mcp }}
+            - name: KONFLATE_MCP
+              value: "true"
+            {{- end }}
             {{- if ne (toString .Values.config.maxDiffResources) "" }}
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}
