@@ -27,6 +27,17 @@ func TestMCP_Tools(t *testing.T) {
 			Impact:   api.Impact{Resources: 11, Parents: 2},
 			Warnings: []api.Warning{{Level: api.LevelCaution, Rule: "removed-statefulset", Resource: "StatefulSet o11y/gatus", Detail: "its PersistentVolumeClaims and data may be deleted"}},
 			Images:   []api.ImageChange{{Name: "ghcr.io/twin/gatus", From: "v5.35.0", To: "v5.36.0"}},
+			Resources: []api.DiffResource{{
+				ID: "r0", Title: "Deployment o11y/gatus", Kind: "Deployment", Name: "o11y/gatus", Status: "changed", Add: 1, Del: 1,
+				// chroma-style highlighted rows; one carries an escaped entity to prove
+				// the tool strips spans and unescapes &amp; back to plain text.
+				Unified: []api.UnifiedRow{
+					{Kind: "ctx", HTML: `<span class="ln">  labels:</span>`},
+					{Kind: "del", HTML: `<span class="k">    app: gatus</span>`},
+					{Kind: "add", HTML: `<span class="k">    app: gatus-sidecar &amp; co</span>`},
+					{Hunk: true, Count: 3},
+				},
+			}},
 		}, nil
 	}}
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, rich)
@@ -55,17 +66,13 @@ func TestMCP_Tools(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	if !names["list_pull_requests"] || !names["get_pr_summary"] {
-		t.Fatalf("advertised tools = %v, want list_pull_requests + get_pr_summary", names)
+	if !names["list_pull_requests"] || !names["get_pr_summary"] || !names["get_pr_diff"] {
+		t.Fatalf("advertised tools = %v, want list_pull_requests + get_pr_summary + get_pr_diff", names)
 	}
 
 	// list_pull_requests: the tracked PR with its computed signals (1 caution, 1 image).
-	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_pull_requests"})
-	if err != nil || res.IsError {
-		t.Fatalf("list_pull_requests: err=%v isError=%v (%s)", err, res != nil && res.IsError, toolText(res))
-	}
 	var out mcpListOutput
-	decodeStructured(t, res.StructuredContent, &out)
+	decodeStructured(t, mustCallTool(t, cs, "list_pull_requests", nil).StructuredContent, &out)
 	if len(out.PullRequests) != 1 {
 		t.Fatalf("listed %d PRs, want 1: %+v", len(out.PullRequests), out.PullRequests)
 	}
@@ -74,22 +81,54 @@ func TestMCP_Tools(t *testing.T) {
 	}
 
 	// get_pr_summary: the Markdown overview, carrying the caution.
-	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_pr_summary", Arguments: map[string]any{"number": 7}})
-	if err != nil || res.IsError {
-		t.Fatalf("get_pr_summary(7): err=%v isError=%v (%s)", err, res != nil && res.IsError, toolText(res))
-	}
-	if text := toolText(res); !strings.Contains(text, "konflate — summary") || !strings.Contains(text, "gatus") {
+	if text := toolText(mustCallTool(t, cs, "get_pr_summary", map[string]any{"number": 7})); !strings.Contains(text, "konflate — summary") || !strings.Contains(text, "gatus") {
 		t.Errorf("summary missing expected content:\n%s", text)
 	}
 
-	// An unknown PR number is a tool-level error (IsError), not a transport failure.
-	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_pr_summary", Arguments: map[string]any{"number": 999}})
+	// get_pr_diff: the rendered YAML as a plain-text unified diff — chroma spans
+	// stripped, entities unescaped, +/- prefixes, and a folded-gap marker.
+	diff := toolText(mustCallTool(t, cs, "get_pr_diff", map[string]any{"number": 7}))
+	for _, want := range []string{
+		"changed Deployment o11y/gatus",
+		"-    app: gatus",
+		"+    app: gatus-sidecar & co", // &amp; unescaped, <span> stripped
+		"… 3 unchanged lines …",
+	} {
+		if !strings.Contains(diff, want) {
+			t.Errorf("diff missing %q:\n%s", want, diff)
+		}
+	}
+	if strings.Contains(diff, "<span") || strings.Contains(diff, "&amp;") {
+		t.Errorf("diff still contains chroma HTML/entities:\n%s", diff)
+	}
+
+	// The resource filter scopes to one resource.
+	if got := toolText(mustCallTool(t, cs, "get_pr_diff", map[string]any{"number": 7, "resource": "r0"})); !strings.Contains(got, "Deployment o11y/gatus") {
+		t.Errorf("get_pr_diff(7, resource=r0):\n%s", got)
+	}
+
+	// Recoverable tool errors (IsError), not transport failures: an unknown PR
+	// number, and an unmatched resource.
+	if res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_pr_summary", Arguments: map[string]any{"number": 999}}); err != nil || !res.IsError {
+		t.Errorf("get_pr_summary(999): want a tool error (err=%v)", err)
+	}
+	if res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_pr_diff", Arguments: map[string]any{"number": 7, "resource": "does-not-exist"}}); err != nil || !res.IsError {
+		t.Errorf("get_pr_diff(unmatched resource): want a tool error (err=%v)", err)
+	}
+}
+
+// mustCallTool calls a tool and fails the test on a transport error or a
+// tool-level error result, returning the successful result.
+func mustCallTool(t *testing.T, cs *mcp.ClientSession, name string, args any) *mcp.CallToolResult {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
-		t.Fatalf("get_pr_summary(999) transport error: %v", err)
+		t.Fatalf("%s: transport error: %v", name, err)
 	}
-	if !res.IsError {
-		t.Error("get_pr_summary on an unknown PR should return a tool error")
+	if res.IsError {
+		t.Fatalf("%s: tool error: %s", name, toolText(res))
 	}
+	return res
 }
 
 // TestMCP_HTTPEndpoint exercises the real /mcp wiring end to end: the route is
