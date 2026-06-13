@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
+	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -144,6 +147,100 @@ func TestMirror_RepacksWhenPacksAccumulate(t *testing.T) {
 	}
 	if _, ok := read(last.BaseDir, "app/other.yaml"); ok {
 		t.Error("base tree contains other.yaml after repack — merge-base resolution broke")
+	}
+}
+
+// TestMirror_RebuildsOnCorruptObjectStore reproduces the production wedge — a
+// repack whose ref walk hits a missing object ("getting object <sha> failed:
+// object not found") — and verifies the mirror self-heals: it discards the
+// damaged bare repo, re-seeds from a clean clone, and the render still resolves
+// correct trees. Without the rebuild, the corrupt mirror would fail every render
+// forever (go-git's incremental fetch can't re-fetch the missing ancestors,
+// since it advertises the broken refs as haves).
+func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
+	orig := repackPackThreshold
+	repackPackThreshold = 1 // force a repack on the next render
+	t.Cleanup(func() { repackPackThreshold = orig })
+
+	src := buildRepo(t)
+	m := newTestMirror(t, src)
+
+	// First render seeds the mirror.
+	first, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("seed render: %v", err)
+	}
+	first.Cleanup()
+
+	// Corrupt the mirror: add a ref pointing at a fabricated, absent object.
+	// RepackObjects walks every ref, so the next repack tries to read it and fails
+	// with exactly the production error — without having to surgically edit packs.
+	bare, err := git.PlainOpen(m.bareDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ghost := plumbing.NewHash("0e2d2fd5a618d41d4da42a9d7ebf1a14659dd6c9")
+	if err := bare.Storer.SetReference(
+		plumbing.NewHashReference("refs/heads/ghost", ghost),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second render must self-heal (rebuild) and still return correct trees.
+	res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("render after corruption should self-heal, got: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+	assertMergeBaseTrees(t, res)
+
+	// The rebuild re-seeded from a clean clone, so the dangling ref is gone —
+	// proof the mirror was actually rebuilt, not that the error was swallowed.
+	rebuilt, err := git.PlainOpen(m.bareDir)
+	if err != nil {
+		t.Fatalf("reopen rebuilt mirror: %v", err)
+	}
+	if _, err := rebuilt.Reference("refs/heads/ghost", false); err == nil {
+		t.Error("dangling ref survived the rebuild; mirror was not re-seeded")
+	}
+}
+
+// TestMirrorCorrupt covers the classifier that decides whether a failed fetch
+// means the mirror's object store is damaged (rebuild it) versus a transient or
+// expected failure (leave it alone). The exclusions matter most: a re-clone
+// fired on a network blip or a gone head ref would be wasteful or wrong.
+func TestMirrorCorrupt(t *testing.T) {
+	t.Parallel()
+	// A malformed pack reached via a network error: the message matches a
+	// corruption sentinel, but it's a net.Error (a mid-fetch truncation), so the
+	// transient exclusion must win over the sentinel match.
+	netPack := &net.OpError{Op: "read", Err: packfile.ErrMalformedPackFile}
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		// Damaged object store — rebuild.
+		{"object not found, wrapped", fmt.Errorf("gitclone: base: %w", plumbing.ErrObjectNotFound), true},
+		{"object not found, flattened by the repack walk", errors.New("gitclone: repack mirror: getting object abc failed: object not found"), true},
+		{"malformed pack file", fmt.Errorf("gitclone: fetch head: %w", packfile.ErrMalformedPackFile), true},
+		{"malformed idx file", fmt.Errorf("gitclone: fetch head: %w", idxfile.ErrMalformedIdxFile), true},
+		// Transient or expected — leave the mirror alone.
+		{"gone head ref", fmt.Errorf("gitclone: fetch head: %w", ErrHeadRefGone), false},
+		{"context canceled", context.Canceled, false},
+		{"deadline exceeded", fmt.Errorf("fetch: %w", context.DeadlineExceeded), false},
+		{"malformed pack from a network truncation", netPack, false},
+		{"unrelated error", errors.New("permission denied"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := mirrorCorrupt(tc.err); got != tc.want {
+				t.Errorf("mirrorCorrupt(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +25,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
+	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
@@ -204,6 +208,27 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	head, base, err = m.fetchLocked(ctx, headRef, baseRef, auth)
+	if err == nil || !mirrorCorrupt(err) {
+		return head, base, err
+	}
+	// The object store is damaged. go-git's incremental fetch can't repair it — it
+	// advertises the broken refs as haves, so the forge never re-sends the missing
+	// objects — so discard the mirror, re-seed from a clean clone, and retry once.
+	// Removing the dir is safe here: the write lock excludes the read lock Trees
+	// holds while extracting.
+	slog.Default().Warn("rebuilding corrupt git mirror", "error", err, "dir", m.bareDir)
+	if rmErr := os.RemoveAll(m.bareDir); rmErr != nil {
+		return nil, nil, fmt.Errorf("gitclone: rebuild mirror: %w", rmErr)
+	}
+	return m.fetchLocked(ctx, headRef, baseRef, auth)
+}
+
+// fetchLocked performs one fetch cycle: open-or-seed the mirror, refresh the base
+// and head refs, repack if the packs have piled up, and resolve both commits. The
+// caller holds the write lock and has resolved auth. Split from fetch so the
+// self-heal path can re-run the whole cycle against a freshly re-seeded mirror.
+func (m *Mirror) fetchLocked(ctx context.Context, headRef, baseRef string, auth *githttp.BasicAuth) (head, base *object.Commit, err error) {
 	repo, err := m.openOrClone(ctx, baseRef, auth)
 	if err != nil {
 		return nil, nil, err
@@ -253,6 +278,40 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 		return nil, nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
 	}
 	return head, base, nil
+}
+
+// mirrorCorrupt reports whether err means the bare mirror's object store is
+// damaged — a missing object or a corrupt pack/index — and so should be
+// re-cloned rather than reused. Transient (network/ctx) and expected (gone head
+// ref) failures are excluded first, so a re-clone never fires on a passing blip.
+//
+// Damage is matched on go-git's exported sentinels via errors.Is: the sentinels
+// are stable API, the messages aren't. The lone text fallback is for the repack
+// ref walk, which renders ErrObjectNotFound with %v (object_walker.go) and so
+// breaks the chain errors.Is needs — that flattened form is the reported wedge.
+func mirrorCorrupt(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Expected (gone head ref) or caller-driven (deadline/cancel): not damage.
+	if errors.Is(err, ErrHeadRefGone) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// A network failure is transient, not damage — and a mid-fetch truncation can
+	// surface as a malformed pack. Exclude it first so a blip never re-clones.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return false
+	}
+	if errors.Is(err, plumbing.ErrObjectNotFound) ||
+		errors.Is(err, packfile.ErrMalformedPackFile) ||
+		errors.Is(err, idxfile.ErrMalformedIdxFile) {
+		return true
+	}
+	// The repack walk flattens ErrObjectNotFound with %v, so errors.Is misses it.
+	return strings.Contains(err.Error(), plumbing.ErrObjectNotFound.Error())
 }
 
 // repackPackThreshold is the packfile count at which a fetch consolidates the
