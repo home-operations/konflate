@@ -96,16 +96,45 @@ type Meta struct {
 	// "auto-updates every Nm". konflate always auto-refreshes; there is no manual
 	// refresh trigger.
 	RefreshIntervalSeconds int `json:"refreshIntervalSeconds"`
+	// Sync reports forge-polling health; present (with OK=false) only when the last
+	// PR-list attempt failed, so the UI can show a banner instead of a misleading
+	// empty list. Omitted when healthy.
+	Sync *SyncStatus `json:"sync,omitempty"`
 }
 
 // Event is a websocket message announcing a change to a PR's diff job, so the
 // UI can update that PR without polling.
 type Event struct {
-	Type   string    `json:"type"`             // "status" (job state changed), "removed" (PR no longer open), or "checks" (CI rollup changed)
-	Number int       `json:"number"`           // the affected PR
+	Type   string    `json:"type"`             // "status", "removed", "checks", or "sync"
+	Number int       `json:"number"`           // the affected PR (status/removed/checks)
 	Status JobStatus `json:"status,omitempty"` // set for "status" events
 	Error  string    `json:"error,omitempty"`
 	// Checks is set on "checks" events — the PR head's new CI rollup (State may be
 	// CheckNone, which clears the indicator). Absent on other event types.
 	Checks *CheckRollup `json:"checks,omitempty"`
+	// Sync is set on "sync" events — the new forge-polling health (OK=true clears
+	// the UI banner, OK=false raises it). Absent on other event types.
+	Sync *SyncStatus `json:"sync,omitempty"`
+}
+
+// SyncReason is the machine-readable tag on a failed SyncStatus, so the UI can
+// branch (a rate limit shows a countdown + token hint; a generic error doesn't).
+type SyncReason string
+
+const (
+	SyncRateLimited SyncReason = "rate_limited" // the forge API rate limit was hit; RetryAt is set
+	SyncError       SyncReason = "error"        // any other failure to reach or list the forge
+)
+
+// SyncStatus reports whether konflate's last attempt to list PRs from the forge
+// succeeded. Surfaced on Meta (initial load) and pushed as a "sync" Event (live),
+// so the UI can show a clear "can't reach the forge / rate-limited" banner instead
+// of a misleading "no pull requests" empty state.
+type SyncStatus struct {
+	OK      bool       `json:"ok"`                // false ⇒ the last PR-list attempt failed
+	Reason  SyncReason `json:"reason,omitempty"`  // why it failed (rate_limited | error)
+	Message string     `json:"message,omitempty"` // human-readable detail for the banner
+	// RetryAt is when a rate limit resets (Unix seconds), set only for
+	// reason=="rate_limited" so the UI can show a countdown; zero otherwise.
+	RetryAt int64 `json:"retryAt,omitempty"`
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v88/github"
 
@@ -192,5 +193,30 @@ func TestNewGitHubReadAuth(t *testing.T) {
 	}
 	if _, ok := anon.client.Client().Transport.(*installTransport); ok {
 		t.Error("read client without App creds must not use App installation auth")
+	}
+}
+
+// TestRateLimit covers the rate-limit classifier the server uses to turn a failed
+// PR-list into a time-bounded UI status: GitHub's primary RateLimitError carries
+// the reset time, the secondary AbuseRateLimitError a retry-after, and both are
+// recognized through the wrapped error chain; an ordinary error is not a limit.
+func TestRateLimit(t *testing.T) {
+	t.Parallel()
+	reset := time.Now().Add(11 * time.Minute).Truncate(time.Second)
+	wrapped := fmt.Errorf("github: list PRs: %w", &github.RateLimitError{
+		Rate:    github.Rate{Reset: github.Timestamp{Time: reset}},
+		Message: "API rate limit exceeded",
+	})
+	if got, ok := RateLimit(wrapped); !ok || !got.Equal(reset) {
+		t.Errorf("RateLimit(primary) = (%v, %v); want (%v, true)", got, ok, reset)
+	}
+
+	after := 30 * time.Second
+	if _, ok := RateLimit(fmt.Errorf("x: %w", &github.AbuseRateLimitError{RetryAfter: &after})); !ok {
+		t.Error("RateLimit(secondary/abuse) ok = false; want true")
+	}
+
+	if _, ok := RateLimit(errors.New("connection refused")); ok {
+		t.Error("RateLimit(plain error) ok = true; want false")
 	}
 }

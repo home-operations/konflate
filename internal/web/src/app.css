@@ -103,6 +103,28 @@ body {
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
+/* Forge-poll failure banner (SyncBanner.svelte): a full-width amber strip below
+   the topbar when konflate can't list PRs (rate-limited / forge unreachable), so
+   an empty list reads as "couldn't fetch" rather than "no open PRs". */
+.sync-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--caution);
+  background: color-mix(in srgb, var(--caution) 12%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--caution) 40%, var(--border));
+}
+.sync-banner-text {
+  color: var(--text);
+}
+.sync-banner-text strong {
+  color: var(--caution);
+  font-weight: 600;
+}
 .brand {
   display: flex;
   align-items: center;

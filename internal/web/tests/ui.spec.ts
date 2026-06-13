@@ -1122,6 +1122,60 @@ test('an empty PR list reads as the success state, not an error', async ({ page 
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/');
   await expect(page.locator('.all-clear')).toContainText('All caught up');
+  // A healthy poll shows no sync banner — the empty list is genuine, not a failure.
+  await expect(page.locator('.sync-banner')).toHaveCount(0);
+});
+
+test('a rate-limited forge poll shows a banner with a reset countdown, not a bare empty list', async ({ page }) => {
+  // The misread that motivated this: an anonymous (rate-limited) poll returned no
+  // PRs and the UI read as "all caught up". Now meta carries sync.ok=false and the
+  // banner explains why — with the reset time and how to raise the limit.
+  const retryAt = Math.floor(Date.now() / 1000) + 11 * 60;
+  await page.route('**/api/meta', (r) =>
+    r.fulfill({
+      json: {
+        ...defaultMeta,
+        sync: { ok: false, reason: 'rate_limited', message: 'GitHub API rate limit exceeded.', retryAt },
+      },
+    }),
+  );
+  await page.route('**/api/prs', (r) => r.fulfill({ json: [] }));
+  await page.routeWebSocket('**/ws', () => {});
+  await page.goto('/');
+
+  const banner = page.locator('.sync-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('GitHub API rate limit exceeded.');
+  await expect(banner).toContainText(/Resets in ~\d+ minutes?\./);
+  await expect(banner).toContainText('Configure a forge token or GitHub App');
+});
+
+test('a generic poll failure banners the error but keeps any loaded PRs', async ({ page }) => {
+  // Unlike a rate limit, an unreachable forge has no reset time or token remedy —
+  // the banner just names the failure and reassures that the list below is stale,
+  // not empty. (Pushed live as a "sync" websocket event here.)
+  await stubApi(page);
+  let pushSync: ((data: string) => void) | null = null;
+  await page.routeWebSocket('**/ws', (ws) => {
+    pushSync = (data) => ws.send(data);
+  });
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(3);
+  await expect(page.locator('.sync-banner')).toHaveCount(0); // healthy to start
+
+  await expect.poll(() => pushSync !== null).toBe(true);
+  pushSync!(JSON.stringify({ type: 'sync', sync: { ok: false, reason: 'error', message: 'forge unreachable' } }));
+
+  const banner = page.locator('.sync-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('forge unreachable');
+  await expect(banner).toContainText('still shown below');
+  await expect(banner).not.toContainText('Resets in');
+  await expect(page.locator('.card')).toHaveCount(3); // the kept PRs remain
+
+  // A recovering "sync" event (ok=true) clears the banner.
+  pushSync!(JSON.stringify({ type: 'sync', sync: { ok: true } }));
+  await expect(page.locator('.sync-banner')).toHaveCount(0);
 });
 
 test('mobile: back and prev/next share one header row, title below (compact chrome)', async ({ page }) => {

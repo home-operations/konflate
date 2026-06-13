@@ -11,6 +11,7 @@ import type {
   Meta,
   PRStatus,
   RenderFailure,
+  SyncStatus,
   Warning,
   WSEvent,
 } from './types';
@@ -57,6 +58,7 @@ interface Store {
   loading: boolean; // a diff fetch/render is in flight
   previews: Record<number, RowPreview>; // lazy list-row diff summaries, by PR number
   connected: boolean;
+  sync: SyncStatus | null; // forge-polling health; non-null ⇒ last poll failed (show the banner)
 }
 
 export const store: Store = $state({
@@ -76,6 +78,7 @@ export const store: Store = $state({
   loading: false,
   previews: {},
   connected: false,
+  sync: null,
 });
 
 // ---- derived helpers ------------------------------------------------------
@@ -299,6 +302,7 @@ async function getJSON<T>(path: string): Promise<T> {
 export async function loadMeta(): Promise<void> {
   try {
     store.meta = await getJSON<Meta>('/api/meta');
+    store.sync = store.meta.sync ?? null; // seed the banner from the initial poll health
   } catch (err) {
     console.error('loadMeta', err);
   }
@@ -465,6 +469,11 @@ function onEvent(ev: WSEvent): void {
   if (ev.type === 'checks') {
     const pr = store.prs.find((p) => p.number === ev.number);
     if (pr) pr.checks = ev.checks.state ? ev.checks : undefined;
+    return;
+  }
+  // Forge-polling health changed: raise the banner (ok=false) or clear it (ok=true).
+  if (ev.type === 'sync') {
+    store.sync = ev.sync.ok ? null : ev.sync;
     return;
   }
   // ev is narrowed to the 'status' variant here — status is guaranteed present.
