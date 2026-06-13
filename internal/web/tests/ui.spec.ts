@@ -1012,6 +1012,16 @@ test('the summary grid resolves to 4 / 2 / 1 columns by pane width (never an orp
   await expect(page.locator('.ov-grid')).toBeVisible();
   await expect.poll(trackCount).toBe(4);
 
+  // Ultrawide: the grid fills the pane (no fixed cap leaving dead space on the
+  // right). It tracks the pane width — within its 14px side padding of .overview.
+  await page.setViewportSize({ width: 2000, height: 900 });
+  await expect.poll(trackCount).toBe(4);
+  const fill = await page.locator('.ov-grid').evaluate((el) => {
+    const pane = (el.closest('.overview') as HTMLElement).clientWidth - 28; // minus 14px padding each side
+    return el.getBoundingClientRect().width / pane;
+  });
+  expect(fill).toBeGreaterThan(0.98); // fills the pane, not capped at 1280
+
   // Mid width — the pane auto-fit used to orphan (3 + 1). Now a balanced 2×2.
   await page.setViewportSize({ width: 960, height: 900 });
   await expect.poll(trackCount).toBe(2);

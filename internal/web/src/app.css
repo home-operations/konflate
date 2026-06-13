@@ -1218,13 +1218,14 @@ button.sum-pill:hover {
    4 / 2 / 1 breakpoints rather than auto-fit, which packs three then orphans the
    fourth onto a lonely second row: wide → four across, medium → a balanced 2×2,
    narrow → a single stack. Always a balanced grid, never a 3+1. The queries read
-   .overview's width (the pane), so they're right with or without the tree rail. */
+   .overview's width (the pane), so they're right with or without the tree rail.
+   No max-width: the columns (and their content) widen with the pane rather than
+   leaving dead space on the right of a wide viewport. */
 .ov-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
-  max-width: 1280px;
 }
 @container (min-width: 440px) {
   .ov-grid {
