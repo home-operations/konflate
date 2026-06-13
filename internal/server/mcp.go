@@ -21,7 +21,14 @@ import (
 func (s *Server) mcpHandler() http.Handler {
 	// One server instance serves every request; the SDK tracks per-client sessions.
 	srv := s.mcpServer()
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	// CrossOriginProtection rejects cross-origin browser requests (via Sec-Fetch-Site
+	// / Origin) as CSRF defense-in-depth; native MCP clients send neither header and
+	// are unaffected. The SDK additionally rejects DNS-rebinding (a non-localhost Host
+	// on a localhost request) by default.
+	return mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return srv },
+		&mcp.StreamableHTTPOptions{CrossOriginProtection: http.NewCrossOriginProtection()},
+	)
 }
 
 // mcpServer builds the MCP server and registers konflate's read-only tools. Split
