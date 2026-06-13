@@ -105,12 +105,13 @@ test('list → review → single-page flow', async ({ page }) => {
   // The forge CI check rides next to the PR title on the review header too
   // (#142 is 4/4 green).
   await expect(page.locator('.review-title .check-success')).toBeVisible();
-  // The same forge link sits next to the PR title on the review header.
-  await expect(page.locator('.review-title .forge-link')).toHaveAttribute(
-    'href',
-    'https://github.com/acme/home-ops/pull/142',
-  );
-  await expect(page.locator('.review-title .forge-link')).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  // The PR link lives in the meta trailer (beside the last-rendered time), as an
+  // icon — no "#142" text, and no longer a direct child next to the title.
+  const headerLink = page.locator('.rt-meta .forge-link');
+  await expect(headerLink).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
+  await expect(headerLink).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  await expect(headerLink).not.toContainText('#142');
+  await expect(page.locator('.review-title > .forge-link')).toHaveCount(0);
   // The tree: a Summary node (selected by default) + one leaf per changed
   // resource. A caution surfaces a marker on the Summary node.
   await expect(page.locator('.tree .tree-summary')).toHaveClass(/selected/);
