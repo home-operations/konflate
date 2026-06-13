@@ -18,6 +18,7 @@
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
   import ForgeLink from './ForgeLink.svelte';
+  import Check from './Check.svelte';
 
   const route = $derived(router.route.name === 'review' ? router.route : null);
   const pr = $derived(currentPR());
@@ -42,7 +43,7 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        {#if pr}<ForgeLink url={pr.url} number={pr.number} glyph={false} />{/if}
+        {#if pr?.checks}<Check checks={pr.checks} size={15} />{/if}
         <div class="rt-meta">
           {#if pr}
             <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
@@ -56,6 +57,9 @@
             {#if pr.updatedAt}
               <span class="rt-tag ago" title={`Last rendered ${absolute(pr.updatedAt)}`}><Icon path={mdiRefresh} size={13} /> {timeAgo(pr.updatedAt, clock.now)}</span>
             {/if}
+            <!-- The link out to the PR trails the meta row as a PR-glyph icon (the
+                 number lives in its tooltip), beside the last-rendered time. -->
+            <ForgeLink url={pr.url} number={pr.number} showNumber={false} />
           {/if}
         </div>
       </div>

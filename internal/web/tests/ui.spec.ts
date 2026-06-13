@@ -32,6 +32,10 @@ test('PR list shows the forge CI check status per PR (green / amber / red)', asy
   await expect(card(142).locator('.check-success')).toBeVisible(); // 4/4 passed
   await expect(card(138).locator('.check-pending')).toBeVisible(); // still running
   await expect(card(131).locator('.check-failure')).toBeVisible(); // one failed
+  // The check sits in the title row, right next to the title — not down in the
+  // meta row among the signal badges.
+  await expect(card(142).locator('.card-top .check-success')).toBeVisible();
+  await expect(card(142).locator('.card-meta .check')).toHaveCount(0);
 });
 
 test('list → review → single-page flow', async ({ page }) => {
@@ -98,12 +102,16 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(page.locator('.flag.caution', { hasText: 'StatefulSet' })).toBeVisible();
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.flag', { hasText: 'plex' })).toBeVisible();
-  // The same forge link sits next to the PR title on the review header.
-  await expect(page.locator('.review-title .forge-link')).toHaveAttribute(
-    'href',
-    'https://github.com/acme/home-ops/pull/142',
-  );
-  await expect(page.locator('.review-title .forge-link')).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  // The forge CI check rides next to the PR title on the review header too
+  // (#142 is 4/4 green).
+  await expect(page.locator('.review-title .check-success')).toBeVisible();
+  // The PR link lives in the meta trailer (beside the last-rendered time), as an
+  // icon — no "#142" text, and no longer a direct child next to the title.
+  const headerLink = page.locator('.rt-meta .forge-link');
+  await expect(headerLink).toHaveAttribute('href', 'https://github.com/acme/home-ops/pull/142');
+  await expect(headerLink).toHaveAttribute('title', 'Open PR #142 on GitHub');
+  await expect(headerLink).not.toContainText('#142');
+  await expect(page.locator('.review-title > .forge-link')).toHaveCount(0);
   // The tree: a Summary node (selected by default) + one leaf per changed
   // resource. A caution surfaces a marker on the Summary node.
   await expect(page.locator('.tree .tree-summary')).toHaveClass(/selected/);
@@ -1003,6 +1011,16 @@ test('the summary grid resolves to 4 / 2 / 1 columns by pane width (never an orp
   await page.goto('/#/pr/142');
   await expect(page.locator('.ov-grid')).toBeVisible();
   await expect.poll(trackCount).toBe(4);
+
+  // Ultrawide: the grid fills the pane (no fixed cap leaving dead space on the
+  // right). It tracks the pane width — within its 14px side padding of .overview.
+  await page.setViewportSize({ width: 2000, height: 900 });
+  await expect.poll(trackCount).toBe(4);
+  const fill = await page.locator('.ov-grid').evaluate((el) => {
+    const pane = (el.closest('.overview') as HTMLElement).clientWidth - 28; // minus 14px padding each side
+    return el.getBoundingClientRect().width / pane;
+  });
+  expect(fill).toBeGreaterThan(0.98); // fills the pane, not capped at 1280
 
   // Mid width — the pane auto-fit used to orphan (3 + 1). Now a balanced 2×2.
   await page.setViewportSize({ width: 960, height: 900 });

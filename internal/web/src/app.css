@@ -727,6 +727,7 @@ a.repo:focus-visible .repo-ext {
 }
 .card-title {
   font-weight: 600;
+  min-width: 0; /* shrink (ellipsis) so a trailing check stays visible */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -940,9 +941,9 @@ button.sum-pill:hover {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
-/* One row: the title hugs its content with the PR number right after it, and the
-   meta trailer is pushed right (margin-left:auto on .rt-meta). The title shrinks
-   (ellipsis) before the number does. */
+/* One row: the title hugs its content with the CI check right after it, and the
+   meta trailer (with the PR link at its end) is pushed right (margin-left:auto on
+   .rt-meta). The title shrinks (ellipsis) before the check does. */
 .review-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -958,13 +959,6 @@ button.sum-pill:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* The PR number rejoins the title as its identifier — no glyph (that's the list
-   rows'), a step up in weight from the muted meta trailer, still a forge link. */
-.review-title > .forge-link {
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 600;
 }
 .rt-meta {
   display: flex;
@@ -1058,6 +1052,11 @@ button.sum-pill:hover {
    square sitting just left of the disclosure column. */
 .forge-link.icon-only {
   padding: 8px;
+}
+/* In the review meta trailer the PR link is one quiet inline item among the
+   author/sha/time tags — drop the list row's tap padding so it aligns with them. */
+.rt-meta .forge-link {
+  padding: 0;
 }
 .review-nav {
   display: flex;
@@ -1219,13 +1218,14 @@ button.sum-pill:hover {
    4 / 2 / 1 breakpoints rather than auto-fit, which packs three then orphans the
    fourth onto a lonely second row: wide → four across, medium → a balanced 2×2,
    narrow → a single stack. Always a balanced grid, never a 3+1. The queries read
-   .overview's width (the pane), so they're right with or without the tree rail. */
+   .overview's width (the pane), so they're right with or without the tree rail.
+   No max-width: the columns (and their content) widen with the pane rather than
+   leaving dead space on the right of a wide viewport. */
 .ov-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
-  max-width: 1280px;
 }
 @container (min-width: 440px) {
   .ov-grid {
@@ -2182,10 +2182,10 @@ kbd {
   .review-title {
     order: 1;
     flex-basis: 100%;
-    /* Inline flow, not a flex row: the title text and its #number share line
-       boxes, so the number trails the last word of the (wrapping) title instead
-       of being bumped to its own line once the title fills the width. The meta
-       row is a block beneath. */
+    /* Inline flow, not a flex row: the title text and its trailing CI check share
+       line boxes, so the check sits by the last word of the (wrapping) title
+       instead of being bumped to its own line once the title fills the width. The
+       meta row (with the PR link at its end) is a block beneath. */
     display: block;
   }
   /* 16px so iOS doesn't force-zoom the page when the filter gains focus. */
@@ -2240,18 +2240,14 @@ kbd {
     overflow: hidden;
     min-width: 0;
   }
-  /* The title flows inline here so #number can trail it; override the two-line
-     clamp that .card-title still relies on. */
+  /* The title flows inline here so its trailing CI check sits beside it; override
+     the two-line clamp that .card-title still relies on. */
   .rt-name {
     display: inline;
     -webkit-line-clamp: none;
   }
-  /* #number flows inline right after the last word of the title. */
-  .review-title > .forge-link {
-    margin-left: 6px;
-  }
-  /* The meta row (author · sha · opened · refreshed) sits on its own line below
-     the inline title+number; let it wrap, and clear the desktop margin-left:auto. */
+  /* The meta row (author · sha · opened · refreshed · PR link) sits on its own line
+     below the inline title; let it wrap, and clear the desktop margin-left:auto. */
   .rt-meta {
     margin-top: 6px;
     flex-wrap: wrap;
