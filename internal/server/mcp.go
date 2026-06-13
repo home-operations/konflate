@@ -73,59 +73,68 @@ func (s *Server) mcpServer() *mcp.Server {
 
 // --- list_pull_requests ---
 
-type mcpListOutput struct {
-	PullRequests []mcpPR `json:"pullRequests"`
-}
-
-// mcpPR is the agent-facing view of a tracked PR: its identity plus the
-// rendered-diff signals, minus the UI-only fields (avatar proxy, merge command).
-type mcpPR struct {
-	Number          int    `json:"number"`
-	Title           string `json:"title"`
-	Author          string `json:"author,omitempty"`
-	State           string `json:"state"`        // open | merged | closed
-	RenderStatus    string `json:"renderStatus"` // pending | running | ready | error
-	URL             string `json:"url,omitempty"`
-	Draft           bool   `json:"draft,omitempty"`
-	Hidden          bool   `json:"hidden,omitempty"` // excluded by the PR filter — listed, never rendered
-	ResourceChanges int    `json:"resourceChanges"`
-	Cautions        int    `json:"cautions"`
-	ImageChanges    int    `json:"imageChanges"`
-	RenderFailures  int    `json:"renderFailures"`
-	CIChecks        string `json:"ciChecks,omitempty"` // success | failure | pending
-}
-
-func (s *Server) mcpListPRs(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, mcpListOutput, error) {
+// mcpListPRs returns the tracked PRs as a compact, one-line-per-PR text block.
+// Plain text (not per-field JSON) keeps the token cost down — no repeated keys or
+// braces — and zero-valued signals are omitted, so a clean PR adds no noise. It's
+// returned as a single text content, so every MCP client sees the same thing
+// (no reliance on whether a client surfaces structured output). An agent then
+// calls get_pr_summary or get_pr_diff for one PR's detail.
+func (s *Server) mcpListPRs(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 	list := s.store.list()
-	out := mcpListOutput{PullRequests: make([]mcpPR, 0, len(list))}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d %s tracked, one per line — #num open|merged|closed "+
+		"[render: pending|running|error, omitted once the diff is ready] [ci=…] [signals] title\n",
+		len(list), plural(len(list), "pull request", "pull requests"))
 	for _, p := range list {
-		out.PullRequests = append(out.PullRequests, toMCPPR(p))
+		writePRLine(&b, p)
 	}
-	text := fmt.Sprintf("%d %s tracked.", len(out.PullRequests), plural(len(out.PullRequests), "pull request", "pull requests"))
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, out, nil
+	return mcpText(b.String()), nil, nil
 }
 
-func toMCPPR(p api.PRStatus) mcpPR {
-	m := mcpPR{
-		Number:       p.Number,
-		Title:        p.Title,
-		Author:       p.Author,
-		State:        prStateWord(p),
-		RenderStatus: string(p.Status),
-		URL:          p.URL,
-		Draft:        p.Draft,
-		Hidden:       p.Hidden,
+// writePRLine renders one tracked PR as a compact line: number, lifecycle, the
+// render status only while it's noteworthy (open PRs that aren't ready yet — a
+// ready diff is the steady state, and a merged PR's diff is frozen), draft/hidden/
+// CI flags when set, the non-zero signals, then the title.
+func writePRLine(b *strings.Builder, p api.PRStatus) {
+	fmt.Fprintf(b, "#%d %s", p.Number, prStateWord(p))
+	if p.Open && p.Status != api.JobReady {
+		fmt.Fprintf(b, " %s", p.Status) // pending | running | error
 	}
-	if p.Signals != nil {
-		m.ResourceChanges = p.Signals.Resources
-		m.Cautions = p.Signals.Caution
-		m.ImageChanges = p.Signals.Images
-		m.RenderFailures = p.Signals.Failures
+	if p.Draft {
+		b.WriteString(" draft")
 	}
-	if p.Checks != nil {
-		m.CIChecks = string(p.Checks.State)
+	if p.Hidden {
+		b.WriteString(" hidden") // filtered or a fork — listed, never rendered
 	}
-	return m
+	if p.Checks != nil && p.Checks.State != "" {
+		fmt.Fprintf(b, " ci=%s", p.Checks.State)
+	}
+	if sig := signalSummary(p.Signals); sig != "" {
+		fmt.Fprintf(b, " [%s]", sig)
+	}
+	fmt.Fprintf(b, " %s\n", p.Title)
+}
+
+// signalSummary joins the non-zero rendered-diff signals (omitting any that are
+// zero), e.g. "11 resources, 1 caution, 1 image change, 1 render failure".
+func signalSummary(s *api.Signals) string {
+	if s == nil {
+		return ""
+	}
+	var parts []string
+	if s.Resources > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", s.Resources, plural(s.Resources, "resource", "resources")))
+	}
+	if s.Caution > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", s.Caution, plural(s.Caution, "caution", "cautions")))
+	}
+	if s.Images > 0 {
+		parts = append(parts, fmt.Sprintf("%d image %s", s.Images, plural(s.Images, "change", "changes")))
+	}
+	if s.Failures > 0 {
+		parts = append(parts, fmt.Sprintf("%d render %s", s.Failures, plural(s.Failures, "failure", "failures")))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Normalized PR lifecycle words for the agent-facing view. The forge state string

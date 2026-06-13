@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -14,9 +13,11 @@ import (
 )
 
 // TestMCP_Tools drives the read-only MCP server over an in-memory transport: the
-// two tools are advertised, list_pull_requests returns the tracked PR with its
-// rendered-diff signals, get_pr_summary returns the Markdown overview, and an
-// unknown PR number is a tool-level error the model can recover from.
+// three tools are advertised, list_pull_requests returns the tracked PR as a
+// compact one-line text block carrying its rendered-diff signals, get_pr_summary
+// returns the Markdown overview, get_pr_diff returns the rendered YAML as a
+// plain-text unified diff, and an unknown PR number is a tool-level error the
+// model can recover from.
 func TestMCP_Tools(t *testing.T) {
 	t.Parallel()
 	pr := api.PR{Number: 7, Title: "chore(gatus): migrate to gatus-sidecar chart", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123", Open: true, State: "open"}
@@ -57,7 +58,7 @@ func TestMCP_Tools(t *testing.T) {
 	}
 	defer func() { _ = cs.Close() }()
 
-	// tools/list advertises exactly the two read-only tools.
+	// tools/list advertises exactly the three read-only tools.
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -70,14 +71,17 @@ func TestMCP_Tools(t *testing.T) {
 		t.Fatalf("advertised tools = %v, want list_pull_requests + get_pr_summary + get_pr_diff", names)
 	}
 
-	// list_pull_requests: the tracked PR with its computed signals (1 caution, 1 image).
-	var out mcpListOutput
-	decodeStructured(t, mustCallTool(t, cs, "list_pull_requests", nil).StructuredContent, &out)
-	if len(out.PullRequests) != 1 {
-		t.Fatalf("listed %d PRs, want 1: %+v", len(out.PullRequests), out.PullRequests)
+	// list_pull_requests: a compact one-line-per-PR text block — lifecycle, the
+	// non-zero signals in order, then the title. Plain text, no per-field JSON, to
+	// keep the token cost down. The "ready" render state is the steady state and is
+	// omitted (the full-line match below would break if "ready" leaked in).
+	list := toolText(mustCallTool(t, cs, "list_pull_requests", nil))
+	if !strings.Contains(list, "1 pull request tracked") {
+		t.Errorf("list header missing the PR count:\n%s", list)
 	}
-	if got := out.PullRequests[0]; got.Number != 7 || got.State != "open" || got.Cautions != 1 || got.ImageChanges != 1 {
-		t.Errorf("PR view = %+v, want #7 open with 1 caution + 1 image change", got)
+	const wantLine = "#7 open [1 resource, 1 caution, 1 image change] chore(gatus): migrate to gatus-sidecar chart"
+	if !strings.Contains(list, wantLine) {
+		t.Errorf("list line missing or malformed; want %q in:\n%s", wantLine, list)
 	}
 
 	// get_pr_summary: the Markdown overview, carrying the caution.
@@ -163,10 +167,8 @@ func TestMCP_HTTPEndpoint(t *testing.T) {
 		if err != nil || res.IsError {
 			t.Fatalf("list_pull_requests over HTTP: err=%v isError=%v", err, res != nil && res.IsError)
 		}
-		var out mcpListOutput
-		decodeStructured(t, res.StructuredContent, &out)
-		if len(out.PullRequests) != 1 || out.PullRequests[0].Number != 7 {
-			t.Fatalf("over HTTP, listed %+v, want #7", out.PullRequests)
+		if text := toolText(res); !strings.Contains(text, "#7") {
+			t.Fatalf("over HTTP, list_pull_requests text = %q, want it to name #7", text)
 		}
 	})
 
@@ -201,17 +203,4 @@ func toolText(res *mcp.CallToolResult) string {
 		}
 	}
 	return b.String()
-}
-
-// decodeStructured round-trips a tool's structured output (delivered to the client
-// as a decoded JSON value) into a typed struct.
-func decodeStructured(t *testing.T, v any, dst any) {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal structured content: %v", err)
-	}
-	if err := json.Unmarshal(b, dst); err != nil {
-		t.Fatalf("unmarshal structured content: %v", err)
-	}
 }
