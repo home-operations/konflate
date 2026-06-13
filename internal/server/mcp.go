@@ -7,6 +7,7 @@ import (
 	"html"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -45,9 +46,10 @@ func (s *Server) mcpServer() *mcp.Server {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_pull_requests",
-		Description: "List the open pull requests konflate is tracking. Each carries its " +
-			"rendered-diff signals (changed resources, cautions, image changes, render " +
-			"failures) and CI check status. Use it to find pull requests, then call " +
+		Description: "List the pull requests konflate is tracking, newest first. Each carries " +
+			"its rendered-diff signals (changed resources, cautions, image changes, render " +
+			"failures) and CI check status. Paginated: a page's footer gives a `cursor` to " +
+			"pass back for the next page. Use it to find pull requests, then call " +
 			"get_pr_summary for one PR's details.",
 	}, s.mcpListPRs)
 
@@ -56,7 +58,7 @@ func (s *Server) mcpServer() *mcp.Server {
 		Description: "konflate's rendered-diff summary for one pull request, by number: the " +
 			"blast radius, caution lint (data-loss, immutable-field, RBAC, suspend/prune), " +
 			"image changes, and render failures — the cluster impact a raw git diff doesn't " +
-			"show. Returns Markdown.",
+			"show. Returns Markdown plus a link to the PR's full-diff resource.",
 	}, s.mcpPRSummary)
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -65,30 +67,100 @@ func (s *Server) mcpServer() *mcp.Server {
 			"actual Kubernetes YAML konflate produced at the PR head vs its merge-base, per " +
 			"changed resource (+ added / - removed lines). This can be large; pass `resource` " +
 			"(a resource id like \"r0\", or a substring of its title) to fetch one resource at " +
-			"a time. Available only once the PR has finished rendering.",
+			"a time. The whole diff is also the resource konflate://pr/<number>/diff. Available " +
+			"only once the PR has finished rendering.",
 	}, s.mcpPRDiff)
+
+	// PR diffs are also addressable as an MCP resource — konflate://pr/{number}/diff
+	// — so a client can fetch (or @-mention) a diff on demand instead of get_pr_diff
+	// inlining it into the conversation; get_pr_summary hands back a link to it. One
+	// template serves every PR (the tracked set is dynamic), matched by the SDK on
+	// read — konflate never enumerates a resource per PR, which would churn the
+	// registry and emit a list_changed notification on every poll.
+	srv.AddResourceTemplate(&mcp.ResourceTemplate{
+		Name:        "pr-diff",
+		Title:       "Rendered PR diff",
+		MIMEType:    mimeTextPlain,
+		URITemplate: "konflate://pr/{number}/diff",
+		Description: "The full rendered diff for a pull request as a plain-text unified diff — " +
+			"the same content get_pr_diff returns with no resource filter. Read " +
+			"konflate://pr/<number>/diff, the number from list_pull_requests.",
+	}, s.mcpReadDiffResource)
 
 	return srv
 }
 
+// mimeTextPlain is the MIME type for konflate's plain-text diff output (the tools'
+// stripped unified diff and the pr-diff resource).
+const mimeTextPlain = "text/plain"
+
 // --- list_pull_requests ---
 
-// mcpListPRs returns the tracked PRs as a compact, one-line-per-PR text block.
-// Plain text (not per-field JSON) keeps the token cost down — no repeated keys or
-// braces — and zero-valued signals are omitted, so a clean PR adds no noise. It's
-// returned as a single text content, so every MCP client sees the same thing
-// (no reliance on whether a client surfaces structured output). An agent then
-// calls get_pr_summary or get_pr_diff for one PR's detail.
-func (s *Server) mcpListPRs(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
-	list := s.store.list()
+type mcpListInput struct {
+	Cursor string `json:"cursor,omitempty" jsonschema:"continuation cursor from a previous page's footer; omit for the first (newest) page"`
+	Limit  int    `json:"limit,omitempty" jsonschema:"max pull requests to return (default 100); the rest are paged behind a cursor"`
+}
+
+// mcpListDefaultLimit bounds one page of list_pull_requests when the caller gives
+// no limit, so a repo with hundreds of open PRs doesn't dump them all into the
+// agent's context at once.
+const mcpListDefaultLimit = 100
+
+// mcpListPRs returns a page of tracked PRs as a compact, one-line-per-PR text
+// block. Plain text (not per-field JSON) keeps the token cost down — no repeated
+// keys or braces — and zero-valued signals are omitted, so a clean PR adds no
+// noise. It's returned as a single text content, so every MCP client sees the same
+// thing (no reliance on whether a client surfaces structured output). The list is
+// paginated newest-first; an agent then calls get_pr_summary or get_pr_diff for one
+// PR's detail.
+func (s *Server) mcpListPRs(_ context.Context, _ *mcp.CallToolRequest, in mcpListInput) (*mcp.CallToolResult, any, error) {
+	list := s.store.list() // newest first by number — a stable, total order
+	limit := in.Limit
+	if limit <= 0 {
+		limit = mcpListDefaultLimit
+	}
+
+	// The cursor is the last PR number emitted on the previous page; since the list
+	// descends by number, resume at the first PR below it. Number-keyed (not index-
+	// keyed) so a PR opening or closing between pages can't skip or repeat a row.
+	start := 0
+	if in.Cursor != "" {
+		after, err := strconv.Atoi(in.Cursor)
+		if err != nil {
+			return mcpError("Invalid cursor %q — pass the value from a previous page's footer.", in.Cursor), nil, nil
+		}
+		for start < len(list) && list[start].Number >= after {
+			start++
+		}
+	}
+	page := list[start:]
+	more := len(page) > limit
+	if more {
+		page = page[:limit]
+	}
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d %s tracked, one per line — #num open|merged|closed "+
-		"[render: pending|running|error, omitted once the diff is ready] [ci=…] [signals] title\n",
-		len(list), plural(len(list), "pull request", "pull requests"))
-	for _, p := range list {
+	writeListHeader(&b, len(list), start, len(page))
+	for _, p := range page {
 		writePRLine(&b, p)
 	}
+	if more {
+		fmt.Fprintf(&b, "… %d more; call list_pull_requests with cursor=%q for the next page …\n",
+			len(list)-start-len(page), strconv.Itoa(page[len(page)-1].Number))
+	}
 	return mcpText(b.String()), nil, nil
+}
+
+// writeListHeader writes the count line and the column legend. It names the page
+// window only when the list is actually paged, so the common single-page case
+// stays terse.
+func writeListHeader(b *strings.Builder, total, start, shown int) {
+	fmt.Fprintf(b, "%d %s tracked", total, plural(total, "pull request", "pull requests"))
+	if shown > 0 && (start > 0 || start+shown < total) {
+		fmt.Fprintf(b, " (showing %d–%d, newest first)", start+1, start+shown)
+	}
+	b.WriteString(", one per line — #num open|merged|closed " +
+		"[render: pending|running|error, omitted once the diff is ready] [ci=…] [signals] title\n")
 }
 
 // writePRLine renders one tracked PR as a compact line: number, lifecycle, the
@@ -171,7 +243,27 @@ func (s *Server) mcpPRSummary(_ context.Context, _ *mcp.CallToolRequest, in mcpS
 	}
 	// The same Markdown summary konflate posts as a PR comment — GitHub-flavoured
 	// admonitions render in a Markdown-aware agent and degrade to plain text.
-	return mcpText(summaryMarkdownBody(env, s.reviewURL(in.Number), true)), nil, nil
+	content := []mcp.Content{&mcp.TextContent{Text: summaryMarkdownBody(env, s.reviewURL(in.Number), true)}}
+	// Hand back a link to the full diff as a resource — but only once it exists, so
+	// the link never dangles — letting the agent fetch the diff on demand instead of
+	// the summary inlining it.
+	if env.Diff != nil {
+		content = append(content, prDiffLink(in.Number))
+	}
+	return &mcp.CallToolResult{Content: content}, nil, nil
+}
+
+// prDiffLink is a ResourceLink to a PR's rendered-diff resource, for tool results
+// that want to point at the full diff without inlining it.
+func prDiffLink(number int) *mcp.ResourceLink {
+	return &mcp.ResourceLink{
+		URI:      prDiffURI(number),
+		Name:     fmt.Sprintf("pr-%d-diff", number),
+		Title:    fmt.Sprintf("Rendered diff for PR #%d", number),
+		MIMEType: mimeTextPlain,
+		Description: "The full rendered YAML diff as plain text — read this resource " +
+			"(or call get_pr_diff) for the line-level changes.",
+	}
 }
 
 // --- get_pr_diff ---
@@ -201,14 +293,23 @@ func (s *Server) mcpPRDiff(_ context.Context, _ *mcp.CallToolRequest, in mcpDiff
 	}
 
 	resources := env.Diff.Resources
+	renderTruncated := env.Diff.Truncated
 	if in.Resource != "" {
 		resources = filterResources(resources, in.Resource)
 		if len(resources) == 0 {
 			return mcpError("No resource matching %q in PR #%d. Available: %s",
 				in.Resource, in.Number, availableResources(env.Diff.Resources)), nil, nil
 		}
+		renderTruncated = 0 // a scoped view isn't "missing" the render-capped resources
 	}
+	return mcpText(renderDiffText(resources, renderTruncated)), nil, nil
+}
 
+// renderDiffText renders the resources to a capped plain-text unified diff,
+// appending notes when the byte cap clips the output or when the render itself
+// dropped resources (KONFLATE_MAX_DIFF_RESOURCES). Shared by the get_pr_diff tool
+// and the pr-diff resource so both stay consistent and bounded.
+func renderDiffText(resources []api.DiffResource, renderTruncated int) string {
 	var b strings.Builder
 	for i := range resources {
 		if i > 0 {
@@ -225,16 +326,55 @@ func (s *Server) mcpPRDiff(_ context.Context, _ *mcp.CallToolRequest, in mcpDiff
 			cut = cut[:nl]
 		}
 		body = cut
-		notes = append(notes, "… output truncated; pass the `resource` argument to fetch a single resource …")
+		notes = append(notes, "… output truncated; use get_pr_diff with the `resource` argument to fetch one resource at a time …")
 	}
-	if in.Resource == "" && env.Diff.Truncated > 0 {
+	if renderTruncated > 0 {
 		notes = append(notes, fmt.Sprintf("… %d more changed %s omitted by the render cap (KONFLATE_MAX_DIFF_RESOURCES) …",
-			env.Diff.Truncated, plural(env.Diff.Truncated, "resource", "resources")))
+			renderTruncated, plural(renderTruncated, "resource", "resources")))
 	}
 	if len(notes) > 0 {
 		body += "\n" + strings.Join(notes, "\n") + "\n"
 	}
-	return mcpText(body), nil, nil
+	return body
+}
+
+// --- pr-diff resource (konflate://pr/{number}/diff) ---
+
+// prDiffURI builds the resource URI for a PR's rendered diff.
+func prDiffURI(number int) string {
+	return fmt.Sprintf("konflate://pr/%d/diff", number)
+}
+
+// prDiffURIRe re-parses a pr-diff URI strictly. The SDK routes any URI matching the
+// registered template ({number} accepts any non-slash run) to the handler, so we
+// re-check here: a non-numeric or malformed URI is a clean not-found.
+var prDiffURIRe = regexp.MustCompile(`^konflate://pr/(\d+)/diff$`)
+
+// mcpReadDiffResource serves konflate://pr/{number}/diff: the full rendered diff
+// for one PR as plain text, the same content get_pr_diff returns with no filter.
+// It reads the store only (renders nothing), so an unrendered, hidden, or unknown
+// PR is a not-found — never a way to force a fork to render.
+func (s *Server) mcpReadDiffResource(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	uri := req.Params.URI
+	m := prDiffURIRe.FindStringSubmatch(uri)
+	if m == nil {
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+	number, err := strconv.Atoi(m[1])
+	if err != nil { // an over-long digit run overflows int
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+	env, ok := s.store.get(number)
+	if !ok || env.Diff == nil {
+		return nil, mcp.ResourceNotFoundError(uri)
+	}
+	return &mcp.ReadResourceResult{
+		Contents: []*mcp.ResourceContents{{
+			URI:      uri,
+			MIMEType: mimeTextPlain,
+			Text:     renderDiffText(env.Diff.Resources, env.Diff.Truncated),
+		}},
+	}, nil
 }
 
 // writeResourceDiff renders one resource as a plain-text unified diff: a heading,

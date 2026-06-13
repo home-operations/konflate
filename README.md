@@ -424,16 +424,19 @@ Operational server (`KONFLATE_METRICS_ADDR`): `GET /metrics`.
 
 **MCP (AI agents).** With `KONFLATE_MCP=true`, konflate serves a read-only
 [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`
-(streamable HTTP) exposing three tools — `list_pull_requests`, `get_pr_summary`,
-and `get_pr_diff` (the rendered YAML as a plain-text diff, per resource)
-— so an AI reviewer (Claude Code, an editor, Claude Desktop) can pull konflate's
-rendered blast radius, cautions, and image changes for a Flux PR instead of
-guessing from the raw git diff. It serves the same data as the read API and
-triggers no render or forge write. Off by default (a new surface); secure it at
-your ingress if you expose it. Cross-origin and DNS-rebinding requests are
-rejected, but tool output carries PR-author-controlled text (titles, branch
-names, resource identifiers) — treat it as untrusted in the consuming agent, the
-usual prompt-injection caveat for surfacing PR content to an LLM.
+(streamable HTTP) exposing three tools — `list_pull_requests` (paginated, newest
+first), `get_pr_summary`, and `get_pr_diff` (the rendered YAML as a plain-text
+diff, per resource) — so an AI reviewer (Claude Code, an editor, Claude Desktop)
+can pull konflate's rendered blast radius, cautions, and image changes for a Flux
+PR instead of guessing from the raw git diff. Each PR's full diff is also an MCP
+resource (`konflate://pr/<number>/diff`) that `get_pr_summary` links to, so a
+client can fetch it on demand rather than inlining it. It serves the same data as
+the read API and triggers no render or forge write. Off by default (a new
+surface); secure it at your ingress if you expose it. Cross-origin and
+DNS-rebinding requests are rejected, but tool output carries PR-author-controlled
+text (titles, branch names, resource identifiers) — treat it as untrusted in the
+consuming agent, the usual prompt-injection caveat for surfacing PR content to an
+LLM.
 
 The summary endpoint doubles as a PR-comment source for CI — ask for Markdown
 and post it straight back (one comment, edited in place on each push). While a
