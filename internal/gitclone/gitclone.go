@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -302,6 +303,14 @@ func mirrorCorrupt(err error) bool {
 		errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
+	// A transport/network failure (a flaky forge link) is transient, not
+	// corruption — and a broken connection can surface as "unexpected EOF", a
+	// signature we'd otherwise read as a truncated object. Exclude it before the
+	// text match so a network blip never triggers a re-clone.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return false
+	}
 	msg := err.Error()
 	for _, sig := range mirrorCorruptSignatures {
 		if strings.Contains(msg, sig) {
@@ -312,9 +321,17 @@ func mirrorCorrupt(err error) bool {
 }
 
 // mirrorCorruptSignatures are the go-git error texts that mark a damaged object
-// store. A var so it is easy to extend as new signatures surface.
+// store — from its pack/loose/zlib decoders and the ref walk. Network-borne
+// "unexpected EOF" is screened out by the net.Error check above, so here it can
+// only mean a truncated stored object. A var so it is easy to extend as new
+// signatures surface.
 var mirrorCorruptSignatures = []string{
 	plumbing.ErrObjectNotFound.Error(), // "object not found" — the reported repack wedge
+	"object corrupt",                   // go-git's corrupt-object sentinel
+	"corrupt",                          // "packfile is corrupt", and similar
+	"zlib: invalid",                    // bad zlib header/checksum on a stored object
+	"invalid checksum",                 // pack/idx checksum mismatch
+	"unexpected EOF",                   // truncated or zero-byte object (the prior loose-object episode)
 }
 
 // repackPackThreshold is the packfile count at which a fetch consolidates the
