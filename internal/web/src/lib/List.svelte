@@ -10,6 +10,8 @@
     ensurePreview,
     type StatusFilter,
   } from './store.svelte';
+  import { router, navigate, replace } from './router.svelte';
+  import { paging, setPageSize, parsePageSize, PAGE_SIZES, DEFAULT_PAGE_SIZE, type PageSize } from './paging.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import { slide } from 'svelte/transition';
   import Icon from './Icon.svelte';
@@ -36,6 +38,8 @@
     mdiSortDescending,
     mdiChevronDown,
     mdiChevronUp,
+    mdiChevronLeft,
+    mdiChevronRight,
     mdiCheckCircleOutline,
     mdiTrayFull,
     mdiUnfoldMoreHorizontal,
@@ -59,6 +63,48 @@
   const openPrs = $derived(prs.filter((p) => p.open && !p.hidden));
   const filterActive = $derived(store.query.trim() !== '' || store.statusFilter !== '');
 
+  // ---- pagination ---------------------------------------------------------
+  // Page size is a persisted display preference (paging.size); the page number is
+  // deep-linked in the URL (router '#/page/N'). Both apply to `shown` — the
+  // already-filtered, pill-narrowed, sorted set — so the pager's "of N" always
+  // equals the active pill's count, and a pill / sort / size change resets to page
+  // 1 (resetPage), while a live data update only clamps (the $effect below).
+  const size = $derived(paging.size);
+  const page = $derived(router.route.name === 'list' ? (router.route.page ?? 1) : 1);
+  const totalPages = $derived(size === 'all' ? 1 : Math.max(1, Math.ceil(shown.length / size)));
+  const paged = $derived(size === 'all' ? shown : shown.slice((page - 1) * size, page * size));
+  // The 1-based [from, to] of the visible window, for the "A–B of N" readout.
+  const from = $derived(shown.length === 0 ? 0 : size === 'all' ? 1 : (page - 1) * size + 1);
+  const to = $derived(size === 'all' ? shown.length : Math.min(page * size, shown.length));
+  // The pager only earns its space once the list outgrows the smallest page size;
+  // below that every size shows the same rows, so the controls would be inert.
+  const paginated = $derived(shown.length > DEFAULT_PAGE_SIZE);
+
+  // Keep the page in range as the set shrinks under it — a live update dropping
+  // rows, or a deep link past the end — instead of stranding the user on a blank
+  // page. replace(), so the correction leaves no history entry. Guarded on
+  // `loaded`: before the first list fetch resolves, shown is empty and totalPages
+  // is 1, which would otherwise clobber a deep-linked #/page/N before its data
+  // even arrives.
+  $effect(() => {
+    if (store.loaded && page > totalPages) replace({ name: 'list', page: totalPages });
+  });
+
+  // gotoPage moves to a page (a history entry, so Back walks pages) and returns to
+  // the top of the list. resetPage drops to page 1 with no history entry — for
+  // filter / sort / size changes, where the prior page no longer means anything.
+  function gotoPage(p: number): void {
+    navigate({ name: 'list', page: p });
+    screenEl?.scrollTo({ top: 0 });
+  }
+  function resetPage(): void {
+    if (page !== 1) replace({ name: 'list', page: 1 });
+  }
+  function changePageSize(s: PageSize): void {
+    setPageSize(s);
+    resetPage();
+  }
+
   // At-a-glance health, shown above the list — each pill is also a toggle that
   // filters the list to that status. merged and hidden are pill-only (kept out
   // of the default open view); hidden = excluded by the PR filter, not rendered.
@@ -71,6 +117,7 @@
 
   function toggleFilter(f: StatusFilter): void {
     store.statusFilter = store.statusFilter === f ? '' : f;
+    resetPage(); // a different subset — restart it at page 1
   }
   // A pill renders while it counts something — or while it's the active
   // filter, so it can't strand itself unclickable when its count hits zero.
@@ -80,9 +127,11 @@
   // name A→Z); the direction button then flips it.
   function onSortKeyChange(): void {
     store.sortDir = store.sort === 'name' ? 'asc' : 'desc';
+    resetPage();
   }
   function toggleSortDir(): void {
     store.sortDir = store.sortDir === 'asc' ? 'desc' : 'asc';
+    resetPage();
   }
   const sortDirLabel = $derived.by(() => {
     if (store.sort === 'name') return store.sortDir === 'asc' ? 'A → Z' : 'Z → A';
@@ -120,8 +169,10 @@
     return !!p && p.state !== 'loading';
   };
 
-  // The visible rows that have a summary to toggle. Drives the expand/collapse-all control.
-  const expandableRows = $derived(shown.filter((p) => p.signals));
+  // The visible rows that have a summary to toggle. Drives the expand/collapse-all
+  // control — scoped to the current page, so "expand all" expands what's on screen
+  // and never lazy-loads previews for rows sitting on other pages.
+  const expandableRows = $derived(paged.filter((p) => p.signals));
   const allExpanded = $derived(expandableRows.length > 0 && expandableRows.every((p) => expanded[p.number]));
   function toggleExpandAll(): void {
     const next = !allExpanded;
@@ -175,6 +226,57 @@
     <Icon path={mdiCheckCircleOutline} size={36} />
     <p>All caught up — no open pull requests.</p>
   </div>
+{/snippet}
+
+<!-- The pager sits below the cards once the list outgrows the smallest page. Its
+     "of N" counts the active view (the same set the active pill counts), the size
+     picker is the persisted per-page preference, and prev/next appear only when
+     there's more than one page. -->
+{#snippet pager()}
+  <nav class="pager" aria-label="Pull request pages">
+    <span class="pager-count">
+      {#if size === 'all'}
+        {shown.length} pull {shown.length === 1 ? 'request' : 'requests'}
+      {:else}
+        {from}–{to} of {shown.length}
+      {/if}
+    </span>
+    <label class="page-size">
+      <span>per page</span>
+      <select
+        value={String(size)}
+        onchange={(e) => changePageSize(parsePageSize(e.currentTarget.value))}
+        aria-label="Pull requests per page"
+      >
+        {#each PAGE_SIZES as s}
+          <option value={String(s)}>{s === 'all' ? 'All' : s}</option>
+        {/each}
+      </select>
+    </label>
+    {#if totalPages > 1}
+      <div class="pager-nav">
+        <button
+          class="pager-btn"
+          onclick={() => gotoPage(page - 1)}
+          disabled={page <= 1}
+          aria-label="Previous page"
+          title="Previous page"
+        >
+          <Icon path={mdiChevronLeft} size={18} />
+        </button>
+        <span class="pager-page">Page {page} of {totalPages}</span>
+        <button
+          class="pager-btn"
+          onclick={() => gotoPage(page + 1)}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+          title="Next page"
+        >
+          <Icon path={mdiChevronRight} size={18} />
+        </button>
+      </div>
+    {/if}
+  </nav>
 {/snippet}
 
 <!-- The inline row summary, lazy-loaded into store.previews. Read-only — the row
@@ -367,10 +469,18 @@
         class="pr-search"
         placeholder="Filter pull requests… (try status:caution or author:renovate)"
         bind:value={store.query}
+        oninput={resetPage}
         aria-label="Filter pull requests"
       />
       {#if store.query}
-        <button class="clear-btn" onclick={() => (store.query = '')} aria-label="Clear filter">
+        <button
+          class="clear-btn"
+          onclick={() => {
+            store.query = '';
+            resetPage();
+          }}
+          aria-label="Clear filter"
+        >
           <Icon path={mdiClose} size={13} />
         </button>
       {/if}
@@ -427,8 +537,9 @@
     {/if}
   {:else}
     <ul class="cards">
-      {#each shown as pr (pr.number)}{@render prCard(pr)}{/each}
+      {#each paged as pr (pr.number)}{@render prCard(pr)}{/each}
     </ul>
+    {#if paginated}{@render pager()}{/if}
   {/if}
 
   <Footer />
