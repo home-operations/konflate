@@ -169,3 +169,28 @@ func TestNew_DispatchesByForge(t *testing.T) {
 		})
 	}
 }
+
+// TestNewGitHubReadAuth covers the read client's credential selection: a
+// configured GitHub App authenticates reads via its installation token — the same
+// identity write-back uses, lifting the 60/hr anonymous API rate limit — a read
+// PAT is the fallback, and with neither the client is anonymous.
+func TestNewGitHubReadAuth(t *testing.T) {
+	t.Parallel()
+	gh := config.ForgeURI{Kind: config.ForgeGitHub, RepoPath: "acme/web"}
+
+	app, err := newGitHub(&config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: testRSAKeyPEM(t)})
+	if err != nil {
+		t.Fatalf("newGitHub (app): %v", err)
+	}
+	if _, ok := app.client.Client().Transport.(*installTransport); !ok {
+		t.Errorf("App-configured read client transport = %T, want *installTransport", app.client.Client().Transport)
+	}
+
+	anon, err := newGitHub(&config.Config{Forge: gh})
+	if err != nil {
+		t.Fatalf("newGitHub (anon): %v", err)
+	}
+	if _, ok := anon.client.Client().Transport.(*installTransport); ok {
+		t.Error("read client without App creds must not use App installation auth")
+	}
+}

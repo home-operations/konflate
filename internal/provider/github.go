@@ -17,6 +17,24 @@ type githubProvider struct {
 }
 
 func newGitHub(cfg *config.Config) (*githubProvider, error) {
+	client, err := newGitHubReadClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	owner, repo := ownerRepo(cfg.Forge.RepoPath)
+	return &githubProvider{client: client, owner: owner, repo: repo}, nil
+}
+
+// newGitHubReadClient builds the read API client by credential precedence,
+// mirroring newGitHubWriteClient: a configured GitHub App is konflate's forge
+// identity for reads too — its installation token lifts the 60/hr anonymous limit
+// and reaches private repos, the same credential write-back uses. A read PAT
+// (KONFLATE_TOKEN) is the fallback; with neither, reads are anonymous.
+func newGitHubReadClient(cfg *config.Config) (*github.Client, error) {
+	if cfg.AppConfigured() {
+		client, _, err := newGitHubAppInstallClient(cfg)
+		return client, err
+	}
 	var opts []github.ClientOptionsFunc
 	if cfg.Token != "" {
 		opts = append(opts, github.WithAuthToken(cfg.Token))
@@ -26,8 +44,7 @@ func newGitHub(cfg *config.Config) (*githubProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("github: new client: %w", err)
 	}
-	owner, repo := ownerRepo(cfg.Forge.RepoPath)
-	return &githubProvider{client: client, owner: owner, repo: repo}, nil
+	return client, nil
 }
 
 // githubEnterpriseOpts returns the base/upload-URL option for a self-hosted
