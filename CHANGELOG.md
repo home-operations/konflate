@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.17](https://github.com/home-operations/konflate/compare/0.2.16...0.2.17) (2026-06-13)
+
+
+### Features
+
+* surface forge rate-limit / poll failures instead of an empty list ([#216](https://github.com/home-operations/konflate/issues/216)) ([8444e25](https://github.com/home-operations/konflate/commit/8444e25d9a83629202e8b9d29603bbade0f38aec))
+* **ui:** review-header + summary layout polish ([#219](https://github.com/home-operations/konflate/issues/219)) ([fcb99d8](https://github.com/home-operations/konflate/commit/fcb99d8d48f6f6fb792c2bc5f7d2c109770cbc7b))
+* **writeback:** post a GitHub Check Run for the render verdict ([#218](https://github.com/home-operations/konflate/issues/218)) ([654c566](https://github.com/home-operations/konflate/commit/654c56693c6b9f8b59cbc99bf3a92bd3af15bc21))
+
 ## [0.2.16](https://github.com/home-operations/konflate/compare/0.2.15...0.2.16) (2026-06-13)
 
 
