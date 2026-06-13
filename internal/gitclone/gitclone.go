@@ -25,6 +25,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
+	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
@@ -283,16 +285,17 @@ func (m *Mirror) fetchLocked(ctx context.Context, headRef, baseRef string, auth 
 }
 
 // mirrorCorrupt reports whether err means the bare mirror's object store is
-// damaged — a ref-reachable object is missing or unreadable — so the mirror
-// should be discarded and re-cloned rather than reused. This is distinct from a
-// transient failure (network/auth/ctx) or an expected one (a gone head ref),
-// which must not trigger a wasteful re-clone, so those are excluded first.
+// damaged — a missing object, or a corrupt pack/index — so the mirror should be
+// discarded and re-cloned rather than reused. This is distinct from a transient
+// failure (network/ctx) or an expected one (a gone head ref), which must not
+// trigger a wasteful re-clone, so those are excluded first.
 //
-// Detection is by message signature, not errors.Is: go-git's object walker
-// flattens the underlying plumbing.ErrObjectNotFound with %v
-// (object_walker.go), breaking the error chain — so the canonical "repack
-// mirror: getting object <sha> failed: object not found" can only be matched on
-// its text.
+// Damage is matched on go-git's exported error sentinels via errors.Is, not on
+// guessed message text — those sentinels are stable API, the strings are not.
+// The one exception is the repack ref walk (go-git object_walker.go), which
+// renders ErrObjectNotFound with %v, breaking the error chain; that exact wedge
+// ("repack mirror: getting object <sha> failed: object not found") is the
+// reported failure, so it gets a single explicit text fallback.
 func mirrorCorrupt(err error) bool {
 	if err == nil {
 		return false
@@ -303,35 +306,23 @@ func mirrorCorrupt(err error) bool {
 		errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	// A transport/network failure (a flaky forge link) is transient, not
-	// corruption — and a broken connection can surface as "unexpected EOF", a
-	// signature we'd otherwise read as a truncated object. Exclude it before the
-	// text match so a network blip never triggers a re-clone.
+	// A transport/network failure (a flaky forge link) is transient, not damage —
+	// and a mid-fetch truncation can surface as a malformed pack, which we'd
+	// otherwise rebuild on. Exclude it first so a network blip never re-clones.
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return false
 	}
-	msg := err.Error()
-	for _, sig := range mirrorCorruptSignatures {
-		if strings.Contains(msg, sig) {
-			return true
-		}
+	// Damaged object store, matched structurally on go-git's sentinels: a missing
+	// object, or a corrupt pack/index file (truncated write, bad checksum, …).
+	if errors.Is(err, plumbing.ErrObjectNotFound) ||
+		errors.Is(err, packfile.ErrMalformedPackFile) ||
+		errors.Is(err, idxfile.ErrMalformedIdxFile) {
+		return true
 	}
-	return false
-}
-
-// mirrorCorruptSignatures are the go-git error texts that mark a damaged object
-// store — from its pack/loose/zlib decoders and the ref walk. Network-borne
-// "unexpected EOF" is screened out by the net.Error check above, so here it can
-// only mean a truncated stored object. A var so it is easy to extend as new
-// signatures surface.
-var mirrorCorruptSignatures = []string{
-	plumbing.ErrObjectNotFound.Error(), // "object not found" — the reported repack wedge
-	"object corrupt",                   // go-git's corrupt-object sentinel
-	"corrupt",                          // "packfile is corrupt", and similar
-	"zlib: invalid",                    // bad zlib header/checksum on a stored object
-	"invalid checksum",                 // pack/idx checksum mismatch
-	"unexpected EOF",                   // truncated or zero-byte object (the prior loose-object episode)
+	// The repack ref walk flattens ErrObjectNotFound with %v (see doc comment),
+	// so errors.Is above can't see it — match its text as the one fallback.
+	return strings.Contains(err.Error(), plumbing.ErrObjectNotFound.Error())
 }
 
 // repackPackThreshold is the packfile count at which a fetch consolidates the

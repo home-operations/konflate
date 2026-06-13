@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
+	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -209,10 +211,10 @@ func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
 // fired on a network blip or a gone head ref would be wasteful or wrong.
 func TestMirrorCorrupt(t *testing.T) {
 	t.Parallel()
-	// netEOF is a network error whose message also matches a corruption
-	// signature ("unexpected EOF") — the exclusion must win, so a flaky link
-	// doesn't masquerade as a truncated object.
-	netEOF := &net.OpError{Op: "read", Err: errors.New("unexpected EOF")}
+	// A malformed pack reached via a network error: the message matches a
+	// corruption sentinel, but it's a net.Error (a mid-fetch truncation), so the
+	// transient exclusion must win over the sentinel match.
+	netPack := &net.OpError{Op: "read", Err: packfile.ErrMalformedPackFile}
 
 	cases := []struct {
 		name string
@@ -221,18 +223,15 @@ func TestMirrorCorrupt(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		// Damaged object store — rebuild.
-		{"object not found (the reported wedge)", fmt.Errorf("gitclone: repack mirror: getting object abc failed: %w", plumbing.ErrObjectNotFound), true},
-		{"object not found bare", plumbing.ErrObjectNotFound, true},
-		{"object corrupt", errors.New("object corrupt: bad header"), true},
-		{"packfile is corrupt", errors.New("packfile is corrupt"), true},
-		{"zlib invalid header", errors.New("zlib: invalid header"), true},
-		{"invalid checksum", errors.New("pack: invalid checksum"), true},
-		{"unexpected EOF (truncated object)", errors.New("unexpected EOF"), true},
+		{"object not found, wrapped", fmt.Errorf("gitclone: base: %w", plumbing.ErrObjectNotFound), true},
+		{"object not found, flattened by the repack walk", errors.New("gitclone: repack mirror: getting object abc failed: object not found"), true},
+		{"malformed pack file", fmt.Errorf("gitclone: fetch head: %w", packfile.ErrMalformedPackFile), true},
+		{"malformed idx file", fmt.Errorf("gitclone: fetch head: %w", idxfile.ErrMalformedIdxFile), true},
 		// Transient or expected — leave the mirror alone.
 		{"gone head ref", fmt.Errorf("gitclone: fetch head: %w", ErrHeadRefGone), false},
 		{"context canceled", context.Canceled, false},
 		{"deadline exceeded", fmt.Errorf("fetch: %w", context.DeadlineExceeded), false},
-		{"network error carrying unexpected EOF", netEOF, false},
+		{"malformed pack from a network truncation", netPack, false},
 		{"unrelated error", errors.New("permission denied"), false},
 	}
 	for _, tc := range cases {
