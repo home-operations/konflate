@@ -277,12 +277,22 @@ open a "render failed" comment on a PR it can't render.
 Write-back is **off until you opt in** — it needs a write credential **and** at
 least one of the feature toggles:
 
-- `KONFLATE_STATUS_CHECKS=true` — post the commit status.
+- `KONFLATE_STATUS_CHECKS=true` — report the render verdict as a status check.
 - `KONFLATE_PR_COMMENTS=true` — post (and update in place) the summary comment.
 - a write credential — a write token, or GitHub App credentials (below).
 
 Set `KONFLATE_PUBLIC_URL` as well so the status and comment link back to the
 review; without it they're still posted, just without a link.
+
+With `KONFLATE_STATUS_CHECKS` on, a **GitHub App** that holds the **Checks**
+permission posts a **Check Run** — a pass / neutral / fail conclusion plus the
+rendered summary (cautions, render failures, blast radius, image changes) in the
+PR's Checks tab, which you can require as a merge gate (cautions are a
+non-blocking _neutral_). A write PAT, GitLab, Forgejo, or an App without
+`checks:write` posts a plain commit status instead; konflate detects the missing
+permission and falls back automatically, so granting `checks:write` upgrades an
+existing App with no other change. The check is upserted per head commit, so a
+re-render refreshes one check rather than stacking duplicates.
 
 Write-back is **best-effort**: each write runs off the render path, a transient
 forge failure (a 5xx, a blip, a brief outage) is retried a few times with
@@ -310,12 +320,12 @@ comments on that repo.
 Scopes depend on which write-back you enable: commit statuses and PR comments are
 governed by different permissions.
 
-| Forge           | Credential                                                             | Scope                                                                                                                                 |
-| --------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub          | **GitHub App** (preferred) — `KONFLATE_APP_CLIENT_ID` + `_PRIVATE_KEY` | App permissions, installed on the repo: **Commit statuses: R/W** (statuses) and/or **Pull requests: R/W** (comments).                 |
-| GitHub          | or a write PAT — `KONFLATE_WRITE_TOKEN`                                | Fine-grained **Commit statuses** and/or **Pull requests** (R/W); or a classic `repo:status` (statuses only) / `repo` (also comments). |
-| GitLab          | `KONFLATE_WRITE_TOKEN`                                                 | Token with the `api` scope and at least **Developer** on the project (covers both statuses and notes).                                |
-| Forgejo / Gitea | `KONFLATE_WRITE_TOKEN`                                                 | Token with `write:repository` (statuses) and, for comments, `write:issue`.                                                            |
+| Forge           | Credential                                                             | Scope                                                                                                                                                 |
+| --------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub          | **GitHub App** (preferred) — `KONFLATE_APP_CLIENT_ID` + `_PRIVATE_KEY` | App permissions, installed on the repo: **Checks: R/W** (Check Run; falls back to **Commit statuses: R/W**) and/or **Pull requests: R/W** (comments). |
+| GitHub          | or a write PAT — `KONFLATE_WRITE_TOKEN`                                | Fine-grained **Commit statuses** and/or **Pull requests** (R/W); or a classic `repo:status` (statuses only) / `repo` (also comments).                 |
+| GitLab          | `KONFLATE_WRITE_TOKEN`                                                 | Token with the `api` scope and at least **Developer** on the project (covers both statuses and notes).                                                |
+| Forgejo / Gitea | `KONFLATE_WRITE_TOKEN`                                                 | Token with `write:repository` (statuses) and, for comments, `write:issue`.                                                                            |
 
 On GitHub the **App is preferred**: konflate authenticates as the App and mints
 short-lived installation tokens, so no long-lived PAT sits in the deployment, the

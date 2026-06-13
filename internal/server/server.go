@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 	"unicode"
@@ -41,9 +42,13 @@ type Server struct {
 	cfg    *config.Config
 	prov   provider.Provider
 	writer provider.Writer // forge write-back (commit statuses); nil when disabled
-	engine Engine
-	ui     fs.FS
-	log    *slog.Logger
+	// checksRejected latches once the forge rejects a Check Run for lack of
+	// permission (the App has no checks:write): subsequent renders skip straight to
+	// the commit-status fallback instead of retrying a write that can't succeed.
+	checksRejected atomic.Bool
+	engine         Engine
+	ui             fs.FS
+	log            *slog.Logger
 
 	// Version is the build version (main stamps it from ldflags after New);
 	// served at /api/meta for the UI footer. "dev" or empty for local builds.
@@ -252,7 +257,10 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// postStatus writes konflate's commit status for a terminal render outcome.
+// postStatus reports a terminal render outcome on the PR head. A GitHub App with
+// checks:write gets a richer Check Run (a conclusion + a markdown report, gate-able
+// as a required check); a write-PAT, GitLab/Forgejo, or an App without checks:write
+// falls back to a plain commit status — so enabling write-back never regresses.
 func (s *Server) postStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) {
 	status := provider.Status{Context: s.cfg.StatusCheckName, TargetURL: s.reviewURL(pr.Number)}
 	switch st {
@@ -265,9 +273,69 @@ func (s *Server) postStatus(pr api.PR, st api.JobStatus, sig *api.Signals, errMs
 	default:
 		return
 	}
+
+	cr, canCheck := s.writer.(provider.CheckRunner)
+	canCheck = canCheck && cr.ChecksSupported() && !s.checksRejected.Load()
+	var check provider.CheckResult
+	if canCheck {
+		check = s.checkResult(pr, st, sig, errMsg)
+	}
+
 	s.writeBack("status", pr.Number, func(ctx context.Context) error {
+		if canCheck {
+			err := cr.CheckRun(ctx, pr, check)
+			if !errors.Is(err, provider.ErrWriteAuthRejected) {
+				return err // success, or a transient error worth retrying as a check run
+			}
+			// The App can't post check runs (no checks:write). Latch it so later
+			// renders skip straight to the commit status, warning once rather than on
+			// every render; fall back to the status for this one now.
+			if s.checksRejected.CompareAndSwap(false, true) {
+				s.log.Warn("check run rejected; falling back to a commit status (grant the GitHub App checks:write to post check runs)",
+					"pr", pr.Number, "error", err)
+			}
+			canCheck = false
+		}
 		return s.writer.SetStatus(ctx, pr, status)
 	})
+}
+
+// checkResult assembles the Check Run payload for a terminal outcome: a conclusion
+// from the verdict and a markdown report reusing the comment summary renderer
+// (GitHub renders its admonitions in check output too).
+func (s *Server) checkResult(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string) provider.CheckResult {
+	res := provider.CheckResult{
+		Name:       s.cfg.StatusCheckName,
+		DetailsURL: s.reviewURL(pr.Number),
+		Conclusion: checkConclusion(st, sig),
+	}
+	if st == api.JobError {
+		res.Title = truncateStatus("render failed: " + oneLine(errMsg))
+	} else {
+		res.Title = renderedStatusDescription(sig)
+	}
+	// The stored envelope drives the markdown body (it handles ready/error/pending);
+	// fall back to the title alone if it's somehow gone.
+	if env, ok := s.store.get(pr.Number); ok {
+		res.Summary = summaryMarkdownBody(env, res.DetailsURL, true)
+	} else {
+		res.Summary = res.Title
+	}
+	return res
+}
+
+// checkConclusion maps a render verdict to a Check Run conclusion: a render error
+// or any render failure fails the check; cautions are a non-blocking neutral; an
+// otherwise-clean render passes.
+func checkConclusion(st api.JobStatus, sig *api.Signals) string {
+	switch {
+	case st == api.JobError, sig != nil && sig.Failures > 0:
+		return provider.CheckFailure
+	case sig != nil && sig.Caution > 0:
+		return provider.CheckNeutral
+	default:
+		return provider.CheckSuccess
+	}
 }
 
 // postComment posts (or updates in place) the rendered summary as a PR comment.
