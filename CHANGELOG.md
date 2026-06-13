@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.16](https://github.com/home-operations/konflate/compare/0.2.15...0.2.16) (2026-06-13)
+
+
+### Bug Fixes
+
+* **provider:** authenticate GitHub reads with the App, not just write-back ([#213](https://github.com/home-operations/konflate/issues/213)) ([2b0e477](https://github.com/home-operations/konflate/commit/2b0e477575ea9f21f1a88a5783f22bde4ec2d9ce))
+
 ## [0.2.15](https://github.com/home-operations/konflate/compare/0.2.14...0.2.15) (2026-06-12)
 
 
