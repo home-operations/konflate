@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.20](https://github.com/home-operations/konflate/compare/0.2.19...0.2.20) (2026-06-13)
+
+
+### Bug Fixes
+
+* **gitclone:** self-heal of the mirror ([#224](https://github.com/home-operations/konflate/issues/224)) ([3bd4a15](https://github.com/home-operations/konflate/commit/3bd4a152bdc317cb36abbec4a7c2610e0870a893))
+
 ## [0.2.19](https://github.com/home-operations/konflate/compare/0.2.18...0.2.19) (2026-06-13)
 
 
