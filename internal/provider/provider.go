@@ -53,6 +53,26 @@ func New(cfg *config.Config) (Provider, error) {
 	}
 }
 
+// GitTokenSource returns the credential the renderer uses to authenticate git
+// clone/fetch over HTTPS, so a render reaches the forge with the same identity as
+// the API client: a private repo can be cloned, and an authenticated clone isn't
+// throttled by the anonymous rate limit. GitHub with App credentials yields a
+// fresh installation token per call (they expire hourly); otherwise it returns the
+// static PAT (KONFLATE_TOKEN), or "" when neither is configured — anonymous, for
+// public repositories only. Only GitHub has an App path; GitLab and Forgejo always
+// use the token. The returned function is safe for concurrent use.
+func GitTokenSource(cfg *config.Config) (func(ctx context.Context) (string, error), error) {
+	if cfg.Forge.Kind == config.ForgeGitHub && cfg.AppConfigured() {
+		it, err := newInstallTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return it.token, nil
+	}
+	token := cfg.Token
+	return func(context.Context) (string, error) { return token, nil }, nil
+}
+
 // ownerRepo splits an "owner/repo" path into its two parts.
 func ownerRepo(repoPath string) (owner, repo string) {
 	owner, repo, _ = strings.Cut(repoPath, "/")

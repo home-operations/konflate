@@ -196,6 +196,47 @@ func TestNewGitHubReadAuth(t *testing.T) {
 	}
 }
 
+// TestGitTokenSource covers the renderer's git credential selection, which must
+// mirror the read client's: a configured GitHub App yields a (lazy) token source so
+// the clone authenticates as the same installation reads use, a PAT is returned
+// verbatim (the x-access-token password), and with neither the source is anonymous.
+func TestGitTokenSource(t *testing.T) {
+	t.Parallel()
+	gh := config.ForgeURI{Kind: config.ForgeGitHub, RepoPath: "acme/web"}
+
+	// PAT: returned verbatim.
+	src, err := GitTokenSource(&config.Config{Forge: gh, Token: "pat-123"})
+	if err != nil {
+		t.Fatalf("GitTokenSource (pat): %v", err)
+	}
+	if tok, err := src(context.Background()); err != nil || tok != "pat-123" {
+		t.Errorf("pat source = (%q, %v), want (\"pat-123\", nil)", tok, err)
+	}
+
+	// Neither credential: anonymous (empty token ⇒ the mirror clones without auth).
+	src, err = GitTokenSource(&config.Config{Forge: gh})
+	if err != nil {
+		t.Fatalf("GitTokenSource (anon): %v", err)
+	}
+	if tok, err := src(context.Background()); err != nil || tok != "" {
+		t.Errorf("anon source = (%q, %v), want (\"\", nil)", tok, err)
+	}
+
+	// GitHub App: a token source is built (no network until it's invoked).
+	src, err = GitTokenSource(&config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: testRSAKeyPEM(t)})
+	if err != nil {
+		t.Fatalf("GitTokenSource (app): %v", err)
+	}
+	if src == nil {
+		t.Error("App-configured git token source must not be nil")
+	}
+	// A malformed App key is rejected here — the App branch parses it, the static
+	// PAT path never would, so this also proves App config takes the App branch.
+	if _, err := GitTokenSource(&config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: "not-a-pem-key"}); err == nil {
+		t.Error("GitTokenSource must reject a malformed App private key")
+	}
+}
+
 // TestRateLimit covers the rate-limit classifier the server uses to turn a failed
 // PR-list into a time-bounded UI status: GitHub's primary RateLimitError carries
 // the reset time, the secondary AbuseRateLimitError a retry-after, and both are

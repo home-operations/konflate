@@ -72,8 +72,11 @@ type flateEngine struct {
 	maxDiffResources       int
 }
 
-// New builds the production Engine from config.
-func New(cfg *config.Config) Engine {
+// New builds the production Engine from config. gitToken authenticates the
+// renderer's clone/fetch with the same forge identity as the API client (a PAT or
+// a GitHub App installation token; see provider.GitTokenSource) — nil clones
+// anonymously, for public repositories only.
+func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 	const mib = 1 << 20
 	conc := cfg.RenderConcurrency
 	if conc <= 0 {
@@ -87,7 +90,7 @@ func New(cfg *config.Config) Engine {
 		// (RepoCacheDir), not the shared CacheDir — otherwise a CacheDir volume
 		// shared across different-repo instances would cross-fetch. flate's
 		// content-addressed source cache below stays on CacheDir and is shared.
-		mirror:                 gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), cfg.Token, cfg.FetchTimeout),
+		mirror:                 gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), gitToken, cfg.FetchTimeout),
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		helmTemplateCacheBytes: int64(cfg.HelmTemplateCacheMB) * mib,

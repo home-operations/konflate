@@ -231,13 +231,16 @@ scheme://[host]/path
 ## Authentication
 
 The forge token (`KONFLATE_TOKEN`) is **optional** and used only for forge read
-auth — it raises the API rate limit and unlocks private repositories. It gates
-no behaviour: konflate works the same with or without it.
+auth — it authenticates both the API calls and the renderer's `git` clone/fetch,
+raising the API rate limit and unlocking private repositories. It gates no
+behaviour: konflate works the same with or without it.
 
 On GitHub, configuring a **GitHub App** (`KONFLATE_APP_CLIENT_ID` +
 `KONFLATE_APP_PRIVATE_KEY`) authenticates reads too — its installation token is
-konflate's forge identity for the API as well as for [write-back](#write-back) —
-so an App-only instance needs no separate `KONFLATE_TOKEN`.
+konflate's forge identity for the API, the renderer's `git` clone/fetch, and
+[write-back](#write-back) alike (minted fresh, never a standing PAT) — so an
+App-only instance clones private repos and lifts the rate limit with no separate
+`KONFLATE_TOKEN`.
 
 The inbound endpoints are gated solely by **their own secret**, independent of
 the token:

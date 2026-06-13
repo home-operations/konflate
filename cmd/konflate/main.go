@@ -64,7 +64,15 @@ func run() error {
 		return fmt.Errorf("provider: %w", err)
 	}
 
-	srv := server.New(cfg, prov, engine.New(cfg), web.FS(), logger)
+	// The renderer clones with the same forge identity as the API client — a PAT or
+	// a GitHub App installation token — so it reaches private repos and isn't capped
+	// by the anonymous rate limit.
+	gitToken, err := provider.GitTokenSource(cfg)
+	if err != nil {
+		return fmt.Errorf("git credential: %w", err)
+	}
+
+	srv := server.New(cfg, prov, engine.New(cfg, gitToken), web.FS(), logger)
 	srv.Version = version // surfaced at /api/meta for the UI footer
 
 	// Graceful shutdown on the usual termination signals. SIGQUIT is deliberately
