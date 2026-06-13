@@ -153,6 +153,24 @@ tests:
             name: KONFLATE_RENDER_FORK_PRS
             value: "true"
 
+  - it: omits KONFLATE_MCP by default (no MCP endpoint)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_MCP
+
+  - it: emits KONFLATE_MCP when mcp is true
+    set:
+      config.mcp: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_MCP
+            value: "true"
+
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
       - notContains:

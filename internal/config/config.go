@@ -162,6 +162,13 @@ type Config struct {
 	// directly.
 	PRFilter *prfilter.Program `env:"-"`
 
+	// MCP, when true, serves a read-only Model Context Protocol endpoint at /mcp
+	// (see MCPEnabled) so an AI agent can query konflate's rendered-diff analysis —
+	// the open PRs and their summaries. It exposes only the same data the read API
+	// already does and triggers no render or write, so it doesn't change konflate's
+	// read-only-to-the-outside posture; off by default since it's a new surface.
+	MCP bool `env:"KONFLATE_MCP" envDefault:"false"`
+
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
 
@@ -323,6 +330,9 @@ func (c *Config) WebhookEnabled() bool { return c.WebhookSecret != "" }
 // PushEnabled reports whether POST /api/prs/{n}/refresh should be served: gated
 // solely by a configured push token.
 func (c *Config) PushEnabled() bool { return c.PushToken != "" }
+
+// MCPEnabled reports whether the read-only MCP endpoint at /mcp should be served.
+func (c *Config) MCPEnabled() bool { return c.MCP }
 
 // WriteEnabled reports whether konflate has a write-back credential — a write
 // PAT or a GitHub App key. It is the master gate for any forge write: without

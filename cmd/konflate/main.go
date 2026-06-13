@@ -57,6 +57,7 @@ func run() error {
 		"refresh_interval", cfg.RefreshInterval,
 		"webhook", cfg.WebhookEnabled(),
 		"push", cfg.PushEnabled(),
+		"mcp", cfg.MCPEnabled(),
 	)
 
 	prov, err := provider.New(cfg)

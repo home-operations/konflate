@@ -96,6 +96,12 @@
           "title": "maxDiffResources",
           "type": "string"
         },
+        "mcp": {
+          "default": false,
+          "description": "Serve a read-only [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` so an AI agent can query konflate's rendered-diff analysis (open PRs + their summaries). Read-only — the same data as the API, triggering no render or write. Off by default (it's a new surface); secure it at your ingress if you expose it.",
+          "title": "mcp",
+          "type": "boolean"
+        },
         "mergeCommand": {
           "default": "",
           "description": "Optional Go text/template for the copy-to-merge command (only .Number / .Repo). Empty = forge default (gh/glab/tea). konflate never runs it.",

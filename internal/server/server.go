@@ -679,6 +679,13 @@ func (s *Server) mainHandler() http.Handler {
 		mux.HandleFunc("POST /hooks", handleDisabled)
 	}
 
+	// Read-only MCP endpoint (opt-in): exposes the same rendered-diff analysis as
+	// /api to an AI agent. No method prefix — the streamable transport uses POST
+	// (messages), GET (SSE), and DELETE (session end) on the one path.
+	if s.cfg.MCPEnabled() {
+		mux.Handle("/mcp", s.mcpHandler())
+	}
+
 	mux.Handle("GET /", s.uiHandler())
 
 	return s.recoverer(s.accessLog(s.securityHeaders(mux)))
