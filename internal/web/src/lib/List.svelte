@@ -11,7 +11,7 @@
     type StatusFilter,
   } from './store.svelte';
   import { router, navigate, replace } from './router.svelte';
-  import { paging, setPageSize, PAGE_SIZES, type PageSize } from './paging.svelte';
+  import { paging, setPageSize, parsePageSize, PAGE_SIZES, DEFAULT_PAGE_SIZE, type PageSize } from './paging.svelte';
   import { clock, timeAgo, absolute } from './time.svelte';
   import { slide } from 'svelte/transition';
   import Icon from './Icon.svelte';
@@ -76,9 +76,9 @@
   // The 1-based [from, to] of the visible window, for the "A–B of N" readout.
   const from = $derived(shown.length === 0 ? 0 : size === 'all' ? 1 : (page - 1) * size + 1);
   const to = $derived(size === 'all' ? shown.length : Math.min(page * size, shown.length));
-  // The pager only earns its space once there's more than the smallest page holds;
+  // The pager only earns its space once the list outgrows the smallest page size;
   // below that every size shows the same rows, so the controls would be inert.
-  const paginated = $derived(shown.length > 10);
+  const paginated = $derived(shown.length > DEFAULT_PAGE_SIZE);
 
   // Keep the page in range as the set shrinks under it — a live update dropping
   // rows, or a deep link past the end — instead of stranding the user on a blank
@@ -104,9 +104,6 @@
     setPageSize(s);
     resetPage();
   }
-  // Map the size <select>'s string value back to a PageSize via the known set, so
-  // no cast is needed and a stray value falls back to the default.
-  const parseSize = (v: string): PageSize => PAGE_SIZES.find((s) => String(s) === v) ?? 10;
 
   // At-a-glance health, shown above the list — each pill is also a toggle that
   // filters the list to that status. merged and hidden are pill-only (kept out
@@ -248,7 +245,7 @@
       <span>per page</span>
       <select
         value={String(size)}
-        onchange={(e) => changePageSize(parseSize(e.currentTarget.value))}
+        onchange={(e) => changePageSize(parsePageSize(e.currentTarget.value))}
         aria-label="Pull requests per page"
       >
         {#each PAGE_SIZES as s}
