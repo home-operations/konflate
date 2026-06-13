@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,6 +205,31 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	head, base, err = m.fetchLocked(ctx, headRef, baseRef, auth)
+	if err == nil || !mirrorCorrupt(err) {
+		return head, base, err
+	}
+	// The persistent mirror's object store is inconsistent — a ref-reachable
+	// object is missing or unreadable, so the repack walk (or a later read) fails.
+	// go-git's incremental fetch can't repair it: it advertises the broken refs as
+	// haves, so the forge replies "up to date" and never re-sends the missing
+	// ancestors. Discard the mirror and re-seed from a clean clone, then retry
+	// once. Transient failures (network/auth/ctx) and an expected gone head ref are
+	// excluded by mirrorCorrupt, so this only fires on real object-store damage.
+	// Safe under the write lock: it excludes the read lock Trees holds while
+	// extracting, so no render is mid-read of the store we're removing.
+	slog.Default().Warn("rebuilding corrupt git mirror", "error", err, "dir", m.bareDir)
+	if rmErr := os.RemoveAll(m.bareDir); rmErr != nil {
+		return nil, nil, fmt.Errorf("gitclone: rebuild mirror: %w", rmErr)
+	}
+	return m.fetchLocked(ctx, headRef, baseRef, auth)
+}
+
+// fetchLocked performs one fetch cycle: open-or-seed the mirror, refresh the base
+// and head refs, repack if the packs have piled up, and resolve both commits. The
+// caller holds the write lock and has resolved auth. Split from fetch so the
+// self-heal path can re-run the whole cycle against a freshly re-seeded mirror.
+func (m *Mirror) fetchLocked(ctx context.Context, headRef, baseRef string, auth *githttp.BasicAuth) (head, base *object.Commit, err error) {
 	repo, err := m.openOrClone(ctx, baseRef, auth)
 	if err != nil {
 		return nil, nil, err
@@ -253,6 +279,42 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 		return nil, nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
 	}
 	return head, base, nil
+}
+
+// mirrorCorrupt reports whether err means the bare mirror's object store is
+// damaged — a ref-reachable object is missing or unreadable — so the mirror
+// should be discarded and re-cloned rather than reused. This is distinct from a
+// transient failure (network/auth/ctx) or an expected one (a gone head ref),
+// which must not trigger a wasteful re-clone, so those are excluded first.
+//
+// Detection is by message signature, not errors.Is: go-git's object walker
+// flattens the underlying plumbing.ErrObjectNotFound with %v
+// (object_walker.go), breaking the error chain — so the canonical "repack
+// mirror: getting object <sha> failed: object not found" can only be matched on
+// its text.
+func mirrorCorrupt(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Expected (gone head ref) or caller-driven (deadline/cancel): not corruption.
+	if errors.Is(err, ErrHeadRefGone) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	msg := err.Error()
+	for _, sig := range mirrorCorruptSignatures {
+		if strings.Contains(msg, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+// mirrorCorruptSignatures are the go-git error texts that mark a damaged object
+// store. A var so it is easy to extend as new signatures surface.
+var mirrorCorruptSignatures = []string{
+	plumbing.ErrObjectNotFound.Error(), // "object not found" — the reported repack wedge
 }
 
 // repackPackThreshold is the packfile count at which a fetch consolidates the

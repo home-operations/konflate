@@ -147,6 +147,61 @@ func TestMirror_RepacksWhenPacksAccumulate(t *testing.T) {
 	}
 }
 
+// TestMirror_RebuildsOnCorruptObjectStore reproduces the production wedge — a
+// repack whose ref walk hits a missing object ("getting object <sha> failed:
+// object not found") — and verifies the mirror self-heals: it discards the
+// damaged bare repo, re-seeds from a clean clone, and the render still resolves
+// correct trees. Without the rebuild, the corrupt mirror would fail every render
+// forever (go-git's incremental fetch can't re-fetch the missing ancestors,
+// since it advertises the broken refs as haves).
+func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
+	orig := repackPackThreshold
+	repackPackThreshold = 1 // force a repack on the next render
+	t.Cleanup(func() { repackPackThreshold = orig })
+
+	src := buildRepo(t)
+	m := newTestMirror(t, src)
+
+	// First render seeds the mirror.
+	first, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("seed render: %v", err)
+	}
+	first.Cleanup()
+
+	// Corrupt the mirror: add a ref pointing at a fabricated, absent object.
+	// RepackObjects walks every ref, so the next repack tries to read it and fails
+	// with exactly the production error — without having to surgically edit packs.
+	bare, err := git.PlainOpen(m.bareDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ghost := plumbing.NewHash("0e2d2fd5a618d41d4da42a9d7ebf1a14659dd6c9")
+	if err := bare.Storer.SetReference(
+		plumbing.NewHashReference("refs/heads/ghost", ghost),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second render must self-heal (rebuild) and still return correct trees.
+	res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("render after corruption should self-heal, got: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+	assertMergeBaseTrees(t, res)
+
+	// The rebuild re-seeded from a clean clone, so the dangling ref is gone —
+	// proof the mirror was actually rebuilt, not that the error was swallowed.
+	rebuilt, err := git.PlainOpen(m.bareDir)
+	if err != nil {
+		t.Fatalf("reopen rebuilt mirror: %v", err)
+	}
+	if _, err := rebuilt.Reference("refs/heads/ghost", false); err == nil {
+		t.Error("dangling ref survived the rebuild; mirror was not re-seeded")
+	}
+}
+
 func TestWithinRoot(t *testing.T) {
 	t.Parallel()
 	const dir = "/tmp/extract"
