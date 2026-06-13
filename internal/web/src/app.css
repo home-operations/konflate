@@ -727,6 +727,7 @@ a.repo:focus-visible .repo-ext {
 }
 .card-title {
   font-weight: 600;
+  min-width: 0; /* shrink (ellipsis) so a trailing check stays visible */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

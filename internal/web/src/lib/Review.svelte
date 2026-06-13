@@ -18,6 +18,7 @@
   import Diffs from './Diffs.svelte';
   import Copy from './Copy.svelte';
   import ForgeLink from './ForgeLink.svelte';
+  import Check from './Check.svelte';
 
   const route = $derived(router.route.name === 'review' ? router.route : null);
   const pr = $derived(currentPR());
@@ -42,6 +43,7 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
+        {#if pr?.checks}<Check checks={pr.checks} size={15} />{/if}
         {#if pr}<ForgeLink url={pr.url} number={pr.number} glyph={false} />{/if}
         <div class="rt-meta">
           {#if pr}

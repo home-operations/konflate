@@ -32,6 +32,10 @@ test('PR list shows the forge CI check status per PR (green / amber / red)', asy
   await expect(card(142).locator('.check-success')).toBeVisible(); // 4/4 passed
   await expect(card(138).locator('.check-pending')).toBeVisible(); // still running
   await expect(card(131).locator('.check-failure')).toBeVisible(); // one failed
+  // The check sits in the title row, right next to the title — not down in the
+  // meta row among the signal badges.
+  await expect(card(142).locator('.card-top .check-success')).toBeVisible();
+  await expect(card(142).locator('.card-meta .check')).toHaveCount(0);
 });
 
 test('list → review → single-page flow', async ({ page }) => {
@@ -98,6 +102,9 @@ test('list → review → single-page flow', async ({ page }) => {
   await expect(page.locator('.flag.caution', { hasText: 'StatefulSet' })).toBeVisible();
   await expect(page.locator('.img-list')).toContainText('ghcr.io/rook/ceph');
   await expect(page.locator('.flag', { hasText: 'plex' })).toBeVisible();
+  // The forge CI check rides next to the PR title on the review header too
+  // (#142 is 4/4 green).
+  await expect(page.locator('.review-title .check-success')).toBeVisible();
   // The same forge link sits next to the PR title on the review header.
   await expect(page.locator('.review-title .forge-link')).toHaveAttribute(
     'href',
