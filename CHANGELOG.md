@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.18](https://github.com/home-operations/konflate/compare/0.2.17...0.2.18) (2026-06-13)
+
+
+### Features
+
+* opt-in read-only MCP endpoint for AI agents ([#220](https://github.com/home-operations/konflate/issues/220)) ([15d3805](https://github.com/home-operations/konflate/commit/15d3805e9d118f297eabcc83a31854eacc08186c))
+
 ## [0.2.17](https://github.com/home-operations/konflate/compare/0.2.16...0.2.17) (2026-06-13)
 
 
