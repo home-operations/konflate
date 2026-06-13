@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { samplePRs, diffEnvelope } from './fixtures';
-import type { Meta } from '../src/lib/types';
+import type { Meta, PRStatus } from '../src/lib/types';
 
 const defaultMeta: Meta = {
   forge: 'github',
@@ -12,9 +12,9 @@ const defaultMeta: Meta = {
 
 // Stub the konflate API (and silence the websocket) so the UI renders
 // deterministically with no backend.
-async function stubApi(page: Page, meta: Meta = defaultMeta) {
+async function stubApi(page: Page, meta: Meta = defaultMeta, prs: PRStatus[] = samplePRs) {
   await page.route('**/api/meta', (route) => route.fulfill({ json: meta }));
-  await page.route('**/api/prs', (route) => route.fulfill({ json: samplePRs }));
+  await page.route('**/api/prs', (route) => route.fulfill({ json: prs }));
   await page.route('**/api/prs/142/diff', (route) => route.fulfill({ json: diffEnvelope }));
   // The row expander hits the lean summary endpoint; the fixture envelope serves
   // both (the UI reads the same headline fields).
@@ -231,6 +231,96 @@ test('filter-excluded PRs are hidden: a pill, a grey dot, out of the default vie
   await hiddenCard.locator('.card').click();
   await expect(page).toHaveURL(/#\/pr\/9$/);
   await expect(page.locator('.review-body')).toContainText('Excluded by the PR filter');
+});
+
+// bulkPRs builds `open` open PRs (highest numbers, newest) plus `merged` merged
+// ones below them — the real fixtures only carry three, under the smallest page
+// size. createdAt increases with the number so created-desc sorts highest first,
+// making the page contents deterministic.
+function bulkPRs({ open, merged = 0 }: { open: number; merged?: number }): PRStatus[] {
+  const total = open + merged;
+  return Array.from({ length: total }, (_, i) => {
+    const number = total - i; // newest (highest) first
+    const isOpen = i < open;
+    return {
+      number,
+      title: `chore(deps): bump dependency ${number}`,
+      author: 'renovate[bot]',
+      state: isOpen ? 'open' : 'closed',
+      open: isOpen,
+      draft: false,
+      headRef: `renovate/dep-${number}`,
+      headSha: `sha${number}`,
+      baseRef: 'main',
+      createdAt: new Date(Date.UTC(2026, 5, 1, 0, number)).toISOString(),
+      closedAt: isOpen ? undefined : new Date(Date.UTC(2026, 5, 2, 0, number)).toISOString(),
+      labels: [],
+      url: `https://github.com/acme/home-ops/pull/${number}`,
+      status: 'ready',
+      updatedAt: '2026-06-04T12:00:00Z',
+    } satisfies PRStatus;
+  });
+}
+
+test('list pagination: default 10 per page, prev/next, and a size picker', async ({ page }) => {
+  await stubApi(page, defaultMeta, bulkPRs({ open: 25 }));
+  await page.goto('/');
+
+  // Default page size is 10 (the lowest), newest first.
+  await expect(page.locator('.card')).toHaveCount(10);
+  await expect(page.locator('.pager-count')).toHaveText('1–10 of 25');
+  await expect(page.locator('.pager-page')).toHaveText('Page 1 of 3');
+  await expect(page.locator('.card-shell[data-pr="25"]')).toBeVisible();
+  await expect(page.locator('.card-shell[data-pr="15"]')).toHaveCount(0); // page 2's top
+
+  // Next → page 2: the URL carries the page, and the window slides.
+  await page.locator('.pager-btn[aria-label="Next page"]').click();
+  await expect(page).toHaveURL(/#\/page\/2$/);
+  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await expect(page.locator('.pager-count')).toHaveText('11–20 of 25');
+  await expect(page.locator('.card-shell[data-pr="15"]')).toBeVisible();
+  await expect(page.locator('.card-shell[data-pr="25"]')).toHaveCount(0);
+
+  // Bumping the size to 50 shows all 25 on one page, drops the prev/next nav, and
+  // resets the URL to the canonical page 1.
+  await page.locator('.page-size select').selectOption('50');
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.locator('.card')).toHaveCount(25);
+  await expect(page.locator('.pager-nav')).toHaveCount(0);
+  await expect(page.locator('.pager-count')).toHaveText('1–25 of 25');
+});
+
+test('list pagination: deep-links a page and clamps an out-of-range page', async ({ page }) => {
+  await stubApi(page, defaultMeta, bulkPRs({ open: 25 }));
+
+  await page.goto('/#/page/2');
+  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await expect(page.locator('.card-shell[data-pr="15"]')).toBeVisible();
+
+  // A page past the end clamps to the last page (and rewrites the URL to match).
+  await page.goto('/#/page/99');
+  await expect(page.locator('.pager-page')).toHaveText('Page 3 of 3');
+  await expect(page).toHaveURL(/#\/page\/3$/);
+  await expect(page.locator('.card')).toHaveCount(5); // 25 → pages of 10/10/5
+});
+
+test('list pagination stays coherent with the filter pills', async ({ page }) => {
+  await stubApi(page, defaultMeta, bulkPRs({ open: 22, merged: 13 }));
+  await page.goto('/');
+
+  // Default (open) view: the pager counts the open set — the same total the open
+  // pill shows — not every tracked PR.
+  await expect(page.locator('.sum-pill.merged')).toContainText('13 merged');
+  await expect(page.locator('.pager-count')).toHaveText('1–10 of 22');
+
+  // Page in, then switch to the merged pill: the page resets to 1 and the count
+  // tracks the merged set, so "of N" matches the merged pill's count (cohesion).
+  await page.locator('.pager-btn[aria-label="Next page"]').click();
+  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await page.locator('.sum-pill.merged').click();
+  await expect(page).toHaveURL(/#\/$/); // back to page 1
+  await expect(page.locator('.pager-count')).toHaveText('1–10 of 13');
+  await expect(page.locator('.pager-page')).toHaveText('Page 1 of 2');
 });
 
 test('split diff renders two balanced columns (regression)', async ({ page }) => {
@@ -862,6 +952,9 @@ test('a scroll-to-top button appears after scrolling and returns to the top', as
   await page.route('**/api/prs', (r) => r.fulfill({ json: many }));
   await page.routeWebSocket('**/ws', () => {});
   await page.goto('/');
+  // 24 PRs paginate (default 10); switch to "All" so the whole list renders and
+  // .list-screen overflows enough to exercise the FAB.
+  await page.locator('.page-size select').selectOption('all');
   await expect(page.locator('.card')).toHaveCount(24);
 
   const fab = page.locator('.scroll-top');

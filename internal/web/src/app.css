@@ -530,6 +530,76 @@ a.repo:focus-visible .repo-ext {
   flex-direction: column;
   gap: 8px;
 }
+/* Pager below the cards: the count readout, the per-page size picker, and (when
+   there's more than one page) prev/next. Shares the cards' 960px column and the
+   toolbar's muted, borderless-control aesthetic. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto 12px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pager-count,
+.pager-page {
+  font-variant-numeric: tabular-nums; /* digits don't reflow as the page changes */
+}
+.page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.page-size select {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.page-size select:hover {
+  color: var(--text);
+}
+.page-size select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* prev/next + the page indicator, pushed to the right edge of the column. */
+.pager-nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.pager-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--panel-alt);
+}
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.pager-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 /* A card is a shell (the bordered, tinted box) wrapping the clickable content
    button and a disclosure chevron. A <button> can't nest in a <button>, so the
    two sit side by side inside the shell. */

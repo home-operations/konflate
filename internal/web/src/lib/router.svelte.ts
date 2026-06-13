@@ -1,16 +1,19 @@
 // A tiny hash router so reviews are deep-linkable and survive refresh / browser
 // back. Routes:
-//   #/                       the PR list
+//   #/                       the PR list (page 1)
+//   #/page/2                 the PR list, page 2 (page 1 stays the bare #/)
 //   #/pr/142                 review, default selection (the Summary)
 //   #/pr/142/summary         review, Summary panel (explicit)
 //   #/pr/142/r0              review, resource r0's diff
 //
 // `sel` is the selected tree node: 'summary', a resource id, or null. A bare
 // #/pr/142 (null) renders the Summary — the first tree node — so the default
-// URL stays clean.
+// URL stays clean. `page` is the list's 1-based page; omitted (page 1) keeps the
+// list URL clean too, so a deep link only carries a page once you've paged past
+// the first.
 
 export type Route =
-  | { name: 'list' }
+  | { name: 'list'; page?: number }
   | { name: 'review'; pr: number; sel: string | null };
 
 function parse(hash: string): Route {
@@ -23,11 +26,19 @@ function parse(hash: string): Route {
       return { name: 'review', pr, sel: parts[2] ?? null };
     }
   }
+  // #/page/N deep-links a list page. N≥2 only — page 1 is the canonical bare #/,
+  // so a stray #/page/1 (or a non-integer) normalizes back to it.
+  if (parts[0] === 'page' && parts[1]) {
+    const page = Number(parts[1]);
+    if (Number.isInteger(page) && page > 1) {
+      return { name: 'list', page };
+    }
+  }
   return { name: 'list' };
 }
 
 function toHash(r: Route): string {
-  if (r.name === 'list') return '#/';
+  if (r.name === 'list') return r.page && r.page > 1 ? `#/page/${r.page}` : '#/';
   return r.sel ? `#/pr/${r.pr}/${r.sel}` : `#/pr/${r.pr}`;
 }
 
