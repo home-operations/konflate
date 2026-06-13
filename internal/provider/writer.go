@@ -57,6 +57,40 @@ type Writer interface {
 	Verify(ctx context.Context) error
 }
 
+// Check Run conclusions konflate reports (a superset of the commit-status states,
+// GitHub-only). Neutral is a non-blocking heads-up — cautions surface without
+// failing the PR, and an operator can still gate on them by making the check
+// required.
+const (
+	CheckSuccess = "success"
+	CheckNeutral = "neutral"
+	CheckFailure = "failure"
+)
+
+// CheckResult is one Check Run konflate posts on a PR head: a conclusion plus a
+// markdown report, richer than a commit status (it shows in the Checks tab and can
+// be a required merge gate). Only a GitHub App can create one — see [CheckRunner].
+type CheckResult struct {
+	Name       string // the check's name on the PR (config StatusCheckName)
+	Conclusion string // CheckSuccess | CheckNeutral | CheckFailure
+	Title      string // short one-line headline
+	Summary    string // markdown body (GitHub renders its admonitions in check output)
+	DetailsURL string // konflate's review URL for the PR
+}
+
+// CheckRunner is a [Writer] that can additionally post a GitHub Check Run. The
+// REST API only lets a GitHub App create check runs, so a write-PAT writer reports
+// ChecksSupported()==false and the GitLab/Forgejo writers don't implement this at
+// all — callers fall back to SetStatus in every non-App case.
+type CheckRunner interface {
+	// ChecksSupported reports whether this writer can post Check Runs (App-authed).
+	ChecksSupported() bool
+	// CheckRun creates or updates konflate's Check Run on the PR head. A permanent
+	// permission rejection (the App lacks checks:write) is wrapped as
+	// ErrWriteAuthRejected so the caller can fall back to a commit status.
+	CheckRun(ctx context.Context, pr api.PR, res CheckResult) error
+}
+
 // ErrWriteAuthRejected marks a write-back credential the forge rejected in a way
 // that won't fix itself — a 401/403/404 (bad token, missing permission, a wrong
 // GitHub App installation, or an unreachable repo), as opposed to a transient 5xx
@@ -131,6 +165,7 @@ func (r *resolvedString) get(ctx context.Context) (string, error) {
 type githubWriter struct {
 	client      *github.Client
 	owner, repo string
+	app         bool            // App-authed ⇒ can post Check Runs (a PAT can't)
 	self        *resolvedString // login of konflate's own comment author; resolved once
 }
 
@@ -140,7 +175,7 @@ func newGitHubWriter(cfg *config.Config) (*githubWriter, error) {
 		return nil, err
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
-	return &githubWriter{client: client, owner: owner, repo: repo, self: &resolvedString{resolve: self}}, nil
+	return &githubWriter{client: client, owner: owner, repo: repo, app: cfg.AppConfigured(), self: &resolvedString{resolve: self}}, nil
 }
 
 // newGitHubWriteClient builds the authenticated write client. A fully-configured
@@ -354,6 +389,71 @@ func (w *githubWriter) SetStatus(ctx context.Context, pr api.PR, st Status) erro
 		return fmt.Errorf("github: set status #%d: %w", pr.Number, err)
 	}
 	return nil
+}
+
+// ChecksSupported reports whether this writer can post Check Runs — true only for
+// the App identity (the REST API forbids check runs over a PAT).
+func (w *githubWriter) ChecksSupported() bool { return w.app }
+
+// CheckRun creates konflate's Check Run on the PR head, or updates the existing one
+// for that head SHA in place (found by the check name) so a re-render of the same
+// commit refreshes a single check rather than stacking duplicates.
+func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult) error {
+	completed, now := "completed", github.Timestamp{Time: time.Now()}
+	output := &github.CheckRunOutput{Title: &res.Title, Summary: &res.Summary}
+
+	id, err := w.findCheckRun(ctx, pr.HeadSHA, res.Name)
+	if err != nil {
+		return err
+	}
+	if id != 0 {
+		_, resp, err := w.client.Checks.UpdateCheckRun(ctx, w.owner, w.repo, id, github.UpdateCheckRunOptions{
+			Name:        res.Name,
+			Status:      &completed,
+			Conclusion:  &res.Conclusion,
+			CompletedAt: &now,
+			DetailsURL:  strOrNil(res.DetailsURL),
+			Output:      output,
+		})
+		if err != nil {
+			return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: update check run #%d: %w", pr.Number, err))
+		}
+		return nil
+	}
+	_, resp, err := w.client.Checks.CreateCheckRun(ctx, w.owner, w.repo, github.CreateCheckRunOptions{
+		Name:        res.Name,
+		HeadSHA:     pr.HeadSHA,
+		Status:      &completed,
+		Conclusion:  &res.Conclusion,
+		CompletedAt: &now,
+		DetailsURL:  strOrNil(res.DetailsURL),
+		Output:      output,
+	})
+	if err != nil {
+		return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: create check run #%d: %w", pr.Number, err))
+	}
+	return nil
+}
+
+// findCheckRun returns the id of konflate's existing Check Run (matched by name) on
+// sha, or 0 if there is none. Matching by name is enough — konflate owns its check
+// name; in the improbable event another app's check shares it, updating it 404/403s
+// and the caller falls back to a commit status.
+func (w *githubWriter) findCheckRun(ctx context.Context, sha, name string) (int64, error) {
+	if sha == "" {
+		return 0, nil
+	}
+	runs, resp, err := w.client.Checks.ListCheckRunsForRef(ctx, w.owner, w.repo, sha, &github.ListCheckRunsOptions{
+		CheckName:   &name,
+		ListOptions: github.ListOptions{PerPage: 1},
+	})
+	if err != nil {
+		return 0, rejectedIf(githubStatus(resp, err), fmt.Errorf("github: list check runs: %w", err))
+	}
+	for _, r := range runs.CheckRuns {
+		return r.GetID(), nil
+	}
+	return 0, nil
 }
 
 func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, body string) error {

@@ -69,6 +69,112 @@ func TestGitHubWriter_SetStatus(t *testing.T) {
 	}
 }
 
+func TestGitHubWriter_CheckRun(t *testing.T) {
+	t.Parallel()
+	const sha = "deadbeefcafe"
+
+	t.Run("creates a check run when none exists", func(t *testing.T) {
+		t.Parallel()
+		var created struct {
+			Name       string `json:"name"`
+			HeadSHA    string `json:"head_sha"`
+			Status     string `json:"status"`
+			Conclusion string `json:"conclusion"`
+			DetailsURL string `json:"details_url"`
+			Output     struct {
+				Title, Summary string
+			} `json:"output"`
+		}
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/acme/web/commits/"+sha+"/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"total_count":0,"check_runs":[]}`))
+		})
+		mux.HandleFunc("/repos/acme/web/check-runs", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&created)
+			_, _ = w.Write([]byte(`{"id":1}`))
+		})
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
+		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+			Name: "konflate", Conclusion: CheckNeutral, Title: "1 caution",
+			Summary: "### konflate — summary", DetailsURL: "https://k.example/#/pr/7",
+		})
+		if err != nil {
+			t.Fatalf("CheckRun (create): %v", err)
+		}
+		if created.Name != "konflate" || created.HeadSHA != sha || created.Status != "completed" ||
+			created.Conclusion != "neutral" || created.DetailsURL != "https://k.example/#/pr/7" ||
+			created.Output.Title != "1 caution" || created.Output.Summary != "### konflate — summary" {
+			t.Errorf("create payload = %+v", created)
+		}
+	})
+
+	t.Run("updates the existing run for the head SHA", func(t *testing.T) {
+		t.Parallel()
+		var patched string
+		var conclusion string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/acme/web/commits/"+sha+"/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"total_count":1,"check_runs":[{"id":42,"name":"konflate"}]}`))
+		})
+		mux.HandleFunc("/repos/acme/web/check-runs/42", func(w http.ResponseWriter, r *http.Request) {
+			patched = r.URL.Path
+			var body struct {
+				Conclusion string `json:"conclusion"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			conclusion = body.Conclusion
+			_, _ = w.Write([]byte(`{"id":42}`))
+		})
+		mux.HandleFunc("/repos/acme/web/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("created a new check run when one already existed; want update")
+			_, _ = w.Write([]byte(`{"id":99}`))
+		})
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
+		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+			Name: "konflate", Conclusion: CheckSuccess, Title: "clean", Summary: "ok",
+		})
+		if err != nil {
+			t.Fatalf("CheckRun (update): %v", err)
+		}
+		if patched != "/repos/acme/web/check-runs/42" || conclusion != "success" {
+			t.Errorf("update path=%q conclusion=%q, want .../check-runs/42 + success", patched, conclusion)
+		}
+	})
+
+	t.Run("a permission rejection is classified so the server can fall back", func(t *testing.T) {
+		t.Parallel()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/acme/web/commits/"+sha+"/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, `{"message":"Resource not accessible by integration"}`, http.StatusForbidden)
+		})
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
+		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha},
+			CheckResult{Name: "konflate", Conclusion: CheckSuccess})
+		if !errors.Is(err, ErrWriteAuthRejected) {
+			t.Fatalf("CheckRun on a 403 = %v, want ErrWriteAuthRejected", err)
+		}
+	})
+
+	t.Run("ChecksSupported tracks App auth", func(t *testing.T) {
+		t.Parallel()
+		if !(&githubWriter{app: true}).ChecksSupported() {
+			t.Error("an App-authed writer must support check runs")
+		}
+		if (&githubWriter{app: false}).ChecksSupported() {
+			t.Error("a PAT-authed writer must not advertise check-run support")
+		}
+	})
+}
+
 func TestNewWriter_NilWhenDisabled(t *testing.T) {
 	t.Parallel()
 	w, err := NewWriter(&config.Config{}) // no write credential
