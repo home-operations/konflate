@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -88,6 +90,64 @@ func TestMCP_Tools(t *testing.T) {
 	if !res.IsError {
 		t.Error("get_pr_summary on an unknown PR should return a tool error")
 	}
+}
+
+// TestMCP_HTTPEndpoint exercises the real /mcp wiring end to end: the route is
+// served only when KONFLATE_MCP is set, and over the streamable HTTP transport
+// (through the full middleware stack — so this also guards that statusRecorder's
+// Unwrap keeps SSE flushing working) a client can call a tool.
+func TestMCP_HTTPEndpoint(t *testing.T) {
+	t.Parallel()
+	pr := api.PR{Number: 7, Title: "feat: widget", HeadRef: "feat", BaseRef: "main", HeadSHA: "abc123", Open: true, State: "open"}
+
+	t.Run("served and callable when enabled", func(t *testing.T) {
+		t.Parallel()
+		cfg := ghCfg("tok")
+		cfg.MCP = true
+		s := newTestServer(t, cfg, &fakeProvider{prs: []api.PR{pr}}, okEngine())
+		s.refreshList(s.runCtx)
+		waitFor(t, s, 7)
+
+		httpSrv := httptest.NewServer(s.mainHandler())
+		t.Cleanup(httpSrv.Close)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v0"}, nil).
+			Connect(ctx, &mcp.StreamableClientTransport{Endpoint: httpSrv.URL + "/mcp"}, nil)
+		if err != nil {
+			t.Fatalf("connect /mcp: %v", err)
+		}
+		defer func() { _ = cs.Close() }()
+
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_pull_requests"})
+		if err != nil || res.IsError {
+			t.Fatalf("list_pull_requests over HTTP: err=%v isError=%v", err, res != nil && res.IsError)
+		}
+		var out mcpListOutput
+		decodeStructured(t, res.StructuredContent, &out)
+		if len(out.PullRequests) != 1 || out.PullRequests[0].Number != 7 {
+			t.Fatalf("over HTTP, listed %+v, want #7", out.PullRequests)
+		}
+	})
+
+	t.Run("not served when disabled (the default)", func(t *testing.T) {
+		t.Parallel()
+		s := newTestServer(t, ghCfg("tok"), &fakeProvider{prs: []api.PR{pr}}, okEngine()) // cfg.MCP is false
+		httpSrv := httptest.NewServer(s.mainHandler())
+		t.Cleanup(httpSrv.Close)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// /mcp isn't registered, so the initialize handshake hits no MCP endpoint
+		// and Connect fails — rather than exposing the surface by default.
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v0"}, nil).
+			Connect(ctx, &mcp.StreamableClientTransport{Endpoint: httpSrv.URL + "/mcp"}, nil)
+		if err == nil {
+			_ = cs.Close()
+			t.Fatal("connected to /mcp with KONFLATE_MCP off; the endpoint must not be served")
+		}
+	})
 }
 
 // toolText concatenates the text content blocks of a tool result.
