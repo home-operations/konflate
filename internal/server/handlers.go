@@ -56,6 +56,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 		RepoURL:                s.cfg.Forge.CloneURL(),
 		Version:                s.Version,
 		RefreshIntervalSeconds: int(s.cfg.RefreshInterval.Seconds()),
+		Sync:                   s.metaSync(),
 	})
 }
 
@@ -525,6 +526,7 @@ func (s *Server) authorizedPush(r *http.Request) bool {
 // verified webhook also calls it when the open-PR set may have changed.
 func (s *Server) refreshList(ctx context.Context) {
 	prs, err := s.prov.ListPRs(ctx)
+	s.noteSyncResult(err) // record forge-polling health (raises/clears the UI banner + metrics)
 	if err != nil {
 		s.log.Error("refresh: list PRs failed", "error", err)
 		return

@@ -52,6 +52,7 @@ type Server struct {
 	store   *store
 	hub     *hub
 	metrics *metrics
+	sync    *syncTracker // forge read-polling health, for /api/meta + "sync" events
 	queue   *queue
 	runCtx  context.Context
 
@@ -88,7 +89,7 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 
 	s := &Server{
 		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
-		store: newStore(), hub: newHub(log), metrics: newMetrics(),
+		store: newStore(), hub: newHub(log), metrics: newMetrics(), sync: newSyncTracker(),
 		avatarKey:   avatarKey,
 		mergeTmpl:   newMergeTemplate(cfg, log),
 		commentTmpl: newCommentTemplate(cfg, log),

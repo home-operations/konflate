@@ -58,7 +58,7 @@ type Mirror struct {
 	bareDir  string // persistent bare repo (under the cache dir)
 	workRoot string // parent for the ephemeral per-diff working trees
 	url      string
-	auth     *githttp.BasicAuth
+	token    TokenFunc // forge credential for clone/fetch, resolved per fetch (nil ⇒ anonymous)
 
 	// fetchTimeout bounds a single fetch (and the cold clone) so a slow or hung
 	// forge can't hold the write lock — and thus block every other render — for
@@ -71,23 +71,44 @@ type Mirror struct {
 	mu sync.RWMutex
 }
 
+// TokenFunc yields the forge credential for git-over-HTTPS — the password paired
+// with the x-access-token username — resolved afresh before each fetch so a
+// GitHub App's hourly-expiring installation token stays current. An empty token
+// (or a nil TokenFunc) means anonymous. It receives the fetch's context so the
+// resolution (an App token mint, on first use or refresh) is bounded with it.
+type TokenFunc func(ctx context.Context) (string, error)
+
 // NewMirror builds a Mirror for cloneURL. The bare repo lives under cacheDir
 // (persistent), per-diff working trees under cloneDir (ephemeral). token may be
-// empty for public repositories (anonymous). fetchTimeout bounds each fetch
-// under the write lock (<=0 disables it; see Mirror.fetchTimeout).
-func NewMirror(cacheDir, cloneDir, cloneURL, token string, fetchTimeout time.Duration) *Mirror {
-	var auth *githttp.BasicAuth
-	if token != "" {
-		// Any non-empty username works; the token is the password over HTTPS.
-		auth = &githttp.BasicAuth{Username: "x-access-token", Password: token}
-	}
+// nil for public repositories (anonymous). fetchTimeout bounds each fetch under
+// the write lock (<=0 disables it; see Mirror.fetchTimeout).
+func NewMirror(cacheDir, cloneDir, cloneURL string, token TokenFunc, fetchTimeout time.Duration) *Mirror {
 	return &Mirror{
 		bareDir:      filepath.Join(cacheDir, "git", "mirror.git"),
 		workRoot:     cloneDir,
 		url:          cloneURL,
-		auth:         auth,
+		token:        token,
 		fetchTimeout: fetchTimeout,
 	}
+}
+
+// authFor resolves the git credential for one fetch cycle by calling the token
+// source (a GitHub App mints/refreshes its installation token here), returning
+// nil — anonymous — when there is no source or it yields an empty token. The same
+// credential covers the cycle's clone and both ref fetches.
+func (m *Mirror) authFor(ctx context.Context) (*githttp.BasicAuth, error) {
+	if m.token == nil {
+		return nil, nil
+	}
+	tok, err := m.token(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gitclone: forge credential: %w", err)
+	}
+	if tok == "" {
+		return nil, nil
+	}
+	// Any non-empty username works; the token is the password over HTTPS.
+	return &githttp.BasicAuth{Username: "x-access-token", Password: tok}, nil
 }
 
 // Trees fetches the PR head and base into the mirror, computes the merge-base of
@@ -172,10 +193,18 @@ func (m *Mirror) fetchScope(ctx context.Context) (context.Context, context.Cance
 // instead of letting it run to the full DiffTimeout. The returned commits carry
 // their own storer reference, so they stay readable after the lock is released.
 func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base *object.Commit, err error) {
+	// Resolve the credential before taking the write lock: an App token mint is a
+	// network call, and holding the lock across it would stall every other render.
+	// Once minted it's cached, so subsequent cycles resolve without I/O.
+	auth, err := m.authFor(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	repo, err := m.openOrClone(ctx, baseRef)
+	repo, err := m.openOrClone(ctx, baseRef, auth)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -183,7 +212,7 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 	// Refresh the base branch (a no-op right after the seeding clone). A missing
 	// base is a real error — the PR targets it.
 	baseFull := "refs/heads/" + baseRef
-	if err := fetchSpec(ctx, repo, m.auth, baseFull, baseFull); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	if err := fetchSpec(ctx, repo, auth, baseFull, baseFull); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil, nil, fmt.Errorf("gitclone: fetch base %q: %w", baseRef, err)
 	}
 	// headRef is the forge's pull head ref (refs/pull/N/head), which the base repo
@@ -191,7 +220,7 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 	// repo. Fetch it into a private local ref. A missing head ref means the
 	// request was deleted — report it as gone so the caller reconciles the PR
 	// rather than failing the render.
-	if err := fetchSpec(ctx, repo, m.auth, headRef, localHeadRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	if err := fetchSpec(ctx, repo, auth, headRef, localHeadRef); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, git.NoMatchingRefSpecError{}) {
 			return nil, nil, fmt.Errorf("gitclone: fetch head %q: %w", headRef, ErrHeadRefGone)
 		}
@@ -287,7 +316,7 @@ func (m *Mirror) countPacks() (int, error) {
 // would data-race. A private handle per render keeps those reads goroutine-safe;
 // don't "optimize" this into a cached handle without moving all object reads
 // under the write lock.
-func (m *Mirror) openOrClone(ctx context.Context, baseRef string) (*git.Repository, error) {
+func (m *Mirror) openOrClone(ctx context.Context, baseRef string, auth *githttp.BasicAuth) (*git.Repository, error) {
 	repo, err := git.PlainOpen(m.bareDir)
 	if err == nil {
 		return repo, nil
@@ -300,7 +329,7 @@ func (m *Mirror) openOrClone(ctx context.Context, baseRef string) (*git.Reposito
 	}
 	repo, err = git.PlainCloneContext(ctx, m.bareDir, true, &git.CloneOptions{
 		URL:           m.url,
-		Auth:          m.auth,
+		Auth:          auth,
 		NoCheckout:    true,
 		Tags:          git.NoTags,
 		SingleBranch:  true,

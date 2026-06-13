@@ -169,11 +169,53 @@ func TestWithinRoot(t *testing.T) {
 	}
 }
 
+// TestMirror_AuthFor covers the per-fetch credential resolution: a nil or
+// empty-yielding token source clones anonymously (nil auth), a yielded token
+// becomes x-access-token basic auth (the password over HTTPS), and a source
+// error — e.g. a GitHub App token mint that failed — propagates rather than
+// silently degrading to an anonymous clone of a private repo.
+func TestMirror_AuthFor(t *testing.T) {
+	t.Parallel()
+	const tok = "ghs_installationtoken"
+	cases := []struct {
+		name              string
+		token             TokenFunc
+		wantUser, wantPro string // empty wantUser ⇒ expect nil auth (anonymous)
+		wantErr           bool
+	}{
+		{"nil source is anonymous", nil, "", "", false},
+		{"empty token is anonymous", func(context.Context) (string, error) { return "", nil }, "", "", false},
+		{"token becomes x-access-token basic auth", func(context.Context) (string, error) { return tok, nil }, "x-access-token", tok, false},
+		{"source error propagates", func(context.Context) (string, error) { return "", errors.New("mint failed") }, "", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := NewMirror(t.TempDir(), t.TempDir(), "https://example.test/x.git", tc.token, 0)
+			auth, err := m.authFor(context.Background())
+			switch {
+			case tc.wantErr:
+				if err == nil {
+					t.Fatal("authFor: want error, got nil")
+				}
+			case err != nil:
+				t.Fatalf("authFor: %v", err)
+			case tc.wantUser == "":
+				if auth != nil {
+					t.Errorf("authFor = %+v, want nil (anonymous)", auth)
+				}
+			case auth == nil || auth.Username != tc.wantUser || auth.Password != tc.wantPro:
+				t.Errorf("authFor = %+v, want {%q, %q}", auth, tc.wantUser, tc.wantPro)
+			}
+		})
+	}
+}
+
 // newTestMirror builds a Mirror with fresh temp dirs for its bare repo and
 // working trees, pointed at the local source repo src.
 func newTestMirror(t *testing.T, src string) *Mirror {
 	t.Helper()
-	return NewMirror(t.TempDir(), t.TempDir(), src, "", 0) // 0: fetch bounded only by ctx
+	return NewMirror(t.TempDir(), t.TempDir(), src, nil, 0) // nil token: anonymous; 0: fetch bounded only by ctx
 }
 
 func read(dir, rel string) (string, bool) {

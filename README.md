@@ -231,13 +231,16 @@ scheme://[host]/path
 ## Authentication
 
 The forge token (`KONFLATE_TOKEN`) is **optional** and used only for forge read
-auth — it raises the API rate limit and unlocks private repositories. It gates
-no behaviour: konflate works the same with or without it.
+auth — it authenticates both the API calls and the renderer's `git` clone/fetch,
+raising the API rate limit and unlocking private repositories. It gates no
+behaviour: konflate works the same with or without it.
 
 On GitHub, configuring a **GitHub App** (`KONFLATE_APP_CLIENT_ID` +
 `KONFLATE_APP_PRIVATE_KEY`) authenticates reads too — its installation token is
-konflate's forge identity for the API as well as for [write-back](#write-back) —
-so an App-only instance needs no separate `KONFLATE_TOKEN`.
+konflate's forge identity for the API, the renderer's `git` clone/fetch, and
+[write-back](#write-back) alike (minted fresh, never a standing PAT) — so an
+App-only instance clones private repos and lifts the rate limit with no separate
+`KONFLATE_TOKEN`.
 
 The inbound endpoints are gated solely by **their own secret**, independent of
 the token:
@@ -495,13 +498,16 @@ reverse proxy / ingress and rate-limit there.
 
 Served on the separate operational port (keep it off your public ingress):
 
-| Metric                           | Type      | Meaning                                |
-| -------------------------------- | --------- | -------------------------------------- |
-| `konflate_diff_jobs_total`       | counter   | Completed renders, by `result`.        |
-| `konflate_diff_duration_seconds` | histogram | Render wall-clock (clone + 2 renders). |
-| `konflate_diff_queue_depth`      | gauge     | PRs queued or rendering.               |
-| `konflate_pull_requests`         | gauge     | Open PRs tracked.                      |
-| `konflate_http_requests_total`   | counter   | Main-server requests, by status class. |
+| Metric                                              | Type      | Meaning                                                     |
+| --------------------------------------------------- | --------- | ----------------------------------------------------------- |
+| `konflate_diff_jobs_total`                          | counter   | Completed renders, by `result`.                             |
+| `konflate_diff_duration_seconds`                    | histogram | Render wall-clock (clone + 2 renders).                      |
+| `konflate_diff_queue_depth`                         | gauge     | PRs queued or rendering.                                    |
+| `konflate_pull_requests`                            | gauge     | Open PRs tracked.                                           |
+| `konflate_http_requests_total`                      | counter   | Main-server requests, by status class.                      |
+| `konflate_forge_list_errors_total`                  | counter   | Failed PR-list polls, by `reason` (`rate_limited`/`error`). |
+| `konflate_forge_rate_limited`                       | gauge     | `1` when the last PR-list poll hit a rate limit, else `0`.  |
+| `konflate_forge_rate_limit_reset_timestamp_seconds` | gauge     | Unix time the rate limit resets (`0` when not limited).     |
 
 Plus the standard Go runtime and process collectors.
 

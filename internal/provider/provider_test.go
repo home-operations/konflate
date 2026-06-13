@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v88/github"
 
@@ -192,5 +193,71 @@ func TestNewGitHubReadAuth(t *testing.T) {
 	}
 	if _, ok := anon.client.Client().Transport.(*installTransport); ok {
 		t.Error("read client without App creds must not use App installation auth")
+	}
+}
+
+// TestGitTokenSource covers the renderer's git credential selection, which must
+// mirror the read client's: a configured GitHub App yields a (lazy) token source so
+// the clone authenticates as the same installation reads use, a PAT is returned
+// verbatim (the x-access-token password), and with neither the source is anonymous.
+func TestGitTokenSource(t *testing.T) {
+	t.Parallel()
+	gh := config.ForgeURI{Kind: config.ForgeGitHub, RepoPath: "acme/web"}
+
+	// PAT: returned verbatim.
+	src, err := GitTokenSource(&config.Config{Forge: gh, Token: "pat-123"})
+	if err != nil {
+		t.Fatalf("GitTokenSource (pat): %v", err)
+	}
+	if tok, err := src(context.Background()); err != nil || tok != "pat-123" {
+		t.Errorf("pat source = (%q, %v), want (\"pat-123\", nil)", tok, err)
+	}
+
+	// Neither credential: anonymous (empty token ⇒ the mirror clones without auth).
+	src, err = GitTokenSource(&config.Config{Forge: gh})
+	if err != nil {
+		t.Fatalf("GitTokenSource (anon): %v", err)
+	}
+	if tok, err := src(context.Background()); err != nil || tok != "" {
+		t.Errorf("anon source = (%q, %v), want (\"\", nil)", tok, err)
+	}
+
+	// GitHub App: a token source is built (no network until it's invoked).
+	src, err = GitTokenSource(&config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: testRSAKeyPEM(t)})
+	if err != nil {
+		t.Fatalf("GitTokenSource (app): %v", err)
+	}
+	if src == nil {
+		t.Error("App-configured git token source must not be nil")
+	}
+	// A malformed App key is rejected here — the App branch parses it, the static
+	// PAT path never would, so this also proves App config takes the App branch.
+	if _, err := GitTokenSource(&config.Config{Forge: gh, AppClientID: "Iv1", AppPrivateKey: "not-a-pem-key"}); err == nil {
+		t.Error("GitTokenSource must reject a malformed App private key")
+	}
+}
+
+// TestRateLimit covers the rate-limit classifier the server uses to turn a failed
+// PR-list into a time-bounded UI status: GitHub's primary RateLimitError carries
+// the reset time, the secondary AbuseRateLimitError a retry-after, and both are
+// recognized through the wrapped error chain; an ordinary error is not a limit.
+func TestRateLimit(t *testing.T) {
+	t.Parallel()
+	reset := time.Now().Add(11 * time.Minute).Truncate(time.Second)
+	wrapped := fmt.Errorf("github: list PRs: %w", &github.RateLimitError{
+		Rate:    github.Rate{Reset: github.Timestamp{Time: reset}},
+		Message: "API rate limit exceeded",
+	})
+	if got, ok := RateLimit(wrapped); !ok || !got.Equal(reset) {
+		t.Errorf("RateLimit(primary) = (%v, %v); want (%v, true)", got, ok, reset)
+	}
+
+	after := 30 * time.Second
+	if _, ok := RateLimit(fmt.Errorf("x: %w", &github.AbuseRateLimitError{RetryAfter: &after})); !ok {
+		t.Error("RateLimit(secondary/abuse) ok = false; want true")
+	}
+
+	if _, ok := RateLimit(errors.New("connection refused")); ok {
+		t.Error("RateLimit(plain error) ok = true; want false")
 	}
 }

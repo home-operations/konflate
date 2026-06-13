@@ -19,6 +19,7 @@
   import List from './lib/List.svelte';
   import Review from './lib/Review.svelte';
   import Palette from './lib/Palette.svelte';
+  import SyncBanner from './lib/SyncBanner.svelte';
   import type { Meta } from './lib/types';
 
   onMount(() => {
@@ -115,6 +116,8 @@
       </button>
     </div>
   </header>
+
+  <SyncBanner />
 
   {#if router.route.name === 'review'}
     <Review />

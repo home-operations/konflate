@@ -208,26 +208,40 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Contex
 // the read provider and the Writer use it, so an App-configured instance
 // authenticates its forge reads as well as its write-back.
 func newGitHubAppInstallClient(cfg *config.Config) (install, apps *github.Client, err error) {
-	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
+	it, err := newInstallTransport(cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
+		return nil, nil, err
 	}
-	// githubEnterpriseOpts points both clients at the GHES API base (nil ⇒ github.com).
-	hostOpts := githubEnterpriseOpts(cfg.Forge.Host)
-	apps, err = github.NewClient(append([]github.ClientOptionsFunc{
-		github.WithTransport(&appJWTTransport{base: http.DefaultTransport, clientID: cfg.AppClientID, key: key}),
-	}, hostOpts...)...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("github: App client: %w", err)
-	}
-	owner, repo := ownerRepo(cfg.Forge.RepoPath)
+	// githubEnterpriseOpts points the client at the GHES API base (nil ⇒ github.com).
 	install, err = github.NewClient(append([]github.ClientOptionsFunc{
-		github.WithTransport(&installTransport{base: http.DefaultTransport, apps: apps, owner: owner, repo: repo}),
-	}, hostOpts...)...)
+		github.WithTransport(it),
+	}, githubEnterpriseOpts(cfg.Forge.Host)...)...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("github: new App client: %w", err)
 	}
-	return install, apps, nil
+	return install, it.apps, nil
+}
+
+// newInstallTransport builds the App installation-token transport for the repo:
+// an App-JWT client (for installation lookup + token mint) wrapped in an
+// installTransport that mints, caches, and refreshes the installation token. It
+// backs the App-authenticated read client and the Writer (via
+// newGitHubAppInstallClient) and the renderer's git credential (via
+// GitTokenSource), so all three authenticate as the same App installation. No
+// network call happens until the token is first needed.
+func newInstallTransport(cfg *config.Config) (*installTransport, error) {
+	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
+	if err != nil {
+		return nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
+	}
+	apps, err := github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(&appJWTTransport{base: http.DefaultTransport, clientID: cfg.AppClientID, key: key}),
+	}, githubEnterpriseOpts(cfg.Forge.Host)...)...)
+	if err != nil {
+		return nil, fmt.Errorf("github: App client: %w", err)
+	}
+	owner, repo := ownerRepo(cfg.Forge.RepoPath)
+	return &installTransport{base: http.DefaultTransport, apps: apps, owner: owner, repo: repo}, nil
 }
 
 // appJWT mints a short-lived GitHub App JWT signed with the App's client id as the

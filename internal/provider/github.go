@@ -2,14 +2,38 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/go-github/v88/github"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
 )
+
+// RateLimit reports whether err is a forge rate-limit rejection and, if so, when
+// the limit resets — so the server can surface a clear, time-bounded status to the
+// UI rather than a generic failure. GitHub's SDK returns a typed
+// *github.RateLimitError (carrying the reset time) for the primary limit and
+// *github.AbuseRateLimitError (a retry-after) for secondary limits; both are
+// matched through the wrapped error chain. Non-GitHub forges and non-rate-limit
+// errors report false.
+func RateLimit(err error) (resetAt time.Time, ok bool) {
+	var rl *github.RateLimitError
+	if errors.As(err, &rl) {
+		return rl.Rate.Reset.Time, true
+	}
+	var ab *github.AbuseRateLimitError
+	if errors.As(err, &ab) {
+		if ab.RetryAfter != nil {
+			return time.Now().Add(*ab.RetryAfter), true
+		}
+		return time.Time{}, true
+	}
+	return time.Time{}, false
+}
 
 type githubProvider struct {
 	client      *github.Client

@@ -181,7 +181,22 @@ export interface DiffEnvelope {
 export type WSEvent =
   | { type: 'status'; number: number; status: JobStatus; error?: string }
   | { type: 'removed'; number: number }
-  | { type: 'checks'; number: number; checks: CheckRollup };
+  | { type: 'checks'; number: number; checks: CheckRollup }
+  | { type: 'sync'; sync: SyncStatus };
+
+// Why a forge poll failed: a rate limit shows a countdown + token hint, a generic
+// error doesn't. Mirrors api.SyncReason.
+export type SyncReason = 'rate_limited' | 'error';
+
+// Forge-polling health. Surfaced on Meta (initial load) and pushed as a "sync"
+// WSEvent (live); the UI shows a banner when ok is false instead of a misleading
+// empty PR list.
+export interface SyncStatus {
+  ok: boolean;
+  reason?: SyncReason;
+  message?: string; // human-readable detail for the banner
+  retryAt?: number; // Unix seconds the rate limit resets (rate_limited only)
+}
 
 export interface Meta {
   forge: string;
@@ -189,4 +204,5 @@ export interface Meta {
   repoUrl?: string; // the repo's web page on its forge (the header links to it)
   version?: string; // konflate build version ("dev" for local builds)
   refreshIntervalSeconds: number;
+  sync?: SyncStatus; // present (ok=false) only when the last forge poll failed
 }
