@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.19](https://github.com/home-operations/konflate/compare/0.2.18...0.2.19) (2026-06-13)
+
+
+### Features
+
+* paginate the PR list (default 10/page, configurable, deep-linkable) ([#222](https://github.com/home-operations/konflate/issues/222)) ([ecb38cc](https://github.com/home-operations/konflate/commit/ecb38cc3ee2098ad6c2bbcb35e09bd4c0097b472))
+
 ## [0.2.18](https://github.com/home-operations/konflate/compare/0.2.17...0.2.18) (2026-06-13)
 
 
