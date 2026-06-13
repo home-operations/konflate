@@ -141,8 +141,8 @@ Kubernetes: `>=1.25.0-0`
 | startupProbe | object | `{}` | Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it. |
 | terminationGracePeriodSeconds | int | `30` | Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains. |
 | tests.image.pullPolicy | string | `"IfNotPresent"` | `helm test` image pull policy. |
-| tests.image.repository | string | `"mirror.gcr.io/busybox"` | `helm test` pod image; needs a shell with wget (konflate's own image is distroless). |
-| tests.image.tag | string | `"1.38.0@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
+| tests.image.repository | string | `"ghcr.io/home-operations/busybox"` | `helm test` pod image; needs a shell with wget (konflate's own image is distroless). |
+| tests.image.tag | string | `"1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
 | tolerations | list | `[]` | Tolerations for pod scheduling. |
 | volumeMounts | list | `[]` | Additional volume mounts on the container. |
 | volumes | list | `[]` | Additional volumes on the Deployment. |
