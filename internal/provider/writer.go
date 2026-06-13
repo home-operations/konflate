@@ -175,33 +175,13 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Cont
 	}
 }
 
-// newGitHubAppClient authenticates as a GitHub App installation: it signs a
-// short-lived App JWT (with the App's client id as the issuer — GitHub accepts and
-// now recommends the client id over the numeric app id), mints installation tokens
-// from it, and refreshes them before expiry. The installation is discovered from
-// the repo on first use, so there's no installation id to configure (like
-// actions/create-github-app-token). Two go-github clients share the App JWT: an
-// App-level one (installation lookup, token mint, identity) and the write client,
-// whose transport injects the minted installation token.
+// newGitHubAppClient authenticates write-back as a GitHub App installation: it
+// builds the installation-token client (see newGitHubAppInstallClient) and
+// resolves konflate's comment-author identity from the App itself.
 func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Context) (string, error), error) {
-	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
+	client, apps, err := newGitHubAppInstallClient(cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
-	}
-	// githubEnterpriseOpts points both clients at the GHES API base (nil ⇒ github.com).
-	hostOpts := githubEnterpriseOpts(cfg.Forge.Host)
-	apps, err := github.NewClient(append([]github.ClientOptionsFunc{
-		github.WithTransport(&appJWTTransport{base: http.DefaultTransport, clientID: cfg.AppClientID, key: key}),
-	}, hostOpts...)...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("github: App client: %w", err)
-	}
-	owner, repo := ownerRepo(cfg.Forge.RepoPath)
-	client, err := github.NewClient(append([]github.ClientOptionsFunc{
-		github.WithTransport(&installTransport{base: http.DefaultTransport, apps: apps, owner: owner, repo: repo}),
-	}, hostOpts...)...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("github: new App client: %w", err)
+		return nil, nil, err
 	}
 	// konflate's comments are authored by the App's bot user, "<app-slug>[bot]";
 	// resolve the slug from the App itself (App-JWT auth) so comment write-back only
@@ -215,6 +195,39 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Contex
 		return app.GetSlug() + "[bot]", nil
 	}
 	return client, self, nil
+}
+
+// newGitHubAppInstallClient builds a go-github client authenticated as the App's
+// installation on the repo: it signs a short-lived App JWT (with the App's client
+// id as the issuer — GitHub accepts and now recommends the client id over the
+// numeric app id), mints installation tokens from it, and refreshes them before
+// expiry. The installation is discovered from the repo on first use, so there's no
+// installation id to configure (like actions/create-github-app-token). It returns
+// the installation-token client (its transport injects the minted token) and the
+// App-level client (App-JWT auth: installation lookup, token mint, identity). Both
+// the read provider and the Writer use it, so an App-configured instance
+// authenticates its forge reads as well as its write-back.
+func newGitHubAppInstallClient(cfg *config.Config) (install, apps *github.Client, err error) {
+	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(cfg.AppPrivateKey))
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: parse App private key (KONFLATE_APP_PRIVATE_KEY): %w", err)
+	}
+	// githubEnterpriseOpts points both clients at the GHES API base (nil ⇒ github.com).
+	hostOpts := githubEnterpriseOpts(cfg.Forge.Host)
+	apps, err = github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(&appJWTTransport{base: http.DefaultTransport, clientID: cfg.AppClientID, key: key}),
+	}, hostOpts...)...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: App client: %w", err)
+	}
+	owner, repo := ownerRepo(cfg.Forge.RepoPath)
+	install, err = github.NewClient(append([]github.ClientOptionsFunc{
+		github.WithTransport(&installTransport{base: http.DefaultTransport, apps: apps, owner: owner, repo: repo}),
+	}, hostOpts...)...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: new App client: %w", err)
+	}
+	return install, apps, nil
 }
 
 // appJWT mints a short-lived GitHub App JWT signed with the App's client id as the

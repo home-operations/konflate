@@ -102,12 +102,14 @@ type Config struct {
 	WriteToken string `env:"KONFLATE_WRITE_TOKEN,unset"`
 
 	// GitHub App credentials — an alternative to WriteToken for GitHub only, and
-	// the preferred write credential there: konflate authenticates as the App and
-	// mints short-lived, narrowly-scoped installation tokens (a revocable bot
-	// identity rather than a standing PAT). AppClientID is the App's client id,
-	// AppPrivateKey its PEM private key (unset from the environment once read, see
-	// Token). The installation is resolved automatically from the repo, so there's
-	// no installation id to configure.
+	// the preferred credential there: konflate authenticates as the App and mints
+	// short-lived, narrowly-scoped installation tokens (a revocable bot identity
+	// rather than a standing PAT). The installation token authenticates konflate's
+	// forge reads (lifting the anonymous API rate limit and reaching private repos)
+	// as well as write-back, so an App-only instance needs no separate Token.
+	// AppClientID is the App's client id, AppPrivateKey its PEM private key (unset
+	// from the environment once read, see Token). The installation is resolved
+	// automatically from the repo, so there's no installation id to configure.
 	AppClientID   string `env:"KONFLATE_APP_CLIENT_ID"`
 	AppPrivateKey string `env:"KONFLATE_APP_PRIVATE_KEY,unset"`
 
@@ -305,12 +307,13 @@ type Config struct {
 	Forge ForgeURI `env:"-"`
 }
 
-// Authenticated reports whether a forge token is set. The token is optional and
-// purely for forge read auth — it raises the API rate limit and unlocks private
-// repositories. It does not gate any feature: inbound endpoints are governed
-// solely by their own secrets (see WebhookEnabled / PushEnabled), so konflate
-// behaves the same with or without it.
-func (c *Config) Authenticated() bool { return c.Token != "" }
+// Authenticated reports whether konflate has forge read auth — a read token or a
+// GitHub App, whose installation token authenticates reads (see the GitHub read
+// provider) as well as write-back. It raises the API rate limit and unlocks
+// private repositories. It gates no feature: inbound endpoints are governed solely
+// by their own secrets (see WebhookEnabled / PushEnabled), so konflate behaves the
+// same with or without it.
+func (c *Config) Authenticated() bool { return c.Token != "" || c.AppConfigured() }
 
 // WebhookEnabled reports whether POST /hooks should be served: gated solely by a
 // configured webhook secret. Without the secret the endpoint returns 501, so a

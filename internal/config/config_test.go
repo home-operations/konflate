@@ -86,6 +86,33 @@ func TestWriteAccessors(t *testing.T) {
 	}
 }
 
+// TestAuthenticatedSources verifies forge read auth is recognized from either a
+// read token or a complete GitHub App (whose installation token authenticates
+// reads). A write-only PAT or a partial App config does not count.
+func TestAuthenticatedSources(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		cfg  Config
+		want bool
+	}{
+		{"no credential", Config{}, false},
+		{"read token", Config{Token: "tok"}, true},
+		{"complete app", Config{AppClientID: "Iv1", AppPrivateKey: "-----BEGIN KEY-----"}, true},
+		{"app id without key", Config{AppClientID: "Iv1"}, false},
+		{"app key without id", Config{AppPrivateKey: "-----BEGIN KEY-----"}, false},
+		{"write token only (not read auth)", Config{WriteToken: "wt"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.cfg.Authenticated(); got != tc.want {
+				t.Errorf("Authenticated() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoad_NoTokenIsValid(t *testing.T) {
 	// Only KONFLATE_REPO is required; absence of KONFLATE_TOKEN yields a valid
 	// (unauthenticated) config, not an error.
