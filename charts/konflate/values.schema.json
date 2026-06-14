@@ -60,12 +60,6 @@
           "title": "fetchTimeout",
           "type": "string"
         },
-        "gitDepth": {
-          "default": "",
-          "description": "Advanced: shallow-clone depth for the PR mirror. Empty/\"0\" = full history (the default and only safe value today; positive values are known-broken — see KONFLATE_GIT_DEPTH).",
-          "title": "gitDepth",
-          "type": "string"
-        },
         "helmRenderCacheMb": {
           "default": "",
           "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",

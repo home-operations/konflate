@@ -245,24 +245,6 @@ tests:
             name: KONFLATE_FETCH_TIMEOUT
             value: "30s"
 
-  - it: omits KONFLATE_GIT_DEPTH when gitDepth is empty (binary default)
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          any: true
-          content:
-            name: KONFLATE_GIT_DEPTH
-
-  - it: emits KONFLATE_GIT_DEPTH (incl. "0" for full history) when set
-    set:
-      config.gitDepth: "0"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: KONFLATE_GIT_DEPTH
-            value: "0"
-
   - it: omits KONFLATE_RERENDER_INTERVAL when rerenderInterval is empty (binary default)
     asserts:
       - notContains:
