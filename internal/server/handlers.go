@@ -525,6 +525,10 @@ func (s *Server) authorizedPush(r *http.Request) bool {
 // have left the open set. Runs at startup and once per RefreshInterval; a
 // verified webhook also calls it when the open-PR set may have changed.
 func (s *Server) refreshList(ctx context.Context) {
+	if reset, blocked := s.rateLimitedUntil(); blocked {
+		s.log.Debug("refresh: skipping list while rate-limited", "until", reset)
+		return
+	}
 	prs, err := s.prov.ListPRs(ctx)
 	s.noteSyncResult(err) // record forge-polling health (raises/clears the UI banner + metrics)
 	if err != nil {
@@ -579,6 +583,11 @@ func (s *Server) refreshList(ctx context.Context) {
 // the refresh — a forge that rate-limits the checks endpoint must not stop PRs
 // from listing.
 func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
+	if s.checksWouldExhaustBudget(len(prs)) {
+		s.log.Info("refresh: skipping checks pass to preserve forge rate budget", "prs", len(prs))
+		s.metrics.checksSkipped.Inc()
+		return
+	}
 	for _, pr := range prs {
 		rollup, err := s.prov.Checks(ctx, pr)
 		if err != nil {
@@ -598,6 +607,9 @@ func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
 // don't track) is a no-op — deliberately no relist, so a chatty CI can't trigger
 // a forge re-list per delivered event.
 func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
+	if _, blocked := s.rateLimitedUntil(); blocked {
+		return // in a rate-limit cooldown — a chatty CI must not draw more 403s
+	}
 	pr, ok := s.store.prByHeadSHA(sha)
 	if !ok {
 		return
@@ -611,6 +623,53 @@ func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
 		r := rollup
 		s.hub.broadcast(api.Event{Type: "checks", Number: pr.Number, Checks: &r})
 	}
+}
+
+// rateLimitedUntil reports whether the last forge poll hit a rate limit that has
+// not yet reset, and when it resets. While it holds, the poll skips the forge
+// entirely: a periodic tick or a webhook-triggered relist during the cooldown can
+// only draw more 403s and can't succeed before the reset. A rate limit with no
+// known reset time (RetryAt == 0) does not block, so konflate never wedges
+// forever on a forge that didn't say when the limit clears.
+func (s *Server) rateLimitedUntil() (reset time.Time, blocked bool) {
+	st := s.sync.status()
+	if st.OK || st.Reason != api.SyncRateLimited || st.RetryAt == 0 {
+		return time.Time{}, false
+	}
+	reset = time.Unix(st.RetryAt, 0)
+	if !s.store.now().Before(reset) {
+		return time.Time{}, false // already past the reset — let the next poll try
+	}
+	return reset, true
+}
+
+// checksReserve is the request headroom checksWouldExhaustBudget keeps unspent:
+// enough for the next poll's PR list and a few closed-PR reconciliations, so a
+// full checks pass never consumes the budget the cheaper, more important list
+// depends on.
+const checksReserve = 10
+
+// checksWouldExhaustBudget reports whether fetching every PR's CI rollup — two
+// forge calls each — would draw the remaining request budget below checksReserve.
+// It fires only when the provider can report a budget (GitHub) and that budget is
+// known; otherwise it returns false and the checks pass runs unchanged. This is
+// what lets an unauthenticated GitHub poll keep listing PRs rather than spend its
+// whole 60/hour allowance on check rollups: the list stays fresh and each PR's CI
+// pill simply keeps its last value until the budget recovers.
+func (s *Server) checksWouldExhaustBudget(n int) bool {
+	if n <= 0 {
+		return false
+	}
+	rb, ok := s.prov.(provider.RateBudgeter)
+	if !ok {
+		return false
+	}
+	remaining, known := rb.RateBudget()
+	if !known {
+		return false
+	}
+	const callsPerPR = 2 // GetCombinedStatus + ListCheckRunsForRef
+	return remaining < n*callsPerPR+checksReserve
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is

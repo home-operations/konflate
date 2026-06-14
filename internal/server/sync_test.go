@@ -121,11 +121,14 @@ func TestServer_SyncStatusSurfacing(t *testing.T) {
 		t.Errorf("forge_rate_limit_reset = %v, want %d", got, reset.Unix())
 	}
 
-	// The forge recovers: the next list succeeds, clearing the banner and gauge.
+	// The forge recovers: once the cooldown has passed, the next list succeeds and
+	// clears the banner and gauges. The rate-limit circuit breaker holds the poll
+	// during the cooldown, so advance the store clock past the reset before re-polling.
 	prov.mu.Lock()
 	prov.listErr = nil
 	prov.prs = []api.PR{{Number: 7, Open: true, HeadRef: "a", BaseRef: "main"}}
 	prov.mu.Unlock()
+	s.store.now = func() time.Time { return reset.Add(time.Minute) }
 	s.refreshList(s.runCtx)
 
 	// Decode into a fresh value: sync is omitempty, and Unmarshal won't clear a
