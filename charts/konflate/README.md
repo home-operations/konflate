@@ -53,6 +53,7 @@ Kubernetes: `>=1.25.0-0`
 | config.diffTimeout | string | `""` | Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances. |
 | config.extraEnv | list | `[]` | Extra raw env vars merged into the container (advanced). |
 | config.fetchTimeout | string | `""` | Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables. |
+| config.gitDepth | string | `""` | Advanced: shallow-clone depth for the PR mirror; konflate deepens on demand for a deeper merge-base, so diffs stay correct. Empty = default (50); "0" = full history. |
 | config.helmRenderCacheMb | string | `""` | Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables. |
 | config.helmTemplateCacheMb | string | `""` | Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables. |
 | config.logFormat | string | `"json"` | Log format: json or text. |

@@ -85,6 +85,51 @@ func buildRepo(t *testing.T) string {
 	return dir
 }
 
+// buildDeepRepo is buildRepo with `extra` extra commits piled on the default
+// branch after the fork, so the merge-base (C0) sits well behind the tip — beyond
+// a small shallow depth. A shallow seed therefore can't see it and must deepen to
+// recover it; the same assertMergeBaseTrees checks then verify the base side is
+// the merge-base (C0), not the (now much later) branch tip.
+func buildDeepRepo(t *testing.T, extra int) string {
+	t.Helper()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	write(t, dir, "app/config.yaml", "replicas: 3\n")
+	commit(t, wt, "C0: init")
+
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	feature := plumbing.NewBranchReferenceName("feature")
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(feature, head.Hash())); err != nil {
+		t.Fatal(err)
+	}
+
+	write(t, dir, "app/other.yaml", "x: 1\n")
+	commit(t, wt, "C1: main diverges")
+	for i := range extra {
+		write(t, dir, "app/filler.yaml", fmt.Sprintf("n: %d\n", i))
+		commit(t, wt, fmt.Sprintf("main advance %d", i))
+	}
+
+	if err := wt.Checkout(&git.CheckoutOptions{Branch: feature}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "app/config.yaml", "replicas: 5\n")
+	commit(t, wt, "C2: feature change")
+
+	return dir
+}
+
 // TestMirror_RepacksWhenPacksAccumulate verifies the mirror folds its packfiles
 // into one once they pile up past the threshold. go-git appends a pack per fetch
 // and never gc's them, so without the repack the bare repo would grow one pack
@@ -288,7 +333,7 @@ func TestMirror_AuthFor(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			m := NewMirror(t.TempDir(), t.TempDir(), "https://example.test/x.git", tc.token, 0)
+			m := NewMirror(t.TempDir(), t.TempDir(), "https://example.test/x.git", tc.token, 0, 0)
 			auth, err := m.authFor(context.Background())
 			switch {
 			case tc.wantErr:
@@ -309,10 +354,17 @@ func TestMirror_AuthFor(t *testing.T) {
 }
 
 // newTestMirror builds a Mirror with fresh temp dirs for its bare repo and
-// working trees, pointed at the local source repo src.
+// working trees, pointed at the local source repo src. Full history (depth 0).
 func newTestMirror(t *testing.T, src string) *Mirror {
 	t.Helper()
-	return NewMirror(t.TempDir(), t.TempDir(), src, nil, 0) // nil token: anonymous; 0: fetch bounded only by ctx
+	return newTestMirrorDepth(t, src, 0)
+}
+
+// newTestMirrorDepth is newTestMirror with an explicit shallow depth (0 = full).
+func newTestMirrorDepth(t *testing.T, src string, depth int) *Mirror {
+	t.Helper()
+	// nil token: anonymous; 0 fetchTimeout: bounded only by ctx.
+	return NewMirror(t.TempDir(), t.TempDir(), src, nil, 0, depth)
 }
 
 func read(dir, rel string) (string, bool) {
@@ -338,6 +390,25 @@ func assertMergeBaseTrees(t *testing.T, res *Result) {
 	if _, ok := read(res.BaseDir, "app/other.yaml"); ok {
 		t.Error("base tree contains other.yaml — diff is against main's tip, not the merge-base")
 	}
+}
+
+// TestMirror_ShallowDeepensToMergeBase verifies a shallow mirror still diffs
+// against the true merge-base. The repo piles 8 commits on the default branch
+// after the fork and the mirror is seeded at depth 2, so the merge-base lies well
+// beyond the initial shallow boundary: only the on-demand deepen in mergeBase can
+// recover it. If deepening failed, Trees would fall back to the branch tip and
+// the base tree would wrongly contain other.yaml — which assertMergeBaseTrees
+// rejects.
+func TestMirror_ShallowDeepensToMergeBase(t *testing.T) {
+	t.Parallel()
+	src := buildDeepRepo(t, 8)
+	m := newTestMirrorDepth(t, src, 2)
+	res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("Trees: %v", err)
+	}
+	t.Cleanup(res.Cleanup)
+	assertMergeBaseTrees(t, res)
 }
 
 // TestMirror_FetchScope verifies the per-fetch deadline: fetchTimeout bounds the

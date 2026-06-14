@@ -236,6 +236,7 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
 		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
 		{"MaxDiffResources", cfg.MaxDiffResources, 500},
+		{"GitDepth", cfg.GitDepth, 50},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s default = %d, want %d", c.name, c.got, c.want)
@@ -249,6 +250,32 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	}
 	if cfg.CacheTTL != 168*time.Hour {
 		t.Errorf("CacheTTL default = %v, want 168h", cfg.CacheTTL)
+	}
+}
+
+// TestLoad_GitDepth covers the shallow-clone depth knob: a positive value passes
+// through, and a negative one (meaningless to git) is clamped to 0 (full history)
+// so it can't produce a malformed shallow fetch.
+func TestLoad_GitDepth(t *testing.T) {
+	for _, tc := range []struct {
+		set  string
+		want int
+	}{
+		{"10", 10},
+		{"0", 0},  // explicit full history
+		{"-5", 0}, // negative clamped to full
+	} {
+		t.Run(tc.set, func(t *testing.T) {
+			t.Setenv("KONFLATE_REPO", "github://owner/repo")
+			t.Setenv("KONFLATE_GIT_DEPTH", tc.set)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.GitDepth != tc.want {
+				t.Errorf("GitDepth(%s) = %d, want %d", tc.set, cfg.GitDepth, tc.want)
+			}
+		})
 	}
 }
 

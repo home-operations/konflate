@@ -128,6 +128,10 @@ spec:
             - name: KONFLATE_FETCH_TIMEOUT
               value: {{ tpl (toString .Values.config.fetchTimeout) $ | quote }}
             {{- end }}
+            {{- if ne (toString .Values.config.gitDepth) "" }}
+            - name: KONFLATE_GIT_DEPTH
+              value: {{ tpl (toString .Values.config.gitDepth) $ | quote }}
+            {{- end }}
             - name: KONFLATE_CLOSED_PR_MAX
               value: {{ .Values.config.closedPrMax | quote }}
             - name: KONFLATE_CLOSED_PR_TTL

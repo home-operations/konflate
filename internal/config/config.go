@@ -293,6 +293,18 @@ type Config struct {
 	// cap. <=0 disables it (the fetch is then bounded only by DiffTimeout).
 	FetchTimeout time.Duration `env:"KONFLATE_FETCH_TIMEOUT" envDefault:"2m"`
 
+	// GitDepth shallow-clones the PR mirror (the persistent bare repo konflate
+	// fetches PR heads and base branches into) to this many commits. A small depth
+	// makes the cold clone of a large repo dramatically cheaper — only recent
+	// history transfers, and peak memory drops with it — while konflate deepens
+	// automatically when a PR's merge-base lies further back, so the diff is still
+	// computed against the true merge-base. It truncates history, not tree content,
+	// so rendering is unaffected. The mirror persists on the cache volume, so this
+	// mainly bites on a fresh volume (first deploy, or a non-persistent cache). 0
+	// disables shallow (full history). Distinct from flate's per-source
+	// GitRepository clone depth.
+	GitDepth int `env:"KONFLATE_GIT_DEPTH" envDefault:"50"`
+
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and, per open PR, re-renders it if
 	// its last render is older than this. It's the safety net that keeps PRs
@@ -462,6 +474,11 @@ func Load() (*Config, error) {
 	// as-is: the refresh loop reads it as "disabled" (inbound triggers only).
 	if cfg.RefreshInterval > 0 && cfg.RefreshInterval < minRefreshInterval {
 		cfg.RefreshInterval = minRefreshInterval
+	}
+	// A negative depth is meaningless to git; treat it as 0 (full history) so a
+	// stray value can't produce a malformed shallow fetch.
+	if cfg.GitDepth < 0 {
+		cfg.GitDepth = 0
 	}
 	if cfg.StatusCheckName == "" {
 		cfg.StatusCheckName = DefaultStatusCheckName
