@@ -51,6 +51,7 @@ func run() error {
 		"repo", cfg.Repo,
 		"forge", cfg.Forge.Kind,
 		"authenticated", cfg.Authenticated(),
+		"checks", cfg.ChecksEnabled(),
 		"port", cfg.Port,
 		"metrics_addr", cfg.MetricsAddr,
 		"diff_concurrency", cfg.MaxDiffConcurrency,

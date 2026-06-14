@@ -198,6 +198,13 @@ export interface SyncStatus {
   retryAt?: number; // Unix seconds the rate limit resets (rate_limited only)
 }
 
+// Features mirrors the backend's api.Features — which optional capabilities are
+// active. Forge-cost read features turn off on an anonymous instance, so the UI
+// hides what the backend won't feed.
+export interface Features {
+  checks: boolean; // forge CI-status polling + the check pill (off when anonymous)
+}
+
 export interface Meta {
   forge: string;
   repo: string;
@@ -205,4 +212,5 @@ export interface Meta {
   version?: string; // konflate build version ("dev" for local builds)
   refreshIntervalSeconds: number;
   sync?: SyncStatus; // present (ok=false) only when the last forge poll failed
+  features: Features; // instance capability gates the UI honors (see api.Features)
 }

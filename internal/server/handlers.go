@@ -57,6 +57,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, _ *http.Request) {
 		Version:                s.Version,
 		RefreshIntervalSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Sync:                   s.metaSync(),
+		Features:               api.Features{Checks: s.cfg.ChecksEnabled()},
 	})
 }
 
@@ -583,6 +584,9 @@ func (s *Server) refreshList(ctx context.Context) {
 // the refresh — a forge that rate-limits the checks endpoint must not stop PRs
 // from listing.
 func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
+	if !s.cfg.ChecksEnabled() {
+		return // anonymous instance: CI-status polling is off (Config.ChecksEnabled)
+	}
 	if s.checksWouldExhaustBudget(len(prs)) {
 		s.log.Info("refresh: skipping checks pass to preserve forge rate budget", "prs", len(prs))
 		s.metrics.checksSkipped.Inc()
@@ -607,6 +611,9 @@ func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
 // don't track) is a no-op — deliberately no relist, so a chatty CI can't trigger
 // a forge re-list per delivered event.
 func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
+	if !s.cfg.ChecksEnabled() {
+		return // anonymous instance: CI-status polling is off (Config.ChecksEnabled)
+	}
 	if _, blocked := s.rateLimitedUntil(); blocked {
 		return // in a rate-limit cooldown — a chatty CI must not draw more 403s
 	}
@@ -652,10 +659,11 @@ const checksReserve = 10
 // checksWouldExhaustBudget reports whether fetching every PR's CI rollup — two
 // forge calls each — would draw the remaining request budget below checksReserve.
 // It fires only when the provider can report a budget (GitHub) and that budget is
-// known; otherwise it returns false and the checks pass runs unchanged. This is
-// what lets an unauthenticated GitHub poll keep listing PRs rather than spend its
-// whole 60/hour allowance on check rollups: the list stays fresh and each PR's CI
-// pill simply keeps its last value until the budget recovers.
+// known; otherwise it returns false and the checks pass runs unchanged. With
+// checks off entirely on an anonymous instance (refreshChecks returns early — see
+// Config.ChecksEnabled), this is a safety net for an authenticated instance with a
+// very large open-PR set: the list stays fresh and each PR's CI pill keeps its
+// last value rather than the list itself starting to fail.
 func (s *Server) checksWouldExhaustBudget(n int) bool {
 	if n <= 0 {
 		return false

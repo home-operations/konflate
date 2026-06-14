@@ -43,7 +43,7 @@
       </div>
       <div class="review-title">
         <span class="rt-name"><Breakable text={pr?.title ?? ''} /></span>
-        {#if pr?.checks}<Check checks={pr.checks} size={15} />{/if}
+        {#if store.meta?.features?.checks && pr?.checks}<Check checks={pr.checks} size={15} />{/if}
         <div class="rt-meta">
           {#if pr}
             <span class="rt-tag rt-author"><Avatar src={pr.authorAvatar} size={16} /> {pr.author}</span>
