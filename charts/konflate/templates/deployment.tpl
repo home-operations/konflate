@@ -15,6 +15,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "konflate.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   # konflate keeps PR/diff state in memory, so run a single instance and replace
