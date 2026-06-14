@@ -398,6 +398,10 @@ func (w *githubWriter) ChecksSupported() bool { return w.app }
 // CheckRun creates konflate's Check Run on the PR head, or updates the existing one
 // for that head SHA in place (found by the check name) so a re-render of the same
 // commit refreshes a single check rather than stacking duplicates.
+//
+// Both posts pin started_at = completed_at = now: konflate renders and then posts a
+// single terminal result (there is no in_progress phase), so the run has no real
+// elapsed time and GitHub should display none.
 func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult) error {
 	completed, now := "completed", github.Timestamp{Time: time.Now()}
 	output := &github.CheckRunOutput{Title: &res.Title, Summary: &res.Summary}
@@ -407,14 +411,32 @@ func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult)
 		return err
 	}
 	if id != 0 {
-		_, resp, err := w.client.Checks.UpdateCheckRun(ctx, w.owner, w.repo, id, github.UpdateCheckRunOptions{
-			Name:        res.Name,
-			Status:      &completed,
-			Conclusion:  &res.Conclusion,
-			CompletedAt: &now,
-			DetailsURL:  strOrNil(res.DetailsURL),
-			Output:      output,
-		})
+		// go-github's UpdateCheckRunOptions can't carry started_at, but the REST API
+		// accepts it and we must resend it: otherwise GitHub keeps the run's original
+		// started_at while completed_at advances on each re-render, showing a bogus,
+		// ever-growing "Completed in Nm". Hand-build the PATCH the typed helper would
+		// send (same URL and preview Accept header), plus started_at.
+		body := struct {
+			github.UpdateCheckRunOptions
+			StartedAt *github.Timestamp `json:"started_at,omitempty"`
+		}{
+			UpdateCheckRunOptions: github.UpdateCheckRunOptions{
+				Name:        res.Name,
+				Status:      &completed,
+				Conclusion:  &res.Conclusion,
+				CompletedAt: &now,
+				DetailsURL:  strOrNil(res.DetailsURL),
+				Output:      output,
+			},
+			StartedAt: &now,
+		}
+		req, err := w.client.NewRequest(ctx, http.MethodPatch,
+			fmt.Sprintf("repos/%s/%s/check-runs/%d", w.owner, w.repo, id), body)
+		if err != nil {
+			return fmt.Errorf("github: update check run #%d: %w", pr.Number, err)
+		}
+		req.Header.Set("Accept", "application/vnd.github.antiope-preview+json")
+		resp, err := w.client.Do(req, nil)
 		if err != nil {
 			return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: update check run #%d: %w", pr.Number, err))
 		}
@@ -425,6 +447,7 @@ func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult)
 		HeadSHA:     pr.HeadSHA,
 		Status:      &completed,
 		Conclusion:  &res.Conclusion,
+		StartedAt:   &now,
 		CompletedAt: &now,
 		DetailsURL:  strOrNil(res.DetailsURL),
 		Output:      output,
