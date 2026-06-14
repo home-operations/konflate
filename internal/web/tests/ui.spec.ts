@@ -8,6 +8,7 @@ const defaultMeta: Meta = {
   repoUrl: 'https://github.com/acme/home-ops',
   version: '1.2.3',
   refreshIntervalSeconds: 1800,
+  features: { checks: true }, // authenticated instance: CI checks shown
 };
 
 // Stub the konflate API (and silence the websocket) so the UI renders
@@ -36,6 +37,19 @@ test('PR list shows the forge CI check status per PR (green / amber / red)', asy
   // meta row among the signal badges.
   await expect(card(142).locator('.card-top .check-success')).toBeVisible();
   await expect(card(142).locator('.card-meta .check')).toHaveCount(0);
+});
+
+test('anonymous instance hides forge CI checks (features.checks=false)', async ({ page }) => {
+  // No forge auth server-side ⇒ meta.features.checks is false ⇒ konflate doesn't
+  // poll CI status, and the UI hides the check pill it would otherwise show even
+  // if a rollup were present (see api.Features).
+  await stubApi(page, { ...defaultMeta, features: { checks: false } });
+  await page.goto('/');
+  const card = (n: number) => page.locator(`.card-shell[data-pr="${n}"]`);
+  await card(142).waitFor();
+  // The fixtures carry check rollups on these PRs, but with the feature off none
+  // of the pills render anywhere.
+  await expect(page.locator('.check')).toHaveCount(0);
 });
 
 test('list → review → single-page flow', async ({ page }) => {
@@ -480,7 +494,7 @@ test('keyboard: j steps from Summary into resources, o returns to Summary', asyn
 });
 
 test('auto-update indicator reflects the configured interval, no refresh button', async ({ page }) => {
-  await stubApi(page, { forge: 'forgejo', repo: 'me/home-ops', refreshIntervalSeconds: 600 });
+  await stubApi(page, { forge: 'forgejo', repo: 'me/home-ops', refreshIntervalSeconds: 600, features: { checks: true } });
   await page.goto('/');
   await expect(page.locator('.actions .auto')).toContainText('10m');
   await expect(page.locator('.actions .btn', { hasText: 'Refresh' })).toHaveCount(0);

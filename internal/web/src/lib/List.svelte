@@ -376,7 +376,7 @@
         <div class="card-top">
         <span class="dot {pr.hidden ? 'dot-hidden' : pr.open ? `dot-${pr.status}` : 'dot-merged'}"></span>
         <span class="card-title"><Breakable text={pr.title} /></span>
-        {#if pr.checks}<Check checks={pr.checks} />{/if}
+        {#if store.meta?.features?.checks && pr.checks}<Check checks={pr.checks} />{/if}
       </div>
       <div class="card-meta">
         <span class="card-author"><Avatar src={pr.authorAvatar} size={15} /> {pr.author || 'unknown'}</span>

@@ -1495,3 +1495,44 @@ func TestRefreshList_RateLimitCircuitBreaker(t *testing.T) {
 		})
 	}
 }
+
+// TestRefreshChecks_DisabledWhenAnonymous verifies the read-side CI-status poll is
+// off on an anonymous instance (Config.ChecksEnabled) — the dominant per-poll forge
+// cost, two calls per PR — and runs as normal once a token is configured.
+func TestRefreshChecks_DisabledWhenAnonymous(t *testing.T) {
+	prs := []api.PR{{Number: 1, HeadSHA: "a"}, {Number: 2, HeadSHA: "b"}}
+
+	anon := &fakeProvider{prs: prs}
+	newTestServer(t, ghCfg(""), anon, okEngine()).refreshList(context.Background())
+	if _, checks := anon.callCounts(); checks != 0 {
+		t.Errorf("anonymous: Checks calls = %d, want 0 (CI-status polling must be off)", checks)
+	}
+
+	authed := &fakeProvider{prs: prs}
+	newTestServer(t, ghCfg("tok"), authed, okEngine()).refreshList(context.Background())
+	if _, checks := authed.callCounts(); checks != len(prs) {
+		t.Errorf("authenticated: Checks calls = %d, want %d (CI status polled per PR)", checks, len(prs))
+	}
+}
+
+// TestMeta_FeaturesReflectAuth verifies /api/meta surfaces the checks feature gate
+// so the UI hides what the backend won't feed: off when anonymous, on when authed.
+func TestMeta_FeaturesReflectAuth(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+		want  bool
+	}{
+		{"anonymous", "", false},
+		{"authenticated", "tok", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t, ghCfg(tc.token), &fakeProvider{}, okEngine())
+			var meta api.Meta
+			mustJSON(t, do(s.mainHandler(), "GET", "/api/meta", nil, nil), &meta)
+			if meta.Features.Checks != tc.want {
+				t.Errorf("meta.Features.Checks = %v, want %v", meta.Features.Checks, tc.want)
+			}
+		})
+	}
+}

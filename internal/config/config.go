@@ -326,10 +326,20 @@ type Config struct {
 // Authenticated reports whether konflate has forge read auth — a read token or a
 // GitHub App, whose installation token authenticates reads (see the GitHub read
 // provider) as well as write-back. It raises the API rate limit and unlocks
-// private repositories. It gates no feature: inbound endpoints are governed solely
-// by their own secrets (see WebhookEnabled / PushEnabled), so konflate behaves the
-// same with or without it.
+// private repositories. It gates one read feature — CI-status checks, too costly
+// to poll on the anonymous rate limit (see ChecksEnabled); inbound endpoints are
+// otherwise governed solely by their own secrets (see WebhookEnabled /
+// PushEnabled).
 func (c *Config) Authenticated() bool { return c.Token != "" || c.AppConfigured() }
+
+// ChecksEnabled reports whether konflate polls and shows each PR's forge CI
+// status — the red/amber/green check pill in the list and review header. It
+// rides on Authenticated: polling every open PR's status costs two forge calls
+// per PR per refresh, which an anonymous instance can't afford on the low
+// unauthenticated rate limit, so checks stay off until a token (or App) is
+// configured. This is the read side — distinct from StatusChecksEnabled, which
+// writes a commit status back to the forge.
+func (c *Config) ChecksEnabled() bool { return c.Authenticated() }
 
 // WebhookEnabled reports whether POST /hooks should be served: gated solely by a
 // configured webhook secret. Without the secret the endpoint returns 501, so a

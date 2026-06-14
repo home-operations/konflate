@@ -100,6 +100,22 @@ type Meta struct {
 	// PR-list attempt failed, so the UI can show a banner instead of a misleading
 	// empty list. Omitted when healthy.
 	Sync *SyncStatus `json:"sync,omitempty"`
+	// Features reports which optional capabilities are active, so the UI gates the
+	// same features the backend has turned off (see [Features]).
+	Features Features `json:"features"`
+}
+
+// Features reports which optional, instance-dependent capabilities are active.
+// It rides on [Meta] so the front end gates the same features the backend does:
+// forge-cost read features auto-disable when konflate is anonymous (see the
+// config's Authenticated), and showing a control the backend won't feed is just
+// noise. To add a gate: a bool here, populate it from a config accessor where
+// Meta is built, and mirror it in the UI's Meta type.
+type Features struct {
+	// Checks is forge CI-status polling + display (the check pill). Off when
+	// anonymous — two forge calls per PR per poll would blow the unauthenticated
+	// rate limit.
+	Checks bool `json:"checks"`
 }
 
 // Event is a websocket message announcing a change to a PR's diff job, so the

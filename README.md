@@ -239,12 +239,15 @@ auth — it authenticates both the API calls and the renderer's `git` clone/fetc
 raising the API rate limit and unlocking private repositories. It gates no
 behaviour: konflate works the same with or without it.
 
-Without it, an unauthenticated GitHub instance shares the low anonymous rate
-limit (60 req/hour). konflate protects the PR list first: when the remaining
-budget runs low it defers the per-PR CI-status pass — the list stays current and
-the red/amber/green pills keep their last value — rather than exhausting the
-limit and failing the list outright. A token raises the limit so the pills stay
-fresh too.
+Without it, an unauthenticated instance shares the forge's low anonymous rate
+limit (60 req/hour on GitHub). So an anonymous instance **disables forge CI-status
+checks** entirely — polling every open PR's status is two forge calls per PR per
+refresh, which would blow that limit and start failing the PR list itself — and
+the red/amber/green check pill is hidden in the UI. Everything else (rendered
+diffs, blast radius, image changes, cautions) is unaffected. Configure a token or
+GitHub App and the checks come back, on the raised rate limit. The active feature
+gates are surfaced on `/api/meta` (see `api.Features`) so the UI shows only what
+the backend feeds.
 
 On GitHub, configuring a **GitHub App** (`KONFLATE_APP_CLIENT_ID` +
 `KONFLATE_APP_PRIVATE_KEY`) authenticates reads too — its installation token is
