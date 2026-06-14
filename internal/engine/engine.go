@@ -189,6 +189,9 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	result.BlastRadius = blastRadius(seeds, head.Result.DependsOn)
 	result.Warnings = append(result.Warnings, danglingDependsOn(
 		parentSet(base.Result.Manifests), parentSet(head.Result.Manifests), head.Result.DependsOn)...)
+	// Surface HelmReleases whose values the bumped chart no longer defines (flate's
+	// WarnStaleValues), newly stranded by this PR — see staleValues.
+	result.Warnings = append(result.Warnings, staleValues(base.Result.Warnings, head.Result.Warnings)...)
 	return result, nil
 }
 

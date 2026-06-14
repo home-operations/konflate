@@ -170,3 +170,55 @@ func danglingDependsOn(
 	slices.SortFunc(out, func(a, b api.Warning) int { return cmp.Compare(a.Resource, b.Resource) })
 	return out
 }
+
+// staleValues surfaces flate's WarnStaleValues advisories as cautions: a
+// HelmRelease sets top-level values the chart's templates no longer read — a key
+// the chart removed or renamed, whose override now silently does nothing. It diffs
+// head against base so only values *this PR* newly strands are flagged, not a
+// pre-existing dead override (flate renders changed-only, so the advisories are
+// already scoped to the PR's closure). flate v0.4.6+.
+func staleValues(base, head []manifest.Warning) []api.Warning {
+	wasStale := map[manifest.NamedResource]map[string]bool{}
+	for _, w := range base {
+		if w.Category != manifest.WarnStaleValues {
+			continue
+		}
+		keys := wasStale[w.Resource]
+		if keys == nil {
+			keys = map[string]bool{}
+			wasStale[w.Resource] = keys
+		}
+		for _, k := range w.Detail {
+			keys[k] = true
+		}
+	}
+	var out []api.Warning
+	for _, w := range head {
+		if w.Category != manifest.WarnStaleValues {
+			continue
+		}
+		fresh := make([]string, 0, len(w.Detail))
+		for _, k := range w.Detail {
+			if !wasStale[w.Resource][k] {
+				fresh = append(fresh, k)
+			}
+		}
+		if len(fresh) == 0 {
+			continue // every stale key here was already stale at the base — not this PR's doing
+		}
+		slices.Sort(fresh)
+		noun := "values"
+		if len(fresh) == 1 {
+			noun = "a value"
+		}
+		out = append(out, api.Warning{
+			Level:    api.LevelCaution,
+			Rule:     "stale-helm-values",
+			Resource: parentLabel(w.Resource),
+			Detail: fmt.Sprintf("sets %s the chart no longer defines (%s) — the override has no effect",
+				noun, strings.Join(fresh, ", ")),
+		})
+	}
+	slices.SortFunc(out, func(a, b api.Warning) int { return cmp.Compare(a.Resource, b.Resource) })
+	return out
+}
