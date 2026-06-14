@@ -74,7 +74,7 @@ type Mirror struct {
 	// history, NOT tree content — every fetched commit still carries its complete
 	// tree, so extraction and rendering are unaffected. The one thing history is
 	// needed for is the merge-base; when it lies deeper than depth, Trees deepens
-	// on demand (see mergeBase). <=0 fetches full history (the original behaviour).
+	// on demand (see resolveMergeBase). <=0 fetches full history (original behaviour).
 	depth int
 
 	// mu serializes each render's fetch AND its tree extraction as one critical
@@ -283,23 +283,23 @@ func (m *Mirror) fetchLocked(
 	if err != nil {
 		return nil, nil, fmt.Errorf("gitclone: base %q: %w", baseRef, err)
 	}
-	mergeBase, err = m.mergeBase(ctx, repo, auth, headRef, baseRef, head, base)
+	mergeBase, err = m.resolveMergeBase(ctx, repo, auth, headRef, baseRef, head, base)
 	if err != nil {
 		return nil, nil, err
 	}
 	return head, mergeBase, nil
 }
 
-// mergeBase returns the GitHub-style merge-base of the PR head and base branch —
-// the commit they share — which is the base side of the diff, so commits that
-// landed on the target branch after the PR opened don't pollute it. On a shallow
-// mirror the common ancestor can lie beyond the fetched history; when no
+// resolveMergeBase returns the GitHub-style merge-base of the PR head and base
+// branch — the commit they share — which is the base side of the diff, so commits
+// that landed on the target branch after the PR opened don't pollute it. On a
+// shallow mirror the common ancestor can lie beyond the fetched history; when no
 // merge-base is found it deepens both refs and retries, escalating the depth
 // until one resolves or history is complete, re-resolving the commits off the
 // now-deeper store each round. With full history (depth<=0) there is nothing to
 // deepen, so an absent merge-base means genuinely unrelated histories and it
 // falls back to the base tip — the original pre-shallow behaviour.
-func (m *Mirror) mergeBase(
+func (m *Mirror) resolveMergeBase(
 	ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth,
 	headRef, baseRef string, head, base *object.Commit,
 ) (*object.Commit, error) {
@@ -331,7 +331,7 @@ func (m *Mirror) mergeBase(
 
 // deepen re-fetches the base and head refs to depth — extending a shallow
 // mirror's history — and re-resolves both commits off the deeper object store,
-// so mergeBase can recompute a merge-base that lay beyond the previous boundary.
+// so resolveMergeBase can recompute one that lay beyond the previous boundary.
 func (m *Mirror) deepen(
 	ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth,
 	headRef, baseRef string, depth int,
@@ -354,7 +354,7 @@ func (m *Mirror) deepen(
 	return head, base, nil
 }
 
-// deepenSteps is the escalating fetch depths mergeBase tries when a merge-base
+// deepenSteps is the escalating fetch depths resolveMergeBase tries when a merge-base
 // lies beyond the configured shallow depth: a couple of multiples (a normal PR
 // resolves in one cheap deepen), then effectively-full so a long-lived branch
 // still resolves before the unrelated-histories fallback. fullDepth is larger
@@ -492,7 +492,7 @@ func (m *Mirror) openOrClone(ctx context.Context, baseRef string, auth *githttp.
 // accumulate any base branch or pull head a PR needs, regardless of the ref it
 // was seeded with, and overwrite a stale local copy after a force-push. depth
 // shallow-fetches to that many commits (0 ⇒ full); a larger depth on a ref
-// already present deepens it (how mergeBase recovers a deeper merge-base).
+// already present deepens it (how resolveMergeBase recovers a deeper merge-base).
 func fetchSpec(ctx context.Context, repo *git.Repository, auth *githttp.BasicAuth, src, dst string, depth int) error {
 	spec := gitconfig.RefSpec(fmt.Sprintf("+%s:%s", src, dst))
 	return repo.FetchContext(ctx, &git.FetchOptions{
