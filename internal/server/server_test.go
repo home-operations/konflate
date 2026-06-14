@@ -39,11 +39,17 @@ type fakeProvider struct {
 	listErr  error
 	listHook func()                  // optional seam invoked at the start of each ListPRs (set before use)
 	checks   map[int]api.CheckRollup // per-PR CI rollup Checks returns (zero value → none)
+
+	listCalls     int  // ListPRs invocations (read via callCounts)
+	checksCalls   int  // Checks invocations (read via callCounts)
+	rateRemaining int  // budget RateBudget reports — only when rateKnown
+	rateKnown     bool // false by default → budget-unaware, leaving the poll's guard inert
 }
 
 func (f *fakeProvider) Checks(_ context.Context, pr api.PR) (api.CheckRollup, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.checksCalls++
 	return f.checks[pr.Number], nil
 }
 
@@ -53,6 +59,7 @@ func (f *fakeProvider) ListPRs(context.Context) ([]api.PR, error) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.listCalls++
 	return f.prs, f.listErr
 }
 
@@ -100,6 +107,30 @@ func (f *fakeProvider) setDetail(pr api.PR) {
 		f.details = map[int]api.PR{}
 	}
 	f.details[pr.Number] = pr
+}
+
+// RateBudget implements provider.RateBudgeter. It reports a budget only after
+// setBudget; by default (rateKnown false) the fake is budget-unaware, so the
+// poll's budget guard stays inert and every other test's behaviour is unchanged.
+func (f *fakeProvider) RateBudget() (int, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.rateRemaining, f.rateKnown
+}
+
+// setBudget makes the fake report a known remaining request budget — turning on
+// the RateBudgeter capability for the budget-gate test.
+func (f *fakeProvider) setBudget(remaining int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rateRemaining, f.rateKnown = remaining, true
+}
+
+// callCounts returns how many times ListPRs and Checks have run.
+func (f *fakeProvider) callCounts() (list, checks int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.listCalls, f.checksCalls
 }
 
 type fakeEngine struct {
@@ -1391,5 +1422,76 @@ func mustJSON(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	t.Helper()
 	if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
 		t.Fatalf("decode %T: %v (body=%s)", v, err, rec.Body.String())
+	}
+}
+
+// TestRefreshChecks_RateBudgetGate verifies the per-PR checks pass is skipped only
+// when the forge's remaining request budget couldn't cover it (two calls per PR
+// plus a reserve) — so a nearly-exhausted anonymous GitHub poll keeps listing PRs,
+// and their filter pills keep their last value, instead of failing the list. When
+// the budget is unknown (no token) or ample, every PR is checked as before.
+func TestRefreshChecks_RateBudgetGate(t *testing.T) {
+	prs := []api.PR{{Number: 1, HeadSHA: "a"}, {Number: 2, HeadSHA: "b"}}
+	const cost = 2 * 2 // 2 PRs × (GetCombinedStatus + ListCheckRunsForRef)
+
+	cases := []struct {
+		name       string
+		budget     func(*fakeProvider)
+		wantChecks int
+	}{
+		{"budget unknown (no token) → runs", func(*fakeProvider) {}, 2},
+		{"budget ample → runs", func(f *fakeProvider) { f.setBudget(5000) }, 2},
+		{"budget exactly covers it → runs", func(f *fakeProvider) { f.setBudget(cost + checksReserve) }, 2},
+		{"budget one short → skipped", func(f *fakeProvider) { f.setBudget(cost + checksReserve - 1) }, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prov := &fakeProvider{prs: prs}
+			tc.budget(prov)
+			s := newTestServer(t, ghCfg("tok"), prov, okEngine())
+
+			s.refreshList(s.runCtx)
+
+			if _, checks := prov.callCounts(); checks != tc.wantChecks {
+				t.Errorf("Checks calls = %d, want %d", checks, tc.wantChecks)
+			}
+			// The list always lands — the gate only ever sheds the checks pass.
+			if _, ok := s.store.get(1); !ok {
+				t.Error("PR #1 must be tracked: the list must run even when checks are skipped")
+			}
+		})
+	}
+}
+
+// TestRefreshList_RateLimitCircuitBreaker verifies the poll skips the forge while
+// a rate-limit cooldown is in effect (a periodic tick or a webhook-driven relist
+// during the window could only draw more 403s) and resumes once the reset has
+// passed. A rate limit with no known reset time, or a generic non-rate-limit
+// failure, must not wedge the poll.
+func TestRefreshList_RateLimitCircuitBreaker(t *testing.T) {
+	now := time.Now()
+	cases := []struct {
+		name     string
+		status   api.SyncStatus
+		wantList int
+	}{
+		{"healthy → polls", api.SyncStatus{OK: true}, 1},
+		{"rate-limited, resets in future → skipped", api.SyncStatus{OK: false, Reason: api.SyncRateLimited, RetryAt: now.Add(time.Hour).Unix()}, 0},
+		{"rate-limited, reset passed → polls", api.SyncStatus{OK: false, Reason: api.SyncRateLimited, RetryAt: now.Add(-time.Minute).Unix()}, 1},
+		{"rate-limited, no reset time → polls (never wedge)", api.SyncStatus{OK: false, Reason: api.SyncRateLimited}, 1},
+		{"generic error → polls", api.SyncStatus{OK: false, Reason: api.SyncError}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prov := &fakeProvider{prs: []api.PR{{Number: 1, HeadSHA: "a"}}}
+			s := newTestServer(t, ghCfg("tok"), prov, okEngine())
+			s.sync.set(tc.status)
+
+			s.refreshList(s.runCtx)
+
+			if list, _ := prov.callCounts(); list != tc.wantList {
+				t.Fatalf("ListPRs calls = %d, want %d", list, tc.wantList)
+			}
+		})
 	}
 }
