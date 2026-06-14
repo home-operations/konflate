@@ -70,6 +70,9 @@ type flateEngine struct {
 	sourceRetry            source.RetryConfig
 	diffTimeout            time.Duration
 	maxDiffResources       int
+	// restrictEgress turns on flate's SSRF egress guard for source fetches (see
+	// config.EgressRestricted): on by default while rendering untrusted fork PRs.
+	restrictEgress bool
 }
 
 // New builds the production Engine from config. gitToken authenticates the
@@ -104,6 +107,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 		},
 		diffTimeout:      cfg.DiffTimeout,
 		maxDiffResources: cfg.MaxDiffResources,
+		restrictEgress:   cfg.EgressRestricted(),
 	}
 }
 
@@ -240,6 +244,7 @@ func (e *flateEngine) renderCfg() orchestrator.Config {
 		HelmRenderCacheBytes:   e.helmRenderCacheBytes,
 		Concurrency:            e.concurrency,
 		SourceRetry:            e.sourceRetry,
+		RestrictEgress:         e.restrictEgress,
 	}
 }
 

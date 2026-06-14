@@ -156,6 +156,12 @@
           "title": "repo",
           "type": "string"
         },
+        "restrictEgress": {
+          "default": "",
+          "description": "Override flate's SSRF egress guard on source fetches (it blocks dials to private / loopback / link-local / cloud-metadata addresses and rejects non-https/ssh git schemes). Empty = follow `renderForkPrs` (on while rendering untrusted forks, off otherwise). `\"true\"` guards every render; `\"false\"` permits private-network sources (e.g. an internal Gitea / OCI registry) even while rendering forks.",
+          "title": "restrictEgress",
+          "type": "string"
+        },
         "sourceRetryAttempts": {
           "default": "",
           "description": "Advanced: tries per source fetch on transient network errors. Empty = default (3); \"1\" disables retry.",

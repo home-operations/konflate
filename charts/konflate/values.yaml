@@ -89,6 +89,8 @@ config:
   prFilterExpr: ""
   # -- Render fork PRs. ⚠️ A fork runs untrusted external code through flate (SSRF / resource exhaustion). Off by default — forks are listed but hidden until you flip this. Kept separate from `prFilterExpr` so the filter can't accidentally enable them.
   renderForkPrs: false
+  # -- Override flate's SSRF egress guard on source fetches (it blocks dials to private / loopback / link-local / cloud-metadata addresses and rejects non-https/ssh git schemes). Empty = follow `renderForkPrs` (on while rendering untrusted forks, off otherwise). `"true"` guards every render; `"false"` permits private-network sources (e.g. an internal Gitea / OCI registry) even while rendering forks.
+  restrictEgress: ""
   # -- Serve a read-only [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` so an AI agent can query konflate's rendered-diff analysis (open PRs + their summaries). Read-only — the same data as the API, triggering no render or write. Off by default (it's a new surface); secure it at your ingress if you expose it.
   mcp: false
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.

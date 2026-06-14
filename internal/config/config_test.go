@@ -86,6 +86,65 @@ func TestWriteAccessors(t *testing.T) {
 	}
 }
 
+// TestEgressRestricted covers the tri-state RestrictEgress override: unset ties
+// flate's SSRF egress guard to fork rendering; an explicit value overrides either
+// way (so an operator with private-network sources can disable it in fork mode).
+func TestEgressRestricted(t *testing.T) {
+	t.Parallel()
+	bptr := func(b bool) *bool { return &b }
+	tests := []struct {
+		name     string
+		fork     bool
+		override *bool
+		want     bool
+	}{
+		{"default: off when not rendering forks", false, nil, false},
+		{"auto-on while rendering forks", true, nil, true},
+		{"override off even in fork mode (private sources)", true, bptr(false), false},
+		{"override on without fork rendering", false, bptr(true), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Config{RenderForkPRs: tt.fork, RestrictEgress: tt.override}
+			if got := c.EgressRestricted(); got != tt.want {
+				t.Errorf("EgressRestricted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLoad_RestrictEgress checks the tri-state env parses through Load: unset
+// leaves the override nil (so it follows fork rendering), and an explicit value
+// is honored over fork mode.
+func TestLoad_RestrictEgress(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	t.Setenv("KONFLATE_RENDER_FORK_PRS", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.RestrictEgress != nil {
+		t.Errorf("RestrictEgress = %v, want nil (env unset)", *cfg.RestrictEgress)
+	}
+	if !cfg.EgressRestricted() {
+		t.Error("EgressRestricted() = false, want true (unset follows KONFLATE_RENDER_FORK_PRS=true)")
+	}
+
+	t.Setenv("KONFLATE_RESTRICT_EGRESS", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with override: %v", err)
+	}
+	if cfg.RestrictEgress == nil || *cfg.RestrictEgress {
+		t.Errorf("RestrictEgress = %v, want explicit false", cfg.RestrictEgress)
+	}
+	if cfg.EgressRestricted() {
+		t.Error("EgressRestricted() = true, want false (explicit override beats fork mode)")
+	}
+}
+
 // TestAuthenticatedSources verifies forge read auth is recognized from either a
 // read token or a complete GitHub App (whose installation token authenticates
 // reads). A write-only PAT or a partial App config does not count.

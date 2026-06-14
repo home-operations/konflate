@@ -157,6 +157,15 @@ type Config struct {
 	// expression can't silently enable forks.
 	RenderForkPRs bool `env:"KONFLATE_RENDER_FORK_PRS" envDefault:"false"`
 
+	// RestrictEgress overrides flate's SSRF egress guard on source fetches — it
+	// blocks dials to private / loopback / link-local / cloud-metadata addresses
+	// and rejects non-https/ssh git schemes. Unset (nil, the default) ties it to
+	// RenderForkPRs: rendering a fork pulls attacker-chosen sources, so the guard
+	// turns on; trusted-only mode leaves it off. Set it to override — "false"
+	// permits private-network sources (an internal Gitea / OCI registry) even while
+	// rendering forks, "true" guards every render. See EgressRestricted.
+	RestrictEgress *bool `env:"KONFLATE_RESTRICT_EGRESS"`
+
 	// PRFilter is the compiled filter — PRFilterExpr, or [DefaultPRFilter] when
 	// that is empty — built in [Load]. A derived field, like Forge; never set it
 	// directly.
@@ -333,6 +342,18 @@ func (c *Config) PushEnabled() bool { return c.PushToken != "" }
 
 // MCPEnabled reports whether the read-only MCP endpoint at /mcp should be served.
 func (c *Config) MCPEnabled() bool { return c.MCP }
+
+// EgressRestricted reports whether flate's SSRF egress guard should block source
+// fetches to private / loopback / link-local / cloud-metadata addresses (and
+// non-https/ssh git schemes). It defaults to RenderForkPRs — a fork's sources are
+// attacker-chosen, so the guard rides along with fork rendering — and RestrictEgress
+// overrides it either way.
+func (c *Config) EgressRestricted() bool {
+	if c.RestrictEgress != nil {
+		return *c.RestrictEgress
+	}
+	return c.RenderForkPRs
+}
 
 // WriteEnabled reports whether konflate has a write-back credential — a write
 // PAT or a GitHub App key. It is the master gate for any forge write: without
