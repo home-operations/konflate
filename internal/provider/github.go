@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/google/go-github/v88/github"
@@ -39,10 +38,6 @@ func RateLimit(err error) (resetAt time.Time, ok bool) {
 type githubProvider struct {
 	client      *github.Client
 	owner, repo string
-
-	mu       sync.Mutex
-	rate     github.Rate // budget from the most recent response (see noteRate/RateBudget)
-	rateSeen bool
 }
 
 func newGitHub(cfg *config.Config) (*githubProvider, error) {
@@ -52,32 +47,6 @@ func newGitHub(cfg *config.Config) (*githubProvider, error) {
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
 	return &githubProvider{client: client, owner: owner, repo: repo}, nil
-}
-
-// noteRate records the forge rate budget reported on a response, so RateBudget
-// can answer "how many requests are left?" without spending one. go-github puts
-// the X-RateLimit headers on every response (including a 403 rate-limit reply,
-// where Remaining is 0); the latest wins. Safe for the concurrent callers — the
-// periodic poll and the webhook handlers.
-func (p *githubProvider) noteRate(resp *github.Response) {
-	if resp == nil {
-		return
-	}
-	p.mu.Lock()
-	p.rate = resp.Rate
-	p.rateSeen = true
-	p.mu.Unlock()
-}
-
-// RateBudget implements [RateBudgeter]: the requests remaining before the rate
-// limit as of the last call, and whether any response has been observed yet.
-func (p *githubProvider) RateBudget() (remaining int, ok bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if !p.rateSeen {
-		return 0, false
-	}
-	return p.rate.Remaining, true
 }
 
 // newGitHubReadClient builds the read API client by credential precedence,
@@ -123,7 +92,6 @@ func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	var out []api.PR
 	for {
 		prs, resp, err := p.client.PullRequests.List(ctx, p.owner, p.repo, opts)
-		p.noteRate(resp)
 		if err != nil {
 			return nil, fmt.Errorf("github: list PRs: %w", err)
 		}
@@ -140,7 +108,6 @@ func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 
 func (p *githubProvider) GetPR(ctx context.Context, number int) (api.PR, error) {
 	pr, resp, err := p.client.PullRequests.Get(ctx, p.owner, p.repo, number)
-	p.noteRate(resp)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return api.PR{}, fmt.Errorf("github: get PR #%d: %w", number, ErrPRNotFound)
@@ -160,8 +127,7 @@ func (p *githubProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup
 	}
 	var passed, failed, pending int
 
-	cs, resp, err := p.client.Repositories.GetCombinedStatus(ctx, p.owner, p.repo, pr.HeadSHA, &github.ListOptions{PerPage: 100})
-	p.noteRate(resp)
+	cs, _, err := p.client.Repositories.GetCombinedStatus(ctx, p.owner, p.repo, pr.HeadSHA, &github.ListOptions{PerPage: 100})
 	if err != nil {
 		return api.CheckRollup{}, fmt.Errorf("github: combined status #%d: %w", pr.Number, err)
 	}
@@ -176,9 +142,8 @@ func (p *githubProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup
 		}
 	}
 
-	runs, resp, err := p.client.Checks.ListCheckRunsForRef(ctx, p.owner, p.repo, pr.HeadSHA,
+	runs, _, err := p.client.Checks.ListCheckRunsForRef(ctx, p.owner, p.repo, pr.HeadSHA,
 		&github.ListCheckRunsOptions{ListOptions: github.ListOptions{PerPage: 100}})
-	p.noteRate(resp)
 	if err != nil {
 		return api.CheckRollup{}, fmt.Errorf("github: check runs #%d: %w", pr.Number, err)
 	}

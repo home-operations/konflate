@@ -24,10 +24,6 @@ type metrics struct {
 	listErrors     *prometheus.CounterVec // reason: rate_limited|error
 	rateLimited    prometheus.Gauge
 	rateLimitReset prometheus.Gauge
-	// checksSkipped counts CI-checks passes skipped to stay within the forge rate
-	// budget (see checksWouldExhaustBudget). A rising count on an unauthenticated
-	// instance is the signal that a token would let the CI pills stay current.
-	checksSkipped prometheus.Counter
 }
 
 // metricNamespace prefixes every konflate metric name.
@@ -70,16 +66,12 @@ func newMetrics() *metrics {
 			Namespace: metricNamespace, Name: "forge_rate_limit_reset_timestamp_seconds",
 			Help: "Unix time the forge rate limit resets (0 when not rate-limited or unknown).",
 		}),
-		checksSkipped: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: metricNamespace, Name: "forge_checks_skipped_total",
-			Help: "CI-checks passes skipped to preserve the forge rate budget.",
-		}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.diffTotal, m.diffDuration, m.queueDepth, m.prsKnown, m.httpReqs,
-		m.listErrors, m.rateLimited, m.rateLimitReset, m.checksSkipped,
+		m.listErrors, m.rateLimited, m.rateLimitReset,
 	)
 	return m
 }
