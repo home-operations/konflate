@@ -98,7 +98,12 @@ func (s *store) loadFrom(p *persist.Store, log *slog.Logger) {
 		if rec.Result != nil {
 			j.signals = computeSignals(rec.Result)
 		}
-		j.savedDigest = contentDigest(rec) // so an identical re-render after restart skips re-writing
+		// savedDigest is left zero (unknown) on load: seeding it would re-marshal
+		// every multi-MB record at startup — a second full pass on top of the decode
+		// persist.Load just did — purely to skip the first post-restart rewrite. Not
+		// worth it: leaving it zero costs at most one rewrite per PR on its first
+		// re-render after a restart, then it stabilises, whereas the marshal is paid
+		// for the whole shelf on every boot (the load path is the cold-start cost).
 		s.jobs[rec.PR.Number] = j
 	}
 }

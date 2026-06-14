@@ -101,6 +101,44 @@ func TestStore_SkipsUnchangedWrites(t *testing.T) {
 	}
 }
 
+// TestStore_LoadDoesNotSeedDigest documents the cold-start trade: loadFrom
+// deliberately leaves savedDigest zero rather than re-marshal every multi-MB
+// record at boot just to seed it. The cost is that the FIRST re-render of a
+// restored PR rewrites even when the diff is identical (then it stabilises) —
+// the inverse of TestStore_SkipsUnchangedWrites, which is the in-process case.
+func TestStore_LoadDoesNotSeedDigest(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	newP := func() *persist.Store {
+		p, err := persist.New(dir, discardLog())
+		if err != nil {
+			t.Fatalf("persist.New: %v", err)
+		}
+		return p
+	}
+
+	// Process 1: render and persist an open PR.
+	s1 := newStore()
+	s1.loadFrom(newP(), discardLog())
+	s1.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true}, false)
+	s1.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a"})
+
+	// Process 2: a fresh store loads it; savedDigest is intentionally not seeded.
+	s2 := newStore()
+	s2.loadFrom(newP(), discardLog())
+
+	file := filepath.Join(dir, "1.json.zst")
+	if err := os.Remove(file); err != nil { // delete behind the store's back
+		t.Fatalf("remove: %v", err)
+	}
+	// An identical re-render after the "restart" must rewrite — proving the digest
+	// was not seeded at load (contrast the in-process no-op above).
+	s2.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a"})
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("first post-restart re-render should rewrite the file: %v", err)
+	}
+}
+
 // TestServer_DropsFilteredOnLoad verifies the persistence ⨯ PR-filter
 // interaction: a merged-shelf entry restored from disk that the *current* filter
 // excludes (a fork, after the operator tightens to !pr.fork) is dropped on load
