@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.21](https://github.com/home-operations/konflate/compare/0.2.20...0.2.21) (2026-06-14)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.5 → v0.4.6) ([#226](https://github.com/home-operations/konflate/issues/226)) ([d2ebc1a](https://github.com/home-operations/konflate/commit/d2ebc1aa40aaa2013bd136c9e125790dd84ef855))
+* **diff:** highlight YAML with whole-document context (correct key colouring) ([#228](https://github.com/home-operations/konflate/issues/228)) ([008c86f](https://github.com/home-operations/konflate/commit/008c86f25bd3f9af86ee478bc93144d7825d1d07))
+
 ## [0.2.20](https://github.com/home-operations/konflate/compare/0.2.19...0.2.20) (2026-06-13)
 
 
