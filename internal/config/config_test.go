@@ -251,6 +251,9 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 	if cfg.CacheTTL != 168*time.Hour {
 		t.Errorf("CacheTTL default = %v, want 168h", cfg.CacheTTL)
 	}
+	if cfg.RerenderInterval != 6*time.Hour {
+		t.Errorf("RerenderInterval default = %v, want 6h", cfg.RerenderInterval)
+	}
 }
 
 // TestLoad_GitDepth covers the shallow-clone depth knob: a positive value passes

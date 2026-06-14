@@ -263,6 +263,24 @@ tests:
             name: KONFLATE_GIT_DEPTH
             value: "0"
 
+  - it: omits KONFLATE_RERENDER_INTERVAL when rerenderInterval is empty (binary default)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_RERENDER_INTERVAL
+
+  - it: emits KONFLATE_RERENDER_INTERVAL (incl. "0" to fall back to refreshInterval) when set
+    set:
+      config.rerenderInterval: "0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RERENDER_INTERVAL
+            value: "0"
+
   - it: omits all write-back env by default (read-only)
     asserts:
       - notContains:

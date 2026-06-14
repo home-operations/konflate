@@ -183,6 +183,12 @@ spec:
             - name: KONFLATE_REFRESH_INTERVAL
               value: {{ tpl . $ | quote }}
             {{- end }}
+            {{- /* toString, not `with`: an explicit "0" (fall back to
+                   refreshInterval) must still emit — `with` drops a 0. */}}
+            {{- if ne (toString .Values.config.rerenderInterval) "" }}
+            - name: KONFLATE_RERENDER_INTERVAL
+              value: {{ tpl (toString .Values.config.rerenderInterval) $ | quote }}
+            {{- end }}
             {{- with .Values.config.extraEnv }}
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}

@@ -65,6 +65,16 @@ config:
 
   # -- How often each open PR re-renders / the PR list reconciles, as a missed-webhook backstop (Go duration). "0" disables periodic refresh (webhooks only); positive values are floored to 1m.
   refreshInterval: 30m
+  # KONFLATE_RERENDER_INTERVAL — how often the backstop re-renders an open PR
+  # whose head SHA is UNCHANGED, to catch mutable upstream sources (floating
+  # chart tags, :latest, moving GitRepository refs) that drift at the same SHA.
+  # Such a re-render is otherwise an identical diff, so this runs slower than
+  # refreshInterval (default 6h) to skip needless helm/kustomize work; a head-SHA
+  # change still re-renders promptly. Empty = default (6h); "0" falls back to
+  # refreshInterval (re-render unchanged PRs as often as the list reconciles).
+
+  # -- Advanced: how often to re-render an open PR whose head is unchanged, to catch mutable-source drift (Go duration). Empty = default (6h); "0" falls back to refreshInterval. Raise it for fully digest-pinned repos.
+  rerenderInterval: ""
   # -- Log level: debug, info, warn, or error.
   logLevel: info
   # -- Log format: json or text.
