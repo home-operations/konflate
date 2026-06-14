@@ -111,6 +111,7 @@
   const summary = $derived.by(() => ({
     open: openPrs.length,
     caution: openPrs.filter((p) => (p.signals?.caution ?? 0) > 0).length,
+    failure: openPrs.filter((p) => (p.signals?.failures ?? 0) > 0).length,
     merged: prs.filter((p) => !p.open).length,
     hidden: prs.filter((p) => p.hidden).length,
   }));
@@ -228,6 +229,33 @@
   </div>
 {/snippet}
 
+<!-- Prev / page indicator / next — shared by the bottom pager and the compact
+     top control beside expand-all, so paging a long list doesn't require scrolling
+     to its end. The caller guards on totalPages > 1. -->
+{#snippet pagerNav()}
+  <div class="pager-nav">
+    <button
+      class="pager-btn"
+      onclick={() => gotoPage(page - 1)}
+      disabled={page <= 1}
+      aria-label="Previous page"
+      title="Previous page"
+    >
+      <Icon path={mdiChevronLeft} size={18} />
+    </button>
+    <span class="pager-page">Page {page} of {totalPages}</span>
+    <button
+      class="pager-btn"
+      onclick={() => gotoPage(page + 1)}
+      disabled={page >= totalPages}
+      aria-label="Next page"
+      title="Next page"
+    >
+      <Icon path={mdiChevronRight} size={18} />
+    </button>
+  </div>
+{/snippet}
+
 <!-- The pager sits below the cards once the list outgrows the smallest page. Its
      "of N" counts the active view (the same set the active pill counts), the size
      picker is the persisted per-page preference, and prev/next appear only when
@@ -253,29 +281,7 @@
         {/each}
       </select>
     </label>
-    {#if totalPages > 1}
-      <div class="pager-nav">
-        <button
-          class="pager-btn"
-          onclick={() => gotoPage(page - 1)}
-          disabled={page <= 1}
-          aria-label="Previous page"
-          title="Previous page"
-        >
-          <Icon path={mdiChevronLeft} size={18} />
-        </button>
-        <span class="pager-page">Page {page} of {totalPages}</span>
-        <button
-          class="pager-btn"
-          onclick={() => gotoPage(page + 1)}
-          disabled={page >= totalPages}
-          aria-label="Next page"
-          title="Next page"
-        >
-          <Icon path={mdiChevronRight} size={18} />
-        </button>
-      </div>
-    {/if}
+    {#if totalPages > 1}{@render pagerNav()}{/if}
   </nav>
 {/snippet}
 
@@ -364,6 +370,7 @@
       data-pr={pr.number}
       class:merged={!pr.open}
       class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
+      class:failure={pr.open && (pr.signals?.failures ?? 0) > 0}
     >
       <button class="card" onclick={() => openPR(pr.number)}>
         <div class="card-top">
@@ -397,14 +404,14 @@
             {#if pr.refreshError}
               <span class="badge warn" title="Couldn't refresh — showing the last render"><Icon path={mdiRefresh} size={13} /></span>
             {/if}
+            {#if pr.signals.failures}
+              <span class="badge danger" title="render failures"><Icon path={mdiAlertCircleOutline} size={13} /> {pr.signals.failures}</span>
+            {/if}
             {#if pr.signals.caution}
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
             {/if}
             {#if pr.signals.images}
               <span class="badge" title={`${pr.signals.images} image change${pr.signals.images === 1 ? '' : 's'}`}><Icon path={mdiPackageVariantClosed} size={13} /> {pr.signals.images}</span>
-            {/if}
-            {#if pr.signals.failures}
-              <span class="badge danger" title="render failures"><Icon path={mdiAlertCircleOutline} size={13} /> {pr.signals.failures}</span>
             {/if}
             <span class="badge muted" title={`${pr.signals.resources} resource change${pr.signals.resources === 1 ? '' : 's'}`}>
               <Icon path={mdiFileDocumentOutline} size={13} /> {pr.signals.resources}
@@ -504,6 +511,9 @@
   {#if store.loaded && (summary.open || summary.merged || summary.hidden)}
     <div class="list-summary">
       {@render pill('open', summary.open, '', 'Show open pull requests')}
+      {#if showPill(summary.failure, 'failure')}
+        {@render pill('failure', summary.failure, 'failure', 'Only PRs that failed to render')}
+      {/if}
       {#if showPill(summary.caution, 'caution')}
         {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
       {/if}
@@ -513,16 +523,25 @@
       {#if showPill(summary.hidden, 'hidden')}
         {@render pill('hidden', summary.hidden, 'hidden', 'PRs excluded by the filter — listed but not rendered')}
       {/if}
-      {#if expandableRows.length}
-        <button
-          class="expand-all"
-          aria-expanded={allExpanded}
-          title={allExpanded ? 'Collapse every row summary' : 'Expand every row summary'}
-          onclick={toggleExpandAll}
-        >
-          <Icon path={allExpanded ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
-          {allExpanded ? 'Collapse all' : 'Expand all'}
-        </button>
+      {#if expandableRows.length || (paginated && totalPages > 1)}
+        <div class="list-summary-end">
+          {#if expandableRows.length}
+            <button
+              class="expand-all"
+              aria-expanded={allExpanded}
+              title={allExpanded ? 'Collapse every row summary' : 'Expand every row summary'}
+              onclick={toggleExpandAll}
+            >
+              <Icon path={allExpanded ? mdiUnfoldLessHorizontal : mdiUnfoldMoreHorizontal} size={14} />
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </button>
+          {/if}
+          <!-- A compact prev/next beside expand-all so paging is reachable from the
+               top of a long list; the full pager (count + size) stays at the bottom. -->
+          {#if paginated && totalPages > 1}
+            {@render pagerNav()}
+          {/if}
+        </div>
       {/if}
     </div>
   {/if}

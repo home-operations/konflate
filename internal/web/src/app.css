@@ -621,6 +621,11 @@ a.repo:focus-visible .repo-ext {
 .card-shell.caution {
   box-shadow: inset 3px 0 0 var(--caution);
 }
+/* A render failure outranks a caution — a red edge. Defined after the caution
+   rule so a card carrying both reads red (equal specificity, source order wins). */
+.card-shell.failure {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
 /* Recently-merged cards are reference, not action — de-emphasized via a muted
    title (whole-card opacity would push the meta text below AA contrast). */
 .card-shell.merged .card-title {
@@ -836,9 +841,16 @@ a.repo:focus-visible .repo-ext {
   margin: 12px auto 4px;
   padding: 0 12px;
 }
-/* Expand/collapse every row summary — pushed to the far right of the pills. */
-.expand-all {
+/* The summary row's right-hand cluster — expand-all and the compact top pager —
+   pushed to the far right of the pills as one group. */
+.list-summary-end {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+/* Expand/collapse every row summary. */
+.expand-all {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -909,6 +921,23 @@ button.sum-pill:hover {
 }
 .sum-pill.caution strong {
   color: var(--caution);
+}
+/* The render-failure pill mirrors the caution pill a notch up the severity
+   scale — red (--danger), matching the card's red edge and the failures badge. */
+.sum-pill.failure {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+.sum-pill.failure strong {
+  color: var(--danger);
+}
+.sum-pill.failure.active {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
+}
+.sum-pill.failure:hover {
+  border-color: var(--danger);
 }
 .sum-pill.merged {
   color: var(--merged);
@@ -1400,6 +1429,9 @@ button.sum-pill:hover {
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+  /* A render-failure message can carry a long unbroken URL/registry path; break
+     it within the column instead of letting it overflow into the next one. */
+  overflow-wrap: anywhere;
 }
 /* One row per changed app: the app, a quiet "N dependents" count, then the
    named direct dependents wrapping below. Same flat shape as a flag but a
