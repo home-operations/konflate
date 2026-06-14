@@ -1256,6 +1256,7 @@ test('a rate-limited forge poll shows a banner with a reset countdown, not a bar
 
   const banner = page.locator('.sync-banner');
   await expect(banner).toBeVisible();
+  await expect(banner).toHaveCSS('justify-content', 'center'); // content is centred, not left-hugged
   await expect(banner).toContainText('GitHub API rate limit exceeded.');
   await expect(banner).toContainText(/Resets in ~\d+ minutes?\./);
   await expect(banner).toContainText('Configure a forge token or GitHub App');
