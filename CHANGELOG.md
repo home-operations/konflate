@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.25](https://github.com/home-operations/konflate/compare/0.2.24...0.2.25) (2026-06-14)
+
+
+### Documentation
+
+* spell out the exact forge webhook events konflate needs ([#250](https://github.com/home-operations/konflate/issues/250)) ([1e52d45](https://github.com/home-operations/konflate/commit/1e52d45a320a11316ab4c84c8c089b948f42e8e9))
+
+
+### Code Refactoring
+
+* **gitclone:** remove the shallow-clone feature ([#248](https://github.com/home-operations/konflate/issues/248)) ([757d70c](https://github.com/home-operations/konflate/commit/757d70ce1cb2ad1b3c57a632d23eedc16de753e0))
+
 ## [0.2.24](https://github.com/home-operations/konflate/compare/0.2.23...0.2.24) (2026-06-14)
 
 
