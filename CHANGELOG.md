@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.24](https://github.com/home-operations/konflate/compare/0.2.23...0.2.24) (2026-06-14)
+
+
+### Bug Fixes
+
+* **gitclone:** disable shallow clone by default — it breaks rendering ([#246](https://github.com/home-operations/konflate/issues/246)) ([79489aa](https://github.com/home-operations/konflate/commit/79489aae5635cf10a3e32beb3675d8f0754ec2c2))
+
 ## [0.2.23](https://github.com/home-operations/konflate/compare/0.2.22...0.2.23) (2026-06-14)
 
 
