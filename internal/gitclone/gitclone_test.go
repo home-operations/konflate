@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
 	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -202,6 +203,97 @@ func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
 	}
 	if _, err := rebuilt.Reference("refs/heads/ghost", false); err == nil {
 		t.Error("dangling ref survived the rebuild; mirror was not re-seeded")
+	}
+}
+
+// TestRepackMirror_SkipsSubmoduleGitlinks builds a repo whose tree carries a gitlink
+// (submodule) entry — its commit, by definition, lives in the submodule's own
+// repository and is absent here. go-git's RepackObjects walks into that commit and
+// fails with "object not found", which the mirror used to misread as corruption and
+// "heal" with a pointless re-clone on every repack. repackMirror must treat the
+// gitlink as a leaf, the way git does at a submodule boundary, and consolidate
+// cleanly. (The production case: JJGadgets/Biohazard's dots/k9s/.source submodule.)
+func TestRepackMirror_SkipsSubmoduleGitlinks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, true) // bare, like the mirror
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := repo.Storer
+
+	store := func(o plumbing.EncodedObject) plumbing.Hash {
+		t.Helper()
+		h, err := s.SetEncodedObject(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+
+	// A normal tracked blob.
+	blob := s.NewEncodedObject()
+	blob.SetType(plumbing.BlobObject)
+	bw, err := blob.Writer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = bw.Write([]byte("replicas: 3\n"))
+	_ = bw.Close()
+	blobHash := store(blob)
+
+	// A tree mixing that blob with a submodule gitlink whose commit is NOT present.
+	submodule := plumbing.NewHash("35893ce49b941c8a2b8706a50cfc35a449572231")
+	tree := &object.Tree{Entries: []object.TreeEntry{
+		{Name: "config.yaml", Mode: filemode.Regular, Hash: blobHash},
+		{Name: "vendored", Mode: filemode.Submodule, Hash: submodule},
+	}}
+	treeObj := s.NewEncodedObject()
+	if err := tree.Encode(treeObj); err != nil {
+		t.Fatal(err)
+	}
+	treeHash := store(treeObj)
+
+	when := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	commit := &object.Commit{
+		Author:    object.Signature{Name: "t", Email: "t@example.com", When: when},
+		Committer: object.Signature{Name: "t", Email: "t@example.com", When: when},
+		Message:   "repo with a submodule",
+		TreeHash:  treeHash,
+	}
+	commitObj := s.NewEncodedObject()
+	if err := commit.Encode(commitObj); err != nil {
+		t.Fatal(err)
+	}
+	commitHash := store(commitObj)
+	if err := s.SetReference(plumbing.NewHashReference("refs/heads/main", commitHash)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Documents the bug repackMirror works around: go-git's own RepackObjects walks
+	// into the gitlink and fails. A nil here would mean upstream fixed it.
+	if err := repo.RepackObjects(&git.RepackConfig{}); err == nil {
+		t.Log("go-git RepackObjects no longer fails on a gitlink — upstream may be fixed; repackMirror's workaround can be revisited")
+	}
+
+	if err := repackMirror(repo); err != nil {
+		t.Fatalf("repackMirror on a repo containing a submodule = %v, want success", err)
+	}
+
+	// The real objects survived the consolidation; the submodule commit was never
+	// needed and is (correctly) still absent.
+	reopened, err := git.PlainOpen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.CommitObject(commitHash); err != nil {
+		t.Errorf("commit missing after repack: %v", err)
+	}
+	if _, err := reopened.BlobObject(blobHash); err != nil {
+		t.Errorf("blob missing after repack: %v", err)
+	}
+	if _, err := reopened.Storer.EncodedObject(plumbing.AnyObject, submodule); !errors.Is(err, plumbing.ErrObjectNotFound) {
+		t.Errorf("submodule commit lookup = %v, want ErrObjectNotFound (it must never live in this repo)", err)
 	}
 }
 
