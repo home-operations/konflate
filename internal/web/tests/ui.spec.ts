@@ -45,6 +45,7 @@ test('list → review → single-page flow', async ({ page }) => {
   // Topbar shows the forge logo + repo (linked to its forge page) and the
   // auto-update indicator — there is no manual refresh button.
   await expect(page.locator('.repo')).toContainText('acme/home-ops');
+  await expect(page).toHaveTitle('Konflate - acme/home-ops'); // repo rides in the browser tab
   await expect(page.locator('.repo svg[role="img"]')).toBeVisible();
   await expect(page.locator('a.repo')).toHaveAttribute('href', 'https://github.com/acme/home-ops');
   await expect(page.locator('a.repo')).toHaveAttribute('target', '_blank');
