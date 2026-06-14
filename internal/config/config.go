@@ -306,16 +306,32 @@ type Config struct {
 	GitDepth int `env:"KONFLATE_GIT_DEPTH" envDefault:"50"`
 
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
-	// opened ones and reconcile closed ones) and, per open PR, re-renders it if
-	// its last render is older than this. It's the safety net that keeps PRs
-	// current even if an inbound webhook misfires; webhooks/pushes still update
-	// PRs immediately and reset their per-PR clock. Merged/closed PRs are frozen
-	// and never auto-refresh. <=0 disables the periodic refresh entirely (inbound
-	// webhooks/pushes become the only triggers), like every sibling duration knob.
-	// A positive value is floored to [minRefreshInterval] in [Load] so a tiny
-	// interval can't turn the refresh into a forge-API hot loop — use webhooks for
-	// near-real-time updates instead.
+	// opened ones and reconcile closed ones) and re-renders an open PR whose head
+	// has advanced. It's the safety net that keeps PRs current even if an inbound
+	// webhook misfires; webhooks/pushes still update PRs immediately and reset
+	// their per-PR clock. Merged/closed PRs are frozen and never auto-refresh.
+	// <=0 disables the periodic refresh entirely (inbound webhooks/pushes become
+	// the only triggers), like every sibling duration knob. A positive value is
+	// floored to [minRefreshInterval] in [Load] so a tiny interval can't turn the
+	// refresh into a forge-API hot loop — use webhooks for near-real-time updates.
+	// (An open PR whose head is *unchanged* re-renders on the slower
+	// [Config.RerenderInterval] instead — see there.)
 	RefreshInterval time.Duration `env:"KONFLATE_REFRESH_INTERVAL" envDefault:"30m"`
+
+	// RerenderInterval is how often the staleness backstop re-renders an open PR
+	// whose head SHA has NOT changed since its last successful render. Such a
+	// re-render produces an identical diff unless a *mutable* upstream source (a
+	// floating chart tag, an `:latest` OCI ref, a moving GitRepository branch)
+	// drifted at the same SHA — far rarer than the list/refresh cadence — so doing
+	// it every RefreshInterval re-runs the full helm/kustomize/highlight pipeline
+	// for nothing. A longer cadence here (default 6h) keeps catching drift while
+	// cutting that churn ~12× at the 30m default; a head-SHA change still
+	// re-renders promptly via the list poll regardless. <=0 falls back to
+	// RefreshInterval (no memo — re-render unchanged PRs as often as the list
+	// reconciles); set a long duration to effectively never re-render an unchanged
+	// PR (good for fully digest-pinned repos). A positive value is floored to
+	// [minRefreshInterval].
+	RerenderInterval time.Duration `env:"KONFLATE_RERENDER_INTERVAL" envDefault:"6h"`
 
 	// ClosedRetention bounds how long a merged PR stays on the "recently merged"
 	// shelf below the open list before it is pruned. Abandoned (closed-unmerged)
@@ -474,6 +490,11 @@ func Load() (*Config, error) {
 	// as-is: the refresh loop reads it as "disabled" (inbound triggers only).
 	if cfg.RefreshInterval > 0 && cfg.RefreshInterval < minRefreshInterval {
 		cfg.RefreshInterval = minRefreshInterval
+	}
+	// Same floor for the re-render cadence (a positive value only); <=0 is left
+	// as-is and read as "fall back to RefreshInterval" by stalePRs.
+	if cfg.RerenderInterval > 0 && cfg.RerenderInterval < minRefreshInterval {
+		cfg.RerenderInterval = minRefreshInterval
 	}
 	// A negative depth is meaningless to git; treat it as 0 (full history) so a
 	// stray value can't produce a malformed shallow fetch.

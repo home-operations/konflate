@@ -369,17 +369,32 @@ func (s *store) activeNumbers() []int {
 // backstop). PRs still in their initial render and closed/merged PRs are
 // excluded. The queue coalesces, so returning one that is mid-render is safe.
 //
-// The deadline is interval ± a deterministic per-PR jitter (see staleJitter):
+// The deadline is a cadence ± a deterministic per-PR jitter (see staleJitter):
 // without it, the whole open set — all rendered together at startup — would go
-// stale on the same tick and re-render as one synchronized batch every interval
-// (a thundering herd on the forge and CPU). Jitter spreads them across the
-// window while keeping the average period ≈ interval.
-func (s *store) stalePRs(now time.Time, interval time.Duration) []api.PR {
+// stale on the same tick and re-render as one synchronized batch (a thundering
+// herd on the forge and CPU). Jitter spreads them across the window.
+//
+// The cadence is interval by default, but rerender (when positive) for a PR
+// whose head SHA is unchanged since its last successful render: that re-render
+// would reproduce an identical diff unless a mutable upstream source (a floating
+// tag, :latest, a moving GitRepository ref) drifted at the same SHA, so it runs
+// on the slower drift-catch cadence instead of re-running the full pipeline every
+// interval. A head-SHA change (caught by the list poll), a failed last render, or
+// a never-succeeded PR all stay on the base interval; rerender<=0 disables the
+// memo entirely (everything on interval).
+func (s *store) stalePRs(now time.Time, interval, rerender time.Duration) []api.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []api.PR
 	for _, j := range s.jobs {
-		if !j.hidden && j.closedAt.IsZero() && !j.renderedAt.IsZero() && now.Sub(j.renderedAt) >= interval+staleJitter(j.pr.Number, interval) {
+		if j.hidden || !j.closedAt.IsZero() || j.renderedAt.IsZero() {
+			continue
+		}
+		due := interval
+		if rerender > 0 && j.refreshErr == "" && j.result != nil && j.result.HeadSHA == j.pr.HeadSHA {
+			due = rerender // unchanged head, clean last render: only mutable-source drift could change it
+		}
+		if now.Sub(j.renderedAt) >= due+staleJitter(j.pr.Number, due) {
 			out = append(out, j.pr)
 		}
 	}

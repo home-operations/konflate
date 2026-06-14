@@ -162,6 +162,12 @@
           "title": "repo",
           "type": "string"
         },
+        "rerenderInterval": {
+          "default": "",
+          "description": "Advanced: how often to re-render an open PR whose head is unchanged, to catch mutable-source drift (Go duration). Empty = default (6h); \"0\" falls back to refreshInterval. Raise it for fully digest-pinned repos.",
+          "title": "rerenderInterval",
+          "type": "string"
+        },
         "restrictEgress": {
           "default": "",
           "description": "Override flate's SSRF egress guard on source fetches (it blocks dials to private / loopback / link-local / cloud-metadata addresses and rejects non-https/ssh git schemes). Empty = follow `renderForkPrs` (on while rendering untrusted forks, off otherwise). `\"true\"` guards every render; `\"false\"` permits private-network sources (e.g. an internal Gitea / OCI registry) even while rendering forks.",

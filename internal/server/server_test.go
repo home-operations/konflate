@@ -1002,7 +1002,9 @@ func TestStore_StalePRsAreJittered(t *testing.T) {
 		st.upsertPR(api.PR{Number: i, Open: true}, false)
 		st.setResult(i, api.DiffResult{PRNumber: i})
 	}
-	count := func(d time.Duration) int { return len(st.stalePRs(base.Add(d), interval)) }
+	// rerender 0 ⇒ memo off, so every PR uses the base interval (this test is about
+	// the jitter spread, not the re-render memo, which has its own test).
+	count := func(d time.Duration) int { return len(st.stalePRs(base.Add(d), interval, 0)) }
 
 	if c := count(interval / 2); c != 0 {
 		t.Errorf("at 0.5·interval: %d stale, want 0 (before the earliest jittered deadline)", c)
@@ -1012,6 +1014,54 @@ func TestStore_StalePRsAreJittered(t *testing.T) {
 	}
 	if c := count(2 * interval); c != n {
 		t.Errorf("at 2·interval: %d stale, want all %d", c, n)
+	}
+}
+
+// TestStore_StalePRsMemoOnUnchangedSHA verifies the re-render memo: an open PR
+// whose head SHA is unchanged since its last clean render is held off the base
+// interval and re-rendered only on the slower rerender cadence (mutable-source
+// drift catch), while a PR whose head advanced still re-renders at the base
+// interval.
+func TestStore_StalePRsMemoOnUnchangedSHA(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const interval = 30 * time.Minute
+	const rerender = 6 * time.Hour
+
+	st := newStore()
+	st.now = func() time.Time { return base }
+	// #1: result SHA == head SHA → unchanged. #2: head advanced past the rendered
+	// SHA (the result is for an older head) → changed.
+	st.upsertPR(api.PR{Number: 1, Open: true, HeadSHA: "sha1"}, false)
+	st.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "sha1"})
+	st.upsertPR(api.PR{Number: 2, Open: true, HeadSHA: "new"}, false)
+	st.setResult(2, api.DiffResult{PRNumber: 2, HeadSHA: "old"})
+
+	staleAt := func(d time.Duration) map[int]bool {
+		m := map[int]bool{}
+		for _, pr := range st.stalePRs(base.Add(d), interval, rerender) {
+			m[pr.Number] = true
+		}
+		return m
+	}
+
+	// Past the base interval but far inside the 6h re-render window: the changed
+	// PR re-renders; the unchanged one is memoized.
+	at := staleAt(2 * interval)
+	if !at[2] {
+		t.Error("changed PR (#2) should be stale at the base interval")
+	}
+	if at[1] {
+		t.Error("unchanged PR (#1) must be memoized within the re-render interval")
+	}
+	// Past the re-render cadence: the unchanged PR re-renders too (drift catch).
+	if !staleAt(2 * rerender)[1] {
+		t.Error("unchanged PR (#1) should re-render once past the re-render interval")
+	}
+
+	// rerender<=0 disables the memo: the unchanged PR is stale at the base interval.
+	if len(st.stalePRs(base.Add(2*interval), interval, 0)) != 2 {
+		t.Error("rerender<=0 should disable the memo (both PRs stale at the base interval)")
 	}
 }
 

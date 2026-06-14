@@ -702,10 +702,12 @@ func refreshCadence(interval time.Duration) (cadence time.Duration, enabled bool
 	return min(interval, 2*time.Minute), true
 }
 
-// refreshStale re-renders every open PR whose last render is older than the
-// refresh interval — the backstop for an inbound webhook that never arrived.
+// refreshStale re-renders every open PR whose last render is older than its
+// staleness cadence — the backstop for an inbound webhook that never arrived. A
+// PR whose head advanced uses RefreshInterval; one whose head is unchanged uses
+// the slower RerenderInterval (it would otherwise re-render an identical diff).
 func (s *Server) refreshStale(now time.Time) {
-	stale := s.store.stalePRs(now, s.cfg.RefreshInterval)
+	stale := s.store.stalePRs(now, s.cfg.RefreshInterval, s.cfg.RerenderInterval)
 	for _, pr := range stale {
 		s.log.Debug("queuing render", "pr", pr.Number, "reason", "stale")
 		s.queue.enqueue(pr)
