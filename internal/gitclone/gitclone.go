@@ -301,8 +301,7 @@ func mirrorCorrupt(err error) bool {
 	}
 	// A network failure is transient, not damage — and a mid-fetch truncation can
 	// surface as a malformed pack. Exclude it first so a blip never re-clones.
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if _, ok := errors.AsType[net.Error](err); ok {
 		return false
 	}
 	if errors.Is(err, plumbing.ErrObjectNotFound) ||

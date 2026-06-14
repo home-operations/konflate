@@ -319,7 +319,8 @@ func isHex(s string) bool {
 func reviewURLFromRequest(r *http.Request, number int) string {
 	scheme := schemeHTTPS
 	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
-		scheme = strings.TrimSpace(strings.Split(p, ",")[0])
+		first, _, _ := strings.Cut(p, ",")
+		scheme = strings.TrimSpace(first)
 	} else if r.TLS == nil {
 		scheme = "http"
 	}

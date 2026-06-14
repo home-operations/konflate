@@ -503,8 +503,7 @@ func githubStatus(resp *github.Response, err error) int {
 	if resp != nil {
 		return resp.StatusCode
 	}
-	var apiErr *github.ErrorResponse
-	if errors.As(err, &apiErr) && apiErr.Response != nil {
+	if apiErr, ok := errors.AsType[*github.ErrorResponse](err); ok && apiErr.Response != nil {
 		return apiErr.Response.StatusCode
 	}
 	return 0

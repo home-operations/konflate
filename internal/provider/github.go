@@ -22,12 +22,10 @@ import (
 // matched through the wrapped error chain. Non-GitHub forges and non-rate-limit
 // errors report false.
 func RateLimit(err error) (resetAt time.Time, ok bool) {
-	var rl *github.RateLimitError
-	if errors.As(err, &rl) {
+	if rl, ok := errors.AsType[*github.RateLimitError](err); ok {
 		return rl.Rate.Reset.Time, true
 	}
-	var ab *github.AbuseRateLimitError
-	if errors.As(err, &ab) {
+	if ab, ok := errors.AsType[*github.AbuseRateLimitError](err); ok {
 		if ab.RetryAfter != nil {
 			return time.Now().Add(*ab.RetryAfter), true
 		}

@@ -161,10 +161,8 @@ func newTestServer(t *testing.T, cfg *config.Config, prov *fakeProvider, eng Eng
 	t.Helper()
 	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>konflate</title>")}}
 	s := New(cfg, prov, eng, ui, discardLog())
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	s.runCtx = ctx
-	s.queue = newQueue(ctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, nil)
+	s.runCtx = t.Context()
+	s.queue = newQueue(s.runCtx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, nil)
 	return s
 }
 
@@ -209,9 +207,7 @@ func TestServer_WebhookRelistCoalesces(t *testing.T) {
 		}
 	}
 	s := newTestServer(t, ghCfg("tok"), prov, okEngine())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s.relistWorker(ctx)
+	go s.relistWorker(t.Context())
 
 	// First trigger: the worker enters ListPRs and blocks there.
 	s.requestRelist()
