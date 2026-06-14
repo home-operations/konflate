@@ -125,6 +125,12 @@ func blastRadius(
 	return out
 }
 
+// sortByResource orders cautions by their "Kind ns/name" resource label so a
+// render's warnings are deterministic regardless of map iteration order.
+func sortByResource(w []api.Warning) {
+	slices.SortFunc(w, func(a, b api.Warning) int { return cmp.Compare(a.Resource, b.Resource) })
+}
+
 // danglingDependsOn flags parents the PR REMOVES (a key in the base render's
 // parent set, absent from the head's) that surviving resources still declare a
 // spec.dependsOn on — a reconciliation those dependents will wedge on after
@@ -167,7 +173,7 @@ func danglingDependsOn(
 				strings.Join(labels, ", ")),
 		})
 	}
-	slices.SortFunc(out, func(a, b api.Warning) int { return cmp.Compare(a.Resource, b.Resource) })
+	sortByResource(out)
 	return out
 }
 
@@ -219,6 +225,6 @@ func staleValues(base, head []manifest.Warning) []api.Warning {
 				noun, strings.Join(fresh, ", ")),
 		})
 	}
-	slices.SortFunc(out, func(a, b api.Warning) int { return cmp.Compare(a.Resource, b.Resource) })
+	sortByResource(out)
 	return out
 }
