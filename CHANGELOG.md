@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.21](https://github.com/home-operations/konflate/compare/0.2.20...0.2.21) (2026-06-14)
+
+
+### Features
+
+* caution on Helm values the bumped chart no longer defines (flate v0.4.6 stale values) ([#230](https://github.com/home-operations/konflate/issues/230)) ([8006734](https://github.com/home-operations/konflate/commit/800673436df9f23f0112049fd50918a3af31d45f))
+* enable flate's SSRF egress guard while rendering fork PRs (KONFLATE_RESTRICT_EGRESS) ([#229](https://github.com/home-operations/konflate/issues/229)) ([9bb6230](https://github.com/home-operations/konflate/commit/9bb6230648319abe535b5965cbae87c5dbc34934))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.5 → v0.4.6) ([#226](https://github.com/home-operations/konflate/issues/226)) ([d2ebc1a](https://github.com/home-operations/konflate/commit/d2ebc1aa40aaa2013bd136c9e125790dd84ef855))
+* **diff:** highlight YAML with whole-document context (correct key colouring) ([#228](https://github.com/home-operations/konflate/issues/228)) ([008c86f](https://github.com/home-operations/konflate/commit/008c86f25bd3f9af86ee478bc93144d7825d1d07))
+* **ui:** centre the sync banner and name the repo in the document title ([#232](https://github.com/home-operations/konflate/issues/232)) ([eee88bb](https://github.com/home-operations/konflate/commit/eee88bbf23c750573fcc8c5f4e279b89967a6711))
+
+
+### Code Refactoring
+
+* **engine:** single-source caution sort-by-resource ([#231](https://github.com/home-operations/konflate/issues/231)) ([043d33b](https://github.com/home-operations/konflate/commit/043d33bef465e1f2065e32340dbe0ed149250086))
+
 ## [0.2.20](https://github.com/home-operations/konflate/compare/0.2.19...0.2.20) (2026-06-13)
 
 
