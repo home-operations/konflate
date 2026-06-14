@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.22](https://github.com/home-operations/konflate/compare/0.2.21...0.2.22) (2026-06-14)
+
+
+### Features
+
+* disable forge CI-status checks on an anonymous instance ([#237](https://github.com/home-operations/konflate/issues/237)) ([095d62f](https://github.com/home-operations/konflate/commit/095d62f2fa6e93d8652df2a855fcb6a70e8fb532))
+* **server:** keep the anonymous forge poll under its rate budget ([#233](https://github.com/home-operations/konflate/issues/233)) ([4636323](https://github.com/home-operations/konflate/commit/46363233c625e4b6434052fe7b3f338030cbdedb))
+* **ui:** render-failure signals in the PR list + a top pager ([#235](https://github.com/home-operations/konflate/issues/235)) ([f78ca91](https://github.com/home-operations/konflate/commit/f78ca9125ba8debf87ecb1882aeee99b98484219))
+
+
+### Bug Fixes
+
+* **gitclone:** hold one lock across fetch+extract to stop the repack race ([#236](https://github.com/home-operations/konflate/issues/236)) ([ceebd6b](https://github.com/home-operations/konflate/commit/ceebd6baf5cf4a503965b6fa4d85d5c3bd2581cf))
+
+
+### Code Refactoring
+
+* adopt Go 1.26 stdlib idioms (errors.AsType, strings, t.Context) ([#239](https://github.com/home-operations/konflate/issues/239)) ([447eb78](https://github.com/home-operations/konflate/commit/447eb78bb178b0ae674314a56fe7a8ff594aac32))
+* remove the now-vestigial rate-budget gate ([#238](https://github.com/home-operations/konflate/issues/238)) ([bbc5d62](https://github.com/home-operations/konflate/commit/bbc5d62cceeb663e1c789096097c5bbeda88a936))
+
 ## [0.2.21](https://github.com/home-operations/konflate/compare/0.2.20...0.2.21) (2026-06-14)
 
 
