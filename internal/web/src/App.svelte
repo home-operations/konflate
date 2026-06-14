@@ -37,6 +37,13 @@
     if (router.route.name === 'review') ensureDiff(router.route.pr);
   });
 
+  // Carry the reviewed repo in the browser tab, e.g. "Konflate -
+  // JJGadgets/Biohazard", so a pinned tab / bookmark names the cluster it
+  // tracks. Falls back to the bare wordmark until meta loads.
+  $effect(() => {
+    document.title = store.meta ? `Konflate - ${store.meta.repo}` : 'konflate';
+  });
+
   const themeIconPath = $derived(
     theme.pref === 'auto' ? mdiThemeLightDark : theme.pref === 'dark' ? mdiWeatherNight : mdiWhiteBalanceSunny,
   );

@@ -45,6 +45,7 @@ test('list → review → single-page flow', async ({ page }) => {
   // Topbar shows the forge logo + repo (linked to its forge page) and the
   // auto-update indicator — there is no manual refresh button.
   await expect(page.locator('.repo')).toContainText('acme/home-ops');
+  await expect(page).toHaveTitle('Konflate - acme/home-ops'); // repo rides in the browser tab
   await expect(page.locator('.repo svg[role="img"]')).toBeVisible();
   await expect(page.locator('a.repo')).toHaveAttribute('href', 'https://github.com/acme/home-ops');
   await expect(page.locator('a.repo')).toHaveAttribute('target', '_blank');
@@ -1256,6 +1257,7 @@ test('a rate-limited forge poll shows a banner with a reset countdown, not a bar
 
   const banner = page.locator('.sync-banner');
   await expect(banner).toBeVisible();
+  await expect(banner).toHaveCSS('justify-content', 'center'); // content is centred, not left-hugged
   await expect(banner).toContainText('GitHub API rate limit exceeded.');
   await expect(banner).toContainText(/Resets in ~\d+ minutes?\./);
   await expect(banner).toContainText('Configure a forge token or GitHub App');

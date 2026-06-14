@@ -109,6 +109,7 @@ body {
 .sync-banner {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   flex: 0 0 auto;
   padding: 8px 14px;
@@ -120,6 +121,7 @@ body {
 }
 .sync-banner-text {
   color: var(--text);
+  text-align: center;
 }
 .sync-banner-text strong {
   color: var(--caution);
