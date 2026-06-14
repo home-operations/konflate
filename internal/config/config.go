@@ -293,20 +293,6 @@ type Config struct {
 	// cap. <=0 disables it (the fetch is then bounded only by DiffTimeout).
 	FetchTimeout time.Duration `env:"KONFLATE_FETCH_TIMEOUT" envDefault:"2m"`
 
-	// GitDepth is the shallow-clone depth for the PR mirror (the persistent bare
-	// repo konflate fetches PR heads and base branches into). DEFAULT 0 = full
-	// history, which is correct and proven.
-	//
-	// A positive value shallow-clones to that many commits to make a cold clone of
-	// a large repo cheaper, but it is currently UNSAFE and must not be used: when a
-	// PR's merge-base lies beyond the shallow boundary — common on an active base
-	// branch — go-git's MergeBase fails with "object not found" rather than
-	// returning empty, so the deepen-on-demand path never triggers and the error is
-	// even misread as a corrupt mirror (triggering a re-clone loop). Every render
-	// then fails. Keep this 0 until shallow is reworked or removed. Distinct from
-	// flate's per-source GitRepository clone depth.
-	GitDepth int `env:"KONFLATE_GIT_DEPTH" envDefault:"0"`
-
 	// RefreshInterval is how often konflate re-lists PRs (to discover newly
 	// opened ones and reconcile closed ones) and re-renders an open PR whose head
 	// has advanced. It's the safety net that keeps PRs current even if an inbound
@@ -497,11 +483,6 @@ func Load() (*Config, error) {
 	// as-is and read as "fall back to RefreshInterval" by stalePRs.
 	if cfg.RerenderInterval > 0 && cfg.RerenderInterval < minRefreshInterval {
 		cfg.RerenderInterval = minRefreshInterval
-	}
-	// A negative depth is meaningless to git; treat it as 0 (full history) so a
-	// stray value can't produce a malformed shallow fetch.
-	if cfg.GitDepth < 0 {
-		cfg.GitDepth = 0
 	}
 	if cfg.StatusCheckName == "" {
 		cfg.StatusCheckName = DefaultStatusCheckName
