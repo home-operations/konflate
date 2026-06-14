@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-github/v88 v88.0.0
-	github.com/home-operations/flate v0.4.6
+	github.com/home-operations/flate v0.4.7
 	github.com/klauspost/compress v1.18.6
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2

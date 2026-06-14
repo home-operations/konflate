@@ -280,8 +280,8 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
-github.com/home-operations/flate v0.4.6 h1:TVhcPCxo3OM+sRH6cQhBsHqjxLrtfyUTva3won6Q9D0=
-github.com/home-operations/flate v0.4.6/go.mod h1:1ObAm9s50Ep4HhBxoondAVSFImMLQjhhN6tfIYduNK8=
+github.com/home-operations/flate v0.4.7 h1:SeC1m0g7nIFimP2HdjIt4umJDYf5TLzh8Xga3sdIkUQ=
+github.com/home-operations/flate v0.4.7/go.mod h1:1ObAm9s50Ep4HhBxoondAVSFImMLQjhhN6tfIYduNK8=
 github.com/homeport/dyff v1.12.0 h1:1d4T2vdY0hYeWtAxjMLIX9bI8OijBfOuKH3wzfdYZT8=
 github.com/homeport/dyff v1.12.0/go.mod h1:ArdUQcX099hp+uQ7pnimwU0Xgk2ba7E7nqdFv3WBRr8=
 github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI=
