@@ -9,6 +9,7 @@ import (
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/store"
 
+	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/diff"
 )
 
@@ -114,5 +115,48 @@ func TestDanglingDependsOn_Quiet(t *testing.T) {
 	)
 	if never != nil {
 		t.Errorf("never-rendered target must not warn: %+v", never)
+	}
+}
+
+func TestStaleValues(t *testing.T) {
+	hr := func(n string) manifest.NamedResource {
+		return manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: n}
+	}
+	stale := func(nr manifest.NamedResource, keys ...string) manifest.Warning {
+		return manifest.Warning{Category: manifest.WarnStaleValues, Resource: nr, Detail: keys}
+	}
+
+	// Newly stale: head strands two keys the base render didn't.
+	got := staleValues(nil, []manifest.Warning{stale(hr("plex"), "ingress.enabled", "foo")})
+	if len(got) != 1 {
+		t.Fatalf("warnings = %d, want 1: %+v", len(got), got)
+	}
+	if w := got[0]; w.Level != api.LevelCaution || w.Rule != "stale-helm-values" || w.Resource != parentLabel(hr("plex")) {
+		t.Errorf("warning = %+v, want a stale-helm-values caution on plex", w)
+	}
+	if !strings.Contains(got[0].Detail, "ingress.enabled") || !strings.Contains(got[0].Detail, "foo") {
+		t.Errorf("detail must list both stranded keys: %q", got[0].Detail)
+	}
+
+	// Only the newly-stranded key is flagged; one already stale at the base is not.
+	got = staleValues(
+		[]manifest.Warning{stale(hr("plex"), "old")},
+		[]manifest.Warning{stale(hr("plex"), "old", "new")},
+	)
+	if len(got) != 1 || !strings.Contains(got[0].Detail, "new") || strings.Contains(got[0].Detail, "old") {
+		t.Errorf("want only the newly-stale key 'new', not pre-existing 'old': %+v", got)
+	}
+
+	// Staleness present on both sides → pre-existing, not this PR's doing → no caution.
+	if got := staleValues(
+		[]manifest.Warning{stale(hr("plex"), "old")},
+		[]manifest.Warning{stale(hr("plex"), "old")},
+	); got != nil {
+		t.Errorf("pre-existing staleness must not warn: %+v", got)
+	}
+
+	// Other flate warning categories are ignored.
+	if got := staleValues(nil, []manifest.Warning{{Category: "EmptyScan", Resource: hr("plex")}}); got != nil {
+		t.Errorf("non-StaleValues categories must be ignored: %+v", got)
 	}
 }
