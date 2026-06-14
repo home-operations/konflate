@@ -25,9 +25,11 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/idxfile"
 	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
@@ -322,12 +324,11 @@ func mirrorCorrupt(err error) bool {
 var repackPackThreshold = 50
 
 // maybeRepack folds the mirror's packfiles into one when they have piled up past
-// repackPackThreshold, reporting whether it did. go-git's RepackObjects writes a
-// single new pack holding every object reachable from the mirror's refs — so the
-// unreachable objects a force-push leaves behind are reclaimed too — then deletes
-// the superseded packs. That deletion invalidates the open handle's cached pack
-// set, so the caller must re-open the mirror before reading objects through it.
-// Caller holds the lock.
+// repackPackThreshold, reporting whether it did. repackMirror writes a single new
+// pack holding every object reachable from the mirror's refs — so the unreachable
+// objects a force-push leaves behind are reclaimed too — then deletes the superseded
+// packs. That deletion invalidates the open handle's cached pack set, so the caller
+// must re-open the mirror before reading objects through it. Caller holds the lock.
 func (m *Mirror) maybeRepack(repo *git.Repository) (bool, error) {
 	n, err := m.countPacks()
 	if err != nil {
@@ -336,12 +337,145 @@ func (m *Mirror) maybeRepack(repo *git.Repository) (bool, error) {
 	if n < repackPackThreshold {
 		return false, nil
 	}
-	// The zero RepackConfig uses OFS deltas and a zero OnlyDeletePacksOlderThan,
-	// which imposes no age floor — every superseded pack is removed.
-	if err := repo.RepackObjects(&git.RepackConfig{}); err != nil {
+	if err := repackMirror(repo); err != nil {
 		return false, fmt.Errorf("gitclone: repack mirror: %w", err)
 	}
 	return true, nil
+}
+
+// repackMirror consolidates every packfile into one holding the objects reachable
+// from the mirror's refs, then deletes the superseded packs — the `git gc` go-git
+// won't run on its own.
+//
+// It stands in for go-git's Repository.RepackObjects, whose object walker recurses
+// into gitlink (submodule) tree entries: it calls GetObject on a commit that lives
+// in the submodule's own repository, never this one, so any repack of a repo that
+// contains a submodule fails with "object not found". (konflate then misread that
+// as a damaged store and "healed" it with a pointless re-clone, every repack,
+// forever.) The walk here treats a submodule entry as a leaf, exactly as git does
+// at a submodule boundary. A genuinely missing object — real damage — still surfaces
+// from the walk or the encoder, and mirrorCorrupt classifies it as corruption.
+func repackMirror(repo *git.Repository) error {
+	pos, ok := repo.Storer.(storer.PackedObjectStorer)
+	if !ok {
+		return errors.New("gitclone: storer is not a PackedObjectStorer")
+	}
+	oldPacks, err := pos.ObjectPacks()
+	if err != nil {
+		return err
+	}
+
+	seen := make(map[plumbing.Hash]struct{})
+	refs, err := repo.References()
+	if err != nil {
+		return err
+	}
+	defer refs.Close()
+	if err := refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Type() != plumbing.HashReference {
+			return nil
+		}
+		return walkReachable(repo.Storer, ref.Hash(), seen)
+	}); err != nil {
+		return err
+	}
+
+	newPack, err := writeObjectPack(repo, seen)
+	if err != nil {
+		return err
+	}
+
+	// Drop every pack the new one supersedes (no age floor); skip it if a no-op
+	// repack happened to reproduce the same hash.
+	for _, h := range oldPacks {
+		if h == newPack {
+			continue
+		}
+		if err := pos.DeleteOldObjectPackAndIndex(h, time.Time{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// walkReachable records h and every object reachable from it into seen, stopping at
+// gitlink (submodule) entries — their commit belongs to the submodule's repository,
+// not this one. Blobs are recorded by hash without being loaded; only commits,
+// trees, and tags are fetched, to follow their links.
+func walkReachable(s storer.EncodedObjectStorer, h plumbing.Hash, seen map[plumbing.Hash]struct{}) error {
+	if _, ok := seen[h]; ok {
+		return nil
+	}
+	obj, err := object.GetObject(s, h)
+	if err != nil {
+		return fmt.Errorf("walk %s: %w", h, err)
+	}
+	seen[h] = struct{}{}
+	switch o := obj.(type) {
+	case *object.Commit:
+		if err := walkReachable(s, o.TreeHash, seen); err != nil {
+			return err
+		}
+		for _, p := range o.ParentHashes {
+			if err := walkReachable(s, p, seen); err != nil {
+				return err
+			}
+		}
+	case *object.Tree:
+		for i := range o.Entries {
+			switch e := o.Entries[i]; e.Mode {
+			case filemode.Dir:
+				if err := walkReachable(s, e.Hash, seen); err != nil {
+					return err
+				}
+			case filemode.Submodule:
+				// A gitlink points at a commit in the submodule's repository, which
+				// this mirror never fetches. Recursing into it (as go-git's own
+				// walker does) would fail with "object not found"; skip it.
+			default:
+				seen[e.Hash] = struct{}{} // blob (regular/executable/symlink) — a leaf
+			}
+		}
+	case *object.Tag:
+		if err := walkReachable(s, o.Target, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeObjectPack encodes objs into one new packfile in the repo's object store and
+// returns its hash, mirroring go-git's createNewObjectPack (OFS deltas, the
+// configured pack window). The writer must be closed before the caller deletes the
+// old packs, so the encode is scoped to this function. The mirror only ever holds
+// packed objects (clone and fetch both write packs, never loose), so there are no
+// loose copies to reclaim afterwards.
+func writeObjectPack(repo *git.Repository, objs map[plumbing.Hash]struct{}) (h plumbing.Hash, err error) {
+	pfw, ok := repo.Storer.(storer.PackfileWriter)
+	if !ok {
+		return h, errors.New("gitclone: storer is not a PackfileWriter")
+	}
+	wc, err := pfw.PackfileWriter()
+	if err != nil {
+		return h, err
+	}
+	defer func() {
+		if cerr := wc.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return h, err
+	}
+	hashes := make([]plumbing.Hash, 0, len(objs))
+	for hash := range objs {
+		hashes = append(hashes, hash)
+	}
+	// useRefDeltas=false → OFS deltas, matching go-git's zero RepackConfig.
+	enc := packfile.NewEncoder(wc, repo.Storer, false)
+	return enc.Encode(hashes, cfg.Pack.Window)
 }
 
 // countPacks returns the number of *.pack files in the mirror's object store. A
