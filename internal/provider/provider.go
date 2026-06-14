@@ -39,19 +39,6 @@ type Provider interface {
 	Checks(ctx context.Context, pr api.PR) (api.CheckRollup, error)
 }
 
-// RateBudgeter is an optional Provider capability: it reports the forge request
-// budget observed on the most recent call. The poll uses it to skip the costly
-// per-PR checks pass before that pass would exhaust the budget and start failing
-// the cheaper, more important PR list. Only the GitHub provider implements it —
-// GitHub's 60 req/hour unauthenticated ceiling is where this bites; GitLab and
-// Forgejo don't, so the guard is simply inert there (and, once authenticated,
-// the budget is large enough that it never fires).
-type RateBudgeter interface {
-	// RateBudget returns the requests remaining before the forge rate limit and
-	// whether any budget has been observed yet — false before the first call.
-	RateBudget() (remaining int, ok bool)
-}
-
 // New builds the provider for the configured forge.
 func New(cfg *config.Config) (Provider, error) {
 	switch cfg.Forge.Kind {

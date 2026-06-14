@@ -549,7 +549,6 @@ Served on the separate operational port (keep it off your public ingress):
 | `konflate_forge_list_errors_total`                  | counter   | Failed PR-list polls, by `reason` (`rate_limited`/`error`). |
 | `konflate_forge_rate_limited`                       | gauge     | `1` when the last PR-list poll hit a rate limit, else `0`.  |
 | `konflate_forge_rate_limit_reset_timestamp_seconds` | gauge     | Unix time the rate limit resets (`0` when not limited).     |
-| `konflate_forge_checks_skipped_total`               | counter   | CI-checks passes skipped to preserve the forge rate budget. |
 
 Plus the standard Go runtime and process collectors.
 

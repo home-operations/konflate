@@ -587,11 +587,6 @@ func (s *Server) refreshChecks(ctx context.Context, prs []api.PR) {
 	if !s.cfg.ChecksEnabled() {
 		return // anonymous instance: CI-status polling is off (Config.ChecksEnabled)
 	}
-	if s.checksWouldExhaustBudget(len(prs)) {
-		s.log.Info("refresh: skipping checks pass to preserve forge rate budget", "prs", len(prs))
-		s.metrics.checksSkipped.Inc()
-		return
-	}
 	for _, pr := range prs {
 		rollup, err := s.prov.Checks(ctx, pr)
 		if err != nil {
@@ -648,36 +643,6 @@ func (s *Server) rateLimitedUntil() (reset time.Time, blocked bool) {
 		return time.Time{}, false // already past the reset — let the next poll try
 	}
 	return reset, true
-}
-
-// checksReserve is the request headroom checksWouldExhaustBudget keeps unspent:
-// enough for the next poll's PR list and a few closed-PR reconciliations, so a
-// full checks pass never consumes the budget the cheaper, more important list
-// depends on.
-const checksReserve = 10
-
-// checksWouldExhaustBudget reports whether fetching every PR's CI rollup — two
-// forge calls each — would draw the remaining request budget below checksReserve.
-// It fires only when the provider can report a budget (GitHub) and that budget is
-// known; otherwise it returns false and the checks pass runs unchanged. With
-// checks off entirely on an anonymous instance (refreshChecks returns early — see
-// Config.ChecksEnabled), this is a safety net for an authenticated instance with a
-// very large open-PR set: the list stays fresh and each PR's CI pill keeps its
-// last value rather than the list itself starting to fail.
-func (s *Server) checksWouldExhaustBudget(n int) bool {
-	if n <= 0 {
-		return false
-	}
-	rb, ok := s.prov.(provider.RateBudgeter)
-	if !ok {
-		return false
-	}
-	remaining, known := rb.RateBudget()
-	if !known {
-		return false
-	}
-	const callsPerPR = 2 // GetCombinedStatus + ListCheckRunsForRef
-	return remaining < n*callsPerPR+checksReserve
 }
 
 // reconcileClosed handles PRs that have left the forge's open set. Each is
