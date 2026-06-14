@@ -171,6 +171,34 @@ tests:
             name: KONFLATE_MCP
             value: "true"
 
+  - it: omits KONFLATE_RESTRICT_EGRESS by default (the binary follows renderForkPrs)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_RESTRICT_EGRESS
+
+  - it: emits KONFLATE_RESTRICT_EGRESS=true to force the egress guard on
+    set:
+      config.restrictEgress: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RESTRICT_EGRESS
+            value: "true"
+
+  - it: emits KONFLATE_RESTRICT_EGRESS=false to disable the guard even while rendering forks
+    set:
+      config.restrictEgress: "false"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_RESTRICT_EGRESS
+            value: "false"
+
   - it: omits KONFLATE_MAX_DIFF_RESOURCES when maxDiffResources is empty (binary default)
     asserts:
       - notContains:

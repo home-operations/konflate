@@ -69,6 +69,7 @@ Kubernetes: `>=1.25.0-0`
 | config.renderConcurrency | string | `""` | Advanced: cap on reconcile goroutines within one render. Empty/"0" = auto (NumCPU*4). |
 | config.renderForkPrs | bool | `false` | Render fork PRs. ⚠️ A fork runs untrusted external code through flate (SSRF / resource exhaustion). Off by default — forks are listed but hidden until you flip this. Kept separate from `prFilterExpr` so the filter can't accidentally enable them. |
 | config.repo | required | `""` | Forge URI of the repository to review (github://owner/repo, gitlab://group/repo, forgejo://host/owner/repo). |
+| config.restrictEgress | string | `""` | Override flate's SSRF egress guard on source fetches (it blocks dials to private / loopback / link-local / cloud-metadata addresses and rejects non-https/ssh git schemes). Empty = follow `renderForkPrs` (on while rendering untrusted forks, off otherwise). `"true"` guards every render; `"false"` permits private-network sources (e.g. an internal Gitea / OCI registry) even while rendering forks. |
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
 | config.statusCheckName | string | `""` | Name the commit status konflate posts under (the required-check name in branch-protection rules). Empty uses the default, "Konflate". |
 | config.statusChecks | bool | `false` | Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set. |

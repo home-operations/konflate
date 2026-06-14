@@ -83,6 +83,10 @@ spec:
             - name: KONFLATE_RENDER_FORK_PRS
               value: "true"
             {{- end }}
+            {{- if ne (toString .Values.config.restrictEgress) "" }}
+            - name: KONFLATE_RESTRICT_EGRESS
+              value: {{ .Values.config.restrictEgress | quote }}
+            {{- end }}
             {{- if .Values.config.mcp }}
             - name: KONFLATE_MCP
               value: "true"
