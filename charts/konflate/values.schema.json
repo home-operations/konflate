@@ -62,7 +62,7 @@
         },
         "gitDepth": {
           "default": "",
-          "description": "Advanced: shallow-clone depth for the PR mirror; konflate deepens on demand for a deeper merge-base, so diffs stay correct. Empty = default (50); \"0\" = full history.",
+          "description": "Advanced: shallow-clone depth for the PR mirror. Empty/\"0\" = full history (the default and only safe value today; positive values are known-broken — see KONFLATE_GIT_DEPTH).",
           "title": "gitDepth",
           "type": "string"
         },
