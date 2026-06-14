@@ -523,16 +523,29 @@ konflate verifies the signature with the per-forge scheme automatically:
 | Forgejo | `X-Gitea-Signature`   | HMAC-SHA256, bare hex               |
 | GitLab  | `X-Gitlab-Token`      | constant-time compare of the secret |
 
-Select these events when creating the webhook. Pull-request events keep the PR
-list and diffs live; CI-status events drive the per-PR check indicator — without
-them the indicator still updates on the `KONFLATE_REFRESH_INTERVAL` poll, just
-not instantly:
+**Select exactly these events** when creating the webhook. konflate acts only on
+the event identifiers below (shown raw, since forge UI labels vary); anything
+else it receives just triggers a harmless coalesced re-list. The PR events keep
+the PR list and diffs live (including a re-render when a PR's head advances); the
+CI-status events drive the per-PR check indicator.
 
-| Forge   | Pull-request events  | CI-status events                                    |
-| ------- | -------------------- | --------------------------------------------------- |
-| GitHub  | Pull requests        | Statuses, Check runs, Check suites                  |
-| Forgejo | Pull Request         | Commit status (+ Workflow Run / Job for Actions CI) |
-| GitLab  | Merge request events | Pipeline events (+ Job events)                      |
+| Forge   | PR events (raw type)                       | CI-status events (raw type)                                                                                                                                   |
+| ------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub  | `pull_request` (UI: **Pull requests**)     | `check_run` + `check_suite` (UI: **Check runs** / **Check suites** — Actions and the Checks API) and/or `status` (UI: **Statuses** — legacy commit-status CI) |
+| Forgejo | `pull_request` (UI: **Pull Request**)      | `status` (UI: **Commit status**)                                                                                                                              |
+| GitLab  | `merge_request` (**Merge request events**) | `pipeline` (**Pipeline events**) + `build` (**Job events**)                                                                                                   |
+
+Two clarifications, since they're easy to get wrong:
+
+- **`push` events are _not_ needed.** `pull_request` / `merge_request` already
+  fire on new commits (GitHub/Forgejo `synchronize`, GitLab MR `update`) and on
+  open-set changes, so a `push` hook would only add redundant re-lists. Leave
+  "Pushes" / "Push events" unchecked.
+- **CI-status events are optional but recommended.** Without them the check
+  indicator still updates, but only on the `KONFLATE_REFRESH_INTERVAL` poll
+  (default 30m) — not in real time. On checks-API CI (e.g. GitHub Actions) the
+  `status` event alone won't carry check state; subscribe to `check_run` /
+  `check_suite` too.
 
 Rate limiting is intentionally **not** built in — put konflate behind your
 reverse proxy / ingress and rate-limit there.
