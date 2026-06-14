@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.26](https://github.com/home-operations/konflate/compare/0.2.25...0.2.26) (2026-06-14)
+
+
+### Features
+
+* **chart:** add deploymentAnnotations ([#252](https://github.com/home-operations/konflate/issues/252)) ([ceb98f5](https://github.com/home-operations/konflate/commit/ceb98f5b6c6e1decbb85c067e17467628090945e))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.6 → v0.4.7) ([#251](https://github.com/home-operations/konflate/issues/251)) ([b625258](https://github.com/home-operations/konflate/commit/b6252583d7b31579e6166e4ff513112cf5c2d4fc))
+* **gitclone:** repack mirrors containing submodules without re-cloning ([#255](https://github.com/home-operations/konflate/issues/255)) ([ca7e3e2](https://github.com/home-operations/konflate/commit/ca7e3e25393898f263a673d0f0d32c6eba37b093))
+* **provider:** resend check-run started_at so GitHub stops inflating its duration ([#254](https://github.com/home-operations/konflate/issues/254)) ([90062da](https://github.com/home-operations/konflate/commit/90062daa3c8041da35d1cb200c4b46c170a8eccd))
+
 ## [0.2.25](https://github.com/home-operations/konflate/compare/0.2.24...0.2.25) (2026-06-14)
 
 
