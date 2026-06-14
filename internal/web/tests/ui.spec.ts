@@ -269,14 +269,14 @@ test('list pagination: default 10 per page, prev/next, and a size picker', async
   // Default page size is 10 (the lowest), newest first.
   await expect(page.locator('.card')).toHaveCount(10);
   await expect(page.locator('.pager-count')).toHaveText('1–10 of 25');
-  await expect(page.locator('.pager-page')).toHaveText('Page 1 of 3');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 1 of 3');
   await expect(page.locator('.card-shell[data-pr="25"]')).toBeVisible();
   await expect(page.locator('.card-shell[data-pr="15"]')).toHaveCount(0); // page 2's top
 
   // Next → page 2: the URL carries the page, and the window slides.
-  await page.locator('.pager-btn[aria-label="Next page"]').click();
+  await page.locator('.pager .pager-btn[aria-label="Next page"]').click();
   await expect(page).toHaveURL(/#\/page\/2$/);
-  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 2 of 3');
   await expect(page.locator('.pager-count')).toHaveText('11–20 of 25');
   await expect(page.locator('.card-shell[data-pr="15"]')).toBeVisible();
   await expect(page.locator('.card-shell[data-pr="25"]')).toHaveCount(0);
@@ -290,16 +290,56 @@ test('list pagination: default 10 per page, prev/next, and a size picker', async
   await expect(page.locator('.pager-count')).toHaveText('1–25 of 25');
 });
 
+test('list pagination: a compact pager beside expand-all pages from the top', async ({ page }) => {
+  await stubApi(page, defaultMeta, bulkPRs({ open: 25 }));
+  await page.goto('/');
+
+  // The top pager (in the summary row's right cluster) mirrors the bottom one and
+  // pages the list without scrolling to its end.
+  const topNav = page.locator('.list-summary-end .pager-nav');
+  await expect(topNav.locator('.pager-page')).toHaveText('Page 1 of 3');
+  await topNav.locator('.pager-btn[aria-label="Next page"]').click();
+  await expect(page).toHaveURL(/#\/page\/2$/);
+  await expect(topNav.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 2 of 3'); // bottom stays in sync
+});
+
+test('render-failure signals: a "failure" pill, a red card edge, and the badge left of images', async ({ page }) => {
+  await stubApi(page);
+  await page.goto('/');
+
+  // A red pill beside "open" counts PRs that failed to render and filters to them.
+  const failurePill = page.locator('.sum-pill.failure');
+  await expect(failurePill).toContainText('1 failure');
+  await failurePill.click();
+  await expect(page.locator('.card')).toHaveCount(1);
+  const card = page.locator('.card-shell[data-pr="142"]');
+  await expect(card).toBeVisible();
+
+  // The failing card carries a red edge (its own class), like a caution card's amber one.
+  await expect(card).toHaveClass(/failure/);
+
+  // The render-failure badge (danger) and the caution badge both sit LEFT of the
+  // image-changes badge (the bare `.badge`) — failures was previously to its right.
+  const classes = await card.locator('.badges .badge').evaluateAll((els) => els.map((el) => el.className.trim()));
+  const dangerIdx = classes.findIndex((c) => c.includes('danger'));
+  const cautionIdx = classes.findIndex((c) => c.includes('caution'));
+  const imagesIdx = classes.indexOf('badge');
+  expect(dangerIdx).toBeGreaterThanOrEqual(0);
+  expect(imagesIdx).toBeGreaterThan(dangerIdx);
+  expect(imagesIdx).toBeGreaterThan(cautionIdx);
+});
+
 test('list pagination: deep-links a page and clamps an out-of-range page', async ({ page }) => {
   await stubApi(page, defaultMeta, bulkPRs({ open: 25 }));
 
   await page.goto('/#/page/2');
-  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 2 of 3');
   await expect(page.locator('.card-shell[data-pr="15"]')).toBeVisible();
 
   // A page past the end clamps to the last page (and rewrites the URL to match).
   await page.goto('/#/page/99');
-  await expect(page.locator('.pager-page')).toHaveText('Page 3 of 3');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 3 of 3');
   await expect(page).toHaveURL(/#\/page\/3$/);
   await expect(page.locator('.card')).toHaveCount(5); // 25 → pages of 10/10/5
 });
@@ -315,12 +355,12 @@ test('list pagination stays coherent with the filter pills', async ({ page }) =>
 
   // Page in, then switch to the merged pill: the page resets to 1 and the count
   // tracks the merged set, so "of N" matches the merged pill's count (cohesion).
-  await page.locator('.pager-btn[aria-label="Next page"]').click();
-  await expect(page.locator('.pager-page')).toHaveText('Page 2 of 3');
+  await page.locator('.pager .pager-btn[aria-label="Next page"]').click();
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 2 of 3');
   await page.locator('.sum-pill.merged').click();
   await expect(page).toHaveURL(/#\/$/); // back to page 1
   await expect(page.locator('.pager-count')).toHaveText('1–10 of 13');
-  await expect(page.locator('.pager-page')).toHaveText('Page 1 of 2');
+  await expect(page.locator('.pager .pager-page')).toHaveText('Page 1 of 2');
 });
 
 test('split diff renders two balanced columns (regression)', async ({ page }) => {
