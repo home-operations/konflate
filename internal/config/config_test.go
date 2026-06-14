@@ -236,7 +236,7 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
 		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
 		{"MaxDiffResources", cfg.MaxDiffResources, 500},
-		{"GitDepth", cfg.GitDepth, 50},
+		{"GitDepth", cfg.GitDepth, 0}, // shallow disabled by default (full history); see config.go
 	} {
 		if c.got != c.want {
 			t.Errorf("%s default = %d, want %d", c.name, c.got, c.want)
