@@ -498,7 +498,11 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	// change (opened/closed/...) or an opaque payload re-lists.
 	switch ev := webhook.Parse(s.cfg.Forge.Kind, r.Header, body); {
 	case ev.HeadSHA != "":
-		go s.refreshChecksForSHA(s.runCtx, ev.HeadSHA)
+		// Coalesce per head SHA: one CI cycle delivers a storm of
+		// check_run/check_suite events, so requestCheckRefresh folds them into at
+		// most one in-flight Checks poll plus one trailing poll instead of a
+		// goroutine + two forge calls per event (see requestCheckRefresh).
+		s.requestCheckRefresh(ev.HeadSHA)
 	case ev.PR > 0 && !ev.Relist:
 		go func() {
 			if err := s.refreshPR(s.runCtx, ev.PR, "webhook"); err != nil {
@@ -618,7 +622,10 @@ func (s *Server) refreshChecksForSHA(ctx context.Context, sha string) {
 	}
 	rollup, err := s.prov.Checks(ctx, pr)
 	if err != nil {
-		s.log.Debug("webhook checks fetch failed", "pr", pr.Number, "error", err)
+		// Warn, not Debug: a webhook-driven refresh is a targeted update for a head
+		// someone is watching, and on failure its rollup is stranded until the next
+		// list poll (KONFLATE_REFRESH_INTERVAL). Surface it rather than swallow it.
+		s.log.Warn("webhook checks fetch failed", "pr", pr.Number, "sha", sha, "error", err)
 		return
 	}
 	if s.store.setChecks(pr.Number, rollup) {
