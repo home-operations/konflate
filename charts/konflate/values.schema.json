@@ -191,6 +191,12 @@
       "title": "config",
       "type": "object"
     },
+    "deploymentAnnotations": {
+      "description": "Annotations added to the Deployment object (e.g. `reloader.stakater.com/auto: \"true\"` to roll the pod when the mounted Secret / PR-comment-template ConfigMap changes). Pod-level annotations go in `podAnnotations`.",
+      "required": [],
+      "title": "deploymentAnnotations",
+      "type": "object"
+    },
     "fullnameOverride": {
       "default": "",
       "description": "Override the full release name.",

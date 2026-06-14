@@ -19,6 +19,20 @@ tests:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/home-operations/konflate@sha256:deadbeef
 
+  - it: omits Deployment annotations by default
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: sets Deployment annotations from deploymentAnnotations
+    set:
+      deploymentAnnotations:
+        reloader.stakater.com/auto: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "true"
+
   - it: uses an explicit tag when no digest is set
     set:
       image.tag: v1.2.3

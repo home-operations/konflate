@@ -74,6 +74,7 @@ Kubernetes: `>=1.25.0-0`
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
 | config.statusCheckName | string | `""` | Name the commit status konflate posts under (the required-check name in branch-protection rules). Empty uses the default, "Konflate". |
 | config.statusChecks | bool | `false` | Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set. |
+| deploymentAnnotations | object | `{}` | Annotations added to the Deployment object (e.g. `reloader.stakater.com/auto: "true"` to roll the pod when the mounted Secret / PR-comment-template ConfigMap changes). Pod-level annotations go in `podAnnotations`. |
 | fullnameOverride | string | `""` | Override the full release name. |
 | httpRoute.additionalRules | list | `[]` | Custom rules prepended before the default rule (templated). |
 | httpRoute.annotations | object | `{}` | HTTPRoute annotations. |

@@ -213,6 +213,9 @@ serviceAccount:
   # -- ServiceAccount name; generated from the release name if empty.
   name: ""
 
+# -- Annotations added to the Deployment object (e.g. `reloader.stakater.com/auto: "true"` to roll the pod when the mounted Secret / PR-comment-template ConfigMap changes). Pod-level annotations go in `podAnnotations`.
+deploymentAnnotations: {}
+
 # -- Annotations added to the pod.
 podAnnotations: {}
 # -- Labels added to the pod.
