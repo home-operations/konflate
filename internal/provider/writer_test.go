@@ -76,12 +76,14 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 	t.Run("creates a check run when none exists", func(t *testing.T) {
 		t.Parallel()
 		var created struct {
-			Name       string `json:"name"`
-			HeadSHA    string `json:"head_sha"`
-			Status     string `json:"status"`
-			Conclusion string `json:"conclusion"`
-			DetailsURL string `json:"details_url"`
-			Output     struct {
+			Name        string `json:"name"`
+			HeadSHA     string `json:"head_sha"`
+			Status      string `json:"status"`
+			Conclusion  string `json:"conclusion"`
+			StartedAt   string `json:"started_at"`
+			CompletedAt string `json:"completed_at"`
+			DetailsURL  string `json:"details_url"`
+			Output      struct {
 				Title, Summary string
 			} `json:"output"`
 		}
@@ -109,23 +111,28 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 			created.Output.Title != "1 caution" || created.Output.Summary != "### konflate — summary" {
 			t.Errorf("create payload = %+v", created)
 		}
+		if created.StartedAt == "" || created.StartedAt != created.CompletedAt {
+			t.Errorf("create started_at=%q completed_at=%q, want equal and non-empty", created.StartedAt, created.CompletedAt)
+		}
 	})
 
 	t.Run("updates the existing run for the head SHA", func(t *testing.T) {
 		t.Parallel()
-		var patched string
-		var conclusion string
+		var patched, method string
+		var conclusion, startedAt, completedAt string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/acme/web/commits/"+sha+"/check-runs", func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte(`{"total_count":1,"check_runs":[{"id":42,"name":"konflate"}]}`))
 		})
 		mux.HandleFunc("/repos/acme/web/check-runs/42", func(w http.ResponseWriter, r *http.Request) {
-			patched = r.URL.Path
+			patched, method = r.URL.Path, r.Method
 			var body struct {
-				Conclusion string `json:"conclusion"`
+				Conclusion  string `json:"conclusion"`
+				StartedAt   string `json:"started_at"`
+				CompletedAt string `json:"completed_at"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			conclusion = body.Conclusion
+			conclusion, startedAt, completedAt = body.Conclusion, body.StartedAt, body.CompletedAt
 			_, _ = w.Write([]byte(`{"id":42}`))
 		})
 		mux.HandleFunc("/repos/acme/web/check-runs", func(w http.ResponseWriter, _ *http.Request) {
@@ -142,8 +149,13 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckRun (update): %v", err)
 		}
-		if patched != "/repos/acme/web/check-runs/42" || conclusion != "success" {
-			t.Errorf("update path=%q conclusion=%q, want .../check-runs/42 + success", patched, conclusion)
+		if patched != "/repos/acme/web/check-runs/42" || method != http.MethodPatch || conclusion != "success" {
+			t.Errorf("update path=%q method=%q conclusion=%q, want PATCH .../check-runs/42 + success", patched, method, conclusion)
+		}
+		// started_at must be resent on update and equal completed_at, else GitHub shows
+		// an ever-growing "Completed in Nm" as completed_at advances each re-render.
+		if startedAt == "" || startedAt != completedAt {
+			t.Errorf("update started_at=%q completed_at=%q, want equal and non-empty", startedAt, completedAt)
 		}
 	})
 
