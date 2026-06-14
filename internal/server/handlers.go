@@ -171,7 +171,7 @@ func ifNoneMatch(r *http.Request, etag string) bool {
 	if strings.TrimSpace(inm) == "*" {
 		return true
 	}
-	for _, candidate := range strings.Split(inm, ",") {
+	for candidate := range strings.SplitSeq(inm, ",") {
 		if strings.TrimSpace(candidate) == etag {
 			return true
 		}
