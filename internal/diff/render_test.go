@@ -75,6 +75,39 @@ func TestRender_Changed(t *testing.T) {
 	}
 }
 
+// TestRender_NestingKeyHighlight guards the whole-document highlighting: a key
+// whose value is a nested block ("data:", "metadata:") must be coloured as a key
+// (chroma's nt class), not left as a plain scalar. Lexing each line in isolation
+// mis-tagged such parent keys — the whole "data:" line became one Literal (class
+// l) — because chroma's YAML lexer needs the following lines' context to know it's
+// a mapping key. docLines lexes the whole document, which fixes it.
+func TestRender_NestingKeyHighlight(t *testing.T) {
+	t.Parallel()
+	old := doc(t, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web\ndata:\n  level: \"2\"\n")
+	neu := doc(t, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web\ndata:\n  level: \"3\"\n")
+
+	res, err := Render(RenderInput{
+		PRNumber: 1, HeadSHA: "sha",
+		Changes: []Change{{Status: "changed", Kind: "ConfigMap", Name: "web", Parent: "HelmRelease web", Old: old, New: neu}},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	r := res.Resources[0]
+
+	// Every nesting-parent key is classified as a key (nt) thanks to document
+	// context — not collapsed into a single plain Literal as per-line lexing did.
+	for _, key := range []string{"data", "metadata"} {
+		if !unifiedHasHTML(r.Unified, `<span class="nt">`+key+`</span>`) {
+			t.Errorf("parent key %q not highlighted as a key (nt):\n%s", key, unifiedDump(r.Unified))
+		}
+	}
+	// The per-line bug tagged the whole "data:" line as one Literal; it must not recur.
+	if unifiedHasHTML(r.Unified, `<span class="l">data:</span>`) {
+		t.Errorf("parent key still mis-tagged as a plain Literal (l):\n%s", unifiedDump(r.Unified))
+	}
+}
+
 // TestRender_DropsTypeOnlyNoOpChange verifies a "changed" pair whose two sides
 // marshal to identical YAML is dropped, not rendered as an empty panel. flate
 // flags changes by typed inequality (reflect.DeepEqual), so replicas typed int 3
@@ -308,6 +341,16 @@ func unifiedHasHTML(rows []api.UnifiedRow, substr string) bool {
 		}
 	}
 	return false
+}
+
+// unifiedDump joins the rows' HTML one per line, for failure messages.
+func unifiedDump(rows []api.UnifiedRow) string {
+	var b strings.Builder
+	for _, r := range rows {
+		b.WriteString(r.HTML)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func sideHasHTML(rows []api.SideRow, substr string) bool {

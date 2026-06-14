@@ -141,10 +141,13 @@ func buildResource(id string, mc marshaledChange, hl *highlighter) api.DiffResou
 
 	a := difflib.SplitLines(oldYAML)
 	b := difflib.SplitLines(newYAML)
-	ah := hl.lines(a)
-	bh := hl.lines(b)
+	// Highlight each whole document once (full lexer context) and slice the tokens
+	// onto a/b — the same lines the diff indexes — so rows align 1:1. ah/bh hold
+	// per-line HTML; aTok/bTok hold per-line tokens for the word-level splice.
+	ah, aTok := hl.docLines(oldYAML, a)
+	bh, bTok := hl.docLines(newYAML, b)
 	groups := difflib.NewMatcher(a, b).GetGroupedOpCodes(3)
-	markIntraline(a, b, groups, hl, ah, bh)
+	markIntraline(a, b, groups, hl, aTok, bTok, ah, bh)
 
 	name := c.Name
 	if c.Namespace != "" {
@@ -319,7 +322,7 @@ func sideRows(ah, bh []string, groups [][]difflib.OpCode) []api.SideRow {
 // markIntraline rewrites replace-aligned line pairs in ah/bh to add word-level
 // highlight spans around the runes that actually changed, so a one-character
 // edit reads as a one-character highlight instead of a whole-line tint.
-func markIntraline(a, b []string, groups [][]difflib.OpCode, hl *highlighter, ah, bh []string) {
+func markIntraline(a, b []string, groups [][]difflib.OpCode, hl *highlighter, aTok, bTok [][]chroma.Token, ah, bh []string) {
 	for _, group := range groups {
 		for _, op := range group {
 			if op.Tag != 'r' {
@@ -329,10 +332,10 @@ func markIntraline(a, b []string, groups [][]difflib.OpCode, hl *highlighter, ah
 				ai, bj := op.I1+k, op.J1+k
 				aLo, aHi, bLo, bHi := runeDiffRange(strings.TrimRight(a[ai], "\n"), strings.TrimRight(b[bj], "\n"))
 				if aHi > aLo {
-					ah[ai] = hl.emit(a[ai], aLo, aHi)
+					ah[ai] = hl.emit(aTok[ai], aLo, aHi)
 				}
 				if bHi > bLo {
-					bh[bj] = hl.emit(b[bj], bLo, bHi)
+					bh[bj] = hl.emit(bTok[bj], bLo, bHi)
 				}
 			}
 		}
@@ -443,7 +446,11 @@ func buildHighlighter() (*built, error) {
 		return nil, fmt.Errorf("chroma css (dark): %w", err)
 	}
 	h := &highlighter{lexer: lexer, style: light, fmtr: fmtr}
-	_ = h.line("warm the lexer's lazy rule compilation once, single-threaded")
+	// Warm the lexer's lazy rule compilation once, single-threaded under the Once,
+	// so it never races the first concurrent renders.
+	if it, terr := lexer.Tokenise(nil, "warm: the lexer\n"); terr == nil {
+		_ = it.Tokens()
+	}
 	return &built{hl: h, css: lightCSS + "\n" + darkCSS}, nil
 }
 
@@ -462,42 +469,80 @@ func scopedCSS(fmtr *chromahtml.Formatter, style *chroma.Style, theme string) (s
 	return css, nil
 }
 
-func (h *highlighter) lines(src []string) []string {
-	out := make([]string, len(src))
-	for i, s := range src {
-		out[i] = h.line(s)
+// docLines tokenises a whole YAML document once — giving chroma's stateful lexer
+// the full block context it needs (a bare parent key like "spec:", lexed alone,
+// is mis-tagged as a plain scalar; in context it's correctly a key) — then splits
+// the token stream into lines with chroma.SplitTokensIntoLines. chroma and
+// difflib.SplitLines split the same src on the same newlines, so the lines align
+// with `lines` (the decomposition the diff indexes) from the front, index for
+// index; any empty tail line difflib keeps past chroma's content renders as empty
+// HTML. It returns each line's HTML and its tokens (the tokens drive emit's
+// word-level splice). This replaces lexing each line in isolation, which lost the
+// cross-line context and left every nesting-parent key uncolored.
+func (h *highlighter) docLines(src string, lines []string) (htmls []string, toks [][]chroma.Token) {
+	htmls = make([]string, len(lines))
+	toks = make([][]chroma.Token, len(lines))
+	it, err := h.lexer.Tokenise(nil, src)
+	if err != nil {
+		for i, ln := range lines {
+			htmls[i] = template.HTMLEscapeString(strings.TrimRight(ln, "\n"))
+		}
+		return htmls, toks
 	}
-	return out
+	split := chroma.SplitTokensIntoLines(it.Tokens())
+	for i := range lines {
+		if i < len(split) {
+			toks[i] = trimTrailingNewline(split[i]) // drop the line's trailing "\n"
+		}
+		htmls[i] = h.format(toks[i]) // a nil/empty line formats to ""
+	}
+	return htmls, toks
 }
 
-func (h *highlighter) line(s string) string {
-	s = strings.TrimRight(s, "\n")
-	it, err := h.lexer.Tokenise(nil, s)
-	if err != nil {
-		return template.HTMLEscapeString(s)
-	}
+// format renders an already-tokenised line to class-based HTML through chroma's
+// formatter — byte-for-byte what formatting the line standalone produced, except
+// the tokens now carry whole-document lexer context.
+func (h *highlighter) format(toks []chroma.Token) string {
 	var b strings.Builder
-	if err := h.fmtr.Format(&b, h.style, it); err != nil {
-		return template.HTMLEscapeString(s)
+	if err := h.fmtr.Format(&b, h.style, chroma.Literator(toks...)); err != nil {
+		return template.HTMLEscapeString(tokenText(toks))
 	}
 	return b.String()
 }
 
-// emit renders one YAML line to class-based highlighted HTML, walking chroma's
-// token stream directly (rather than its formatter) so a word-level highlight
-// can be spliced mid-token: the rune range [lo,hi) is wrapped in
-// <span class="wd">. Token classes mirror chroma's WithClasses output
-// (StandardTypes), so they match the same embedded stylesheet line() produces.
-func (h *highlighter) emit(s string, lo, hi int) string {
-	s = strings.TrimRight(s, "\n")
-	it, err := h.lexer.Tokenise(nil, s)
-	if err != nil {
-		return template.HTMLEscapeString(s)
+// trimTrailingNewline drops the "\n" the line split leaves on a line's last token,
+// so no literal newline reaches the per-line HTML (the old per-line path trimmed
+// it before tokenising).
+func trimTrailingNewline(toks []chroma.Token) []chroma.Token {
+	if n := len(toks); n > 0 {
+		toks[n-1].Value = strings.TrimSuffix(toks[n-1].Value, "\n")
+		if toks[n-1].Value == "" {
+			return toks[:n-1]
+		}
 	}
+	return toks
+}
+
+// tokenText concatenates token values back into the line's plain text — for the
+// rare formatter-error fallback.
+func tokenText(toks []chroma.Token) string {
+	var b strings.Builder
+	for _, t := range toks {
+		b.WriteString(t.Value)
+	}
+	return b.String()
+}
+
+// emit renders one line's tokens to class-based highlighted HTML, walking them
+// directly (rather than the formatter) so a word-level highlight can be spliced
+// mid-token: the rune range [lo,hi) is wrapped in <span class="wd">. Token
+// classes mirror chroma's WithClasses output (StandardTypes), so they match the
+// same embedded stylesheet format() produces. lo>=hi emits no word span.
+func (h *highlighter) emit(toks []chroma.Token, lo, hi int) string {
 	esc := func(r []rune) string { return template.HTMLEscapeString(string(r)) }
 	var b strings.Builder
 	pos := 0
-	for t := it(); t != chroma.EOF; t = it() {
+	for _, t := range toks {
 		rs := []rune(t.Value)
 		n := len(rs)
 		class := classFor(t.Type)
@@ -525,18 +570,20 @@ func (h *highlighter) emit(s string, lo, hi int) string {
 	return b.String()
 }
 
-// classFor maps a chroma token type to its short CSS class, mirroring the
-// formatter's StandardTypes lookup (with category fallback) so the hand-emitted
-// spans align with chroma's generated stylesheet.
+// classFor maps a chroma token type to its short CSS class, mirroring chroma's
+// own (unexported) html.Formatter.class: walk up via Parent() to the nearest type
+// present in StandardTypes and return its class (an empty class short-circuits,
+// exactly as chroma does). This keeps emit's hand-written word-splice spans
+// aligned with the formatter's stylesheet. We configure no class prefix, so —
+// unlike the formatter — there is none to prepend.
 func classFor(tt chroma.TokenType) string {
-	if c, ok := chroma.StandardTypes[tt]; ok {
-		return c
+	for {
+		if cls, ok := chroma.StandardTypes[tt]; ok {
+			return cls
+		}
+		if tt == 0 {
+			return ""
+		}
+		tt = tt.Parent()
 	}
-	if c, ok := chroma.StandardTypes[tt.SubCategory()]; ok {
-		return c
-	}
-	if c, ok := chroma.StandardTypes[tt.Category()]; ok {
-		return c
-	}
-	return ""
 }
