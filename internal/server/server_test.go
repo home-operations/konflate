@@ -32,19 +32,23 @@ import (
 // --- fakes ---------------------------------------------------------------
 
 type fakeProvider struct {
-	mu       sync.Mutex
-	prs      []api.PR       // the open list ListPRs returns
-	details  map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
-	notFound map[int]bool   // numbers GetPR reports as deleted (provider.ErrPRNotFound)
-	listErr  error
-	listHook func()                  // optional seam invoked at the start of each ListPRs (set before use)
-	checks   map[int]api.CheckRollup // per-PR CI rollup Checks returns (zero value → none)
+	mu         sync.Mutex
+	prs        []api.PR       // the open list ListPRs returns
+	details    map[int]api.PR // GetPR overrides (e.g. a departed PR's merged/closed state)
+	notFound   map[int]bool   // numbers GetPR reports as deleted (provider.ErrPRNotFound)
+	listErr    error
+	listHook   func()                  // optional seam invoked at the start of each ListPRs (set before use)
+	checksHook func()                  // optional seam invoked at the start of each Checks (set before use)
+	checks     map[int]api.CheckRollup // per-PR CI rollup Checks returns (zero value → none)
 
 	listCalls   int // ListPRs invocations (read via callCounts)
 	checksCalls int // Checks invocations (read via callCounts)
 }
 
 func (f *fakeProvider) Checks(_ context.Context, pr api.PR) (api.CheckRollup, error) {
+	if f.checksHook != nil {
+		f.checksHook() // outside the lock so a hook may block without wedging the fake
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.checksCalls++
@@ -212,6 +216,54 @@ func TestServer_WebhookRelistCoalesces(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // let any erroneous extra run surface
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("ListPRs calls = %d, want 2 (one in-flight + one coalesced trailing run)", got)
+	}
+}
+
+// TestServer_CheckRefreshCoalesces verifies a burst of check-status webhooks for
+// one head SHA collapses to one in-flight Checks poll plus one trailing poll,
+// rather than a forge call per event — the fix for a CI cycle (or a Renovate
+// batch) delivering dozens of check_run/check_suite deliveries that otherwise fan
+// out into a concurrent burst of forge calls.
+func TestServer_CheckRefreshCoalesces(t *testing.T) {
+	t.Parallel()
+	const sha = "deadbeefcafe"
+	var calls atomic.Int32
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	prov := &fakeProvider{}
+	prov.checksHook = func() {
+		if calls.Add(1) == 1 {
+			entered <- struct{}{} // the first refresh is now in flight
+			<-release             // hold it so a burst can pile up behind it
+		}
+	}
+	s := newTestServer(t, ghCfg("tok"), prov, okEngine())
+	s.store.upsertPR(api.PR{Number: 7, HeadSHA: sha, Open: true}, false) // so prByHeadSHA(sha) resolves
+	go s.checkRefreshWorker(t.Context())
+
+	// First trigger: the worker enters Checks and blocks there.
+	s.requestCheckRefresh(sha)
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("check-refresh worker never started the first run")
+	}
+
+	// A burst for the same head arrives while that refresh is in flight; it must
+	// coalesce, not fan out into a Checks call per event.
+	for range 5 {
+		s.requestCheckRefresh(sha)
+	}
+	close(release) // let the in-flight refresh finish; the worker then drains one trailing entry
+
+	// Exactly two Checks calls: the in-flight refresh + one coalesced trailing poll.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && calls.Load() < 2 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond) // let any erroneous extra run surface
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("Checks calls = %d, want 2 (one in-flight + one coalesced trailing poll)", got)
 	}
 }
 

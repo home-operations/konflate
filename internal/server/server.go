@@ -72,6 +72,21 @@ type Server struct {
 	// rather than a goroutine + forge ListPRs per event. Buffered, created in New.
 	relist chan struct{}
 
+	// checkRefresh coalesces webhook-triggered check-rollup refreshes per head
+	// SHA. One PR's CI cycle delivers a storm of check_run/check_suite events (a
+	// Renovate batch, many heads at once); fanning out a goroutine + two forge
+	// calls per event both hammered the forge — risking a secondary rate limit
+	// that silently dropped the refresh, stranding a mid-CI snapshot until the
+	// next list poll — and re-polled the same head dozens of times. checkWake
+	// (single-token, created in New) nudges checkRefreshWorker, which drains
+	// checkPending one SHA at a time: a burst for one head collapses to at most
+	// one in-flight Checks poll plus one trailing poll, and distinct heads are
+	// polled serially, never in a concurrent fan-out. checkPending is guarded by
+	// checkMu.
+	checkWake    chan struct{}
+	checkMu      sync.Mutex
+	checkPending map[string]struct{}
+
 	avatarKey   []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
 	mergeTmpl   *template.Template // renders the "copy to merge" command; nil disables it
 	commentTmpl *template.Template // renders a custom PR-comment body; nil uses the default summary
@@ -95,10 +110,12 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	s := &Server{
 		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
 		store: newStore(), hub: newHub(log), metrics: newMetrics(), sync: newSyncTracker(),
-		avatarKey:   avatarKey,
-		mergeTmpl:   newMergeTemplate(cfg, log),
-		commentTmpl: newCommentTemplate(cfg, log),
-		relist:      make(chan struct{}, 1),
+		avatarKey:    avatarKey,
+		mergeTmpl:    newMergeTemplate(cfg, log),
+		commentTmpl:  newCommentTemplate(cfg, log),
+		relist:       make(chan struct{}, 1),
+		checkWake:    make(chan struct{}, 1),
+		checkPending: make(map[string]struct{}),
 	}
 
 	// Durability: persist rendered diffs under the (operator-persisted) cache
@@ -527,6 +544,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.refreshList(gctx)
 	go s.refreshLoop(gctx)
 	go s.relistWorker(gctx)
+	go s.checkRefreshWorker(gctx)
 
 	g.Go(func() error { return serve(mainSrv, "main", s.log) })
 	g.Go(func() error { return serve(metricsSrv, "metrics", s.log) })
@@ -578,6 +596,57 @@ func (s *Server) relistWorker(ctx context.Context) {
 			return
 		case <-s.relist:
 			s.refreshList(ctx)
+		}
+	}
+}
+
+// requestCheckRefresh queues a check-rollup refresh for the open PR whose head is
+// sha, coalescing per SHA (see the checkRefresh fields): repeated triggers for
+// the same head — the storm of check_run/check_suite events one CI cycle delivers
+// — fold into a single pending entry, and one arriving while that head's refresh
+// is in flight schedules exactly one trailing poll. Never blocks the caller (the
+// webhook handler): checkRefreshWorker does the forge I/O.
+func (s *Server) requestCheckRefresh(sha string) {
+	if sha == "" {
+		return
+	}
+	s.checkMu.Lock()
+	s.checkPending[sha] = struct{}{}
+	s.checkMu.Unlock()
+	select {
+	case s.checkWake <- struct{}{}:
+	default: // worker already nudged; it drains every pending SHA before sleeping
+	}
+}
+
+// checkRefreshWorker serializes webhook-triggered check refreshes: on each wake it
+// drains the pending-SHA set one head at a time through refreshChecksForSHA, so a
+// burst of check events can't fan out into a swarm of concurrent forge calls. A
+// trigger that arrives while a head's refresh runs re-adds it, yielding exactly
+// one trailing poll — which lands after the storm settles, i.e. once the checks
+// have actually completed, rather than capturing a mid-CI snapshot. Returns when
+// ctx is cancelled.
+func (s *Server) checkRefreshWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.checkWake:
+		}
+		for ctx.Err() == nil {
+			s.checkMu.Lock()
+			sha := ""
+			for k := range s.checkPending {
+				sha = k
+				break
+			}
+			if sha == "" {
+				s.checkMu.Unlock()
+				break // drained; wait for the next wake
+			}
+			delete(s.checkPending, sha)
+			s.checkMu.Unlock()
+			s.refreshChecksForSHA(ctx, sha)
 		}
 	}
 }
