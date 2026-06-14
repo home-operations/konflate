@@ -85,6 +85,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 	if conc <= 0 {
 		conc = runtime.NumCPU() * 4 // flate's default for I/O-bound reconcile work
 	}
+	mirror := gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), gitToken, cfg.FetchTimeout, cfg.GitDepth)
 	return &flateEngine{
 		clusterPath: cfg.ClusterPath,
 		selfURLs:    []string{cfg.Forge.CloneURL()},
@@ -93,7 +94,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 		// (RepoCacheDir), not the shared CacheDir — otherwise a CacheDir volume
 		// shared across different-repo instances would cross-fetch. flate's
 		// content-addressed source cache below stays on CacheDir and is shared.
-		mirror:                 gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), gitToken, cfg.FetchTimeout),
+		mirror:                 mirror,
 		pullHeadRef:            cfg.Forge.PullHeadRef,
 		cache:                  source.NewCache(cacheroot.New(cfg.CacheDir)),
 		helmTemplateCacheBytes: int64(cfg.HelmTemplateCacheMB) * mib,

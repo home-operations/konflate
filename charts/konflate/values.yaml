@@ -127,6 +127,16 @@ config:
 
   # -- Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables.
   fetchTimeout: ""
+  # KONFLATE_GIT_DEPTH — shallow-clone the PR mirror to this many commits. A small
+  # depth makes the cold clone of a large repo far cheaper (only recent history
+  # transfers, and peak memory drops with it); konflate deepens automatically when
+  # a PR's merge-base lies further back, so the diff is still against the true
+  # merge-base. The mirror persists on the cache volume, so this mainly helps a
+  # fresh volume (first deploy, or persistence disabled). Default 50; "0" = full
+  # history.
+
+  # -- Advanced: shallow-clone depth for the PR mirror; konflate deepens on demand for a deeper merge-base, so diffs stay correct. Empty = default (50); "0" = full history.
+  gitDepth: ""
   # Merged PRs stay on a collapsed "recently merged" shelf below the open list.
   # Their diffs are persisted (see `persistence`), so the shelf survives a
   # restart; with both caps set to 0 and persistence on, merged diffs are kept

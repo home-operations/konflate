@@ -60,6 +60,12 @@
           "title": "fetchTimeout",
           "type": "string"
         },
+        "gitDepth": {
+          "default": "",
+          "description": "Advanced: shallow-clone depth for the PR mirror; konflate deepens on demand for a deeper merge-base, so diffs stay correct. Empty = default (50); \"0\" = full history.",
+          "title": "gitDepth",
+          "type": "string"
+        },
         "helmRenderCacheMb": {
           "default": "",
           "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",
