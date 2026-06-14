@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.23](https://github.com/home-operations/konflate/compare/0.2.22...0.2.23) (2026-06-14)
+
+
+### Features
+
+* **gitclone:** shallow-clone the PR mirror with merge-base deepening ([#242](https://github.com/home-operations/konflate/issues/242)) ([77dde4d](https://github.com/home-operations/konflate/commit/77dde4d9a424a34d53ec5bebbdfed562a5ee2876))
+* **server:** memoize unchanged-PR re-renders on a slower drift cadence ([#243](https://github.com/home-operations/konflate/issues/243)) ([e7f8fd5](https://github.com/home-operations/konflate/commit/e7f8fd52ff232a87e751780cc761845a58e7b47b))
+
+
+### Bug Fixes
+
+* **server:** coalesce check-status webhooks per head SHA ([#240](https://github.com/home-operations/konflate/issues/240)) ([e3bb2cd](https://github.com/home-operations/konflate/commit/e3bb2cd1beaff63459b4626cb24195c2c57ed995))
+
+
+### Performance Improvements
+
+* **server:** skip the redundant per-record re-marshal at startup ([#244](https://github.com/home-operations/konflate/issues/244)) ([cb87608](https://github.com/home-operations/konflate/commit/cb87608333629449692718e6a1dbfc2c877814f3))
+
+
+### Code Refactoring
+
+* **gitclone:** rename the mergeBase method to resolveMergeBase ([#245](https://github.com/home-operations/konflate/issues/245)) ([1cba3f7](https://github.com/home-operations/konflate/commit/1cba3f7c3b15c98fa8d7c1d6156ed69813f8554b))
+
 ## [0.2.22](https://github.com/home-operations/konflate/compare/0.2.21...0.2.22) (2026-06-14)
 
 
