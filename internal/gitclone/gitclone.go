@@ -40,9 +40,10 @@ var ErrHeadRefGone = errors.New("gitclone: head ref no longer exists on remote")
 
 // localHeadRef is the mirror-local ref the PR head is fetched into. The head is
 // taken from the forge's pull head ref (refs/pull/N/head), which isn't a branch,
-// so it's mapped into this private namespace rather than refs/heads. Fetches are
-// serialized under Mirror.mu, and each render resolves its head commit before
-// releasing the lock, so one shared local ref is safe.
+// so it's mapped into this private namespace rather than refs/heads. A render
+// holds Mirror.mu from fetch through extract (see the struct), so another render
+// can't overwrite this shared local ref — or prune the head it points at —
+// between the resolve and the extract.
 const localHeadRef = "refs/konflate/pull-head"
 
 // Result holds the two extracted working trees plus a cleanup func that
@@ -55,9 +56,7 @@ type Result struct {
 
 // Mirror is a persistent bare clone of one repository. Trees fetches the
 // requested refs into it (incrementally) and extracts the two trees a diff
-// needs. It is safe for concurrent use: fetches are serialized and excluded
-// from the object reads done while extracting (go-git fetch appends to the
-// object store, so a read racing a write could otherwise see a torn ref).
+// needs. It is safe for concurrent use.
 type Mirror struct {
 	bareDir  string // persistent bare repo (under the cache dir)
 	workRoot string // parent for the ephemeral per-diff working trees
@@ -65,14 +64,20 @@ type Mirror struct {
 	token    TokenFunc // forge credential for clone/fetch, resolved per fetch (nil ⇒ anonymous)
 
 	// fetchTimeout bounds a single fetch (and the cold clone) so a slow or hung
-	// forge can't hold the write lock — and thus block every other render — for
-	// longer than this. <=0 leaves the fetch bounded only by the caller's ctx.
+	// forge can't hold the lock — and thus block every other render — for longer
+	// than this. <=0 leaves the fetch bounded only by the caller's ctx.
 	fetchTimeout time.Duration
 
-	// fetch takes the write lock; merge-base + tree extraction take the read
-	// lock, so several renders extract concurrently but none does so while a
-	// fetch is mutating the shared object store.
-	mu sync.RWMutex
+	// mu serializes each render's fetch AND its tree extraction as one critical
+	// section — they must not be split across two lock acquisitions. A render
+	// resolves its commits during the fetch; a concurrent render's repack (which
+	// deletes the superseded packfiles) or corrupt-mirror rebuild (which removes
+	// the bare repo) would then delete the packs those commits point at before
+	// this render extracts them, surfacing as "packfile not found" mid-extract.
+	// Holding mu from fetch through extract closes that window. The expensive
+	// flate render runs after Trees returns, outside the lock, so renders still
+	// overlap there — only the (cheap, local) git phase is serialized.
+	mu sync.Mutex
 }
 
 // TokenFunc yields the forge credential for git-over-HTTPS — the password paired
@@ -122,19 +127,35 @@ func (m *Mirror) authFor(ctx context.Context) (*githttp.BasicAuth, error) {
 // PRs alike — and baseRef is the target branch name. Callers must call
 // Result.Cleanup.
 func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result, err error) {
-	// Bound the fetch on its own — it runs under the write lock, so a slow or hung
-	// fetch would otherwise block every other render for the full caller deadline.
-	// The merge-base walk and tree extraction below are local and stay on ctx.
+	// Bound the fetch on its own so a slow or hung fetch holding the lock can't
+	// block every other render for the full caller deadline.
 	fetchCtx, cancel := m.fetchScope(ctx)
 	defer cancel()
-	head, base, err := m.fetch(fetchCtx, headRef, baseRef)
+
+	// Resolve the credential before taking the lock: an App token mint is a network
+	// call, and holding the lock across it would stall every other render. Once
+	// minted it's cached, so subsequent cycles resolve without I/O.
+	auth, err := m.authFor(fetchCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Prepare the ephemeral work dir before taking the read lock — directory
-	// creation doesn't touch the mirror, so holding the lock for it would only
-	// widen the window a fetcher waits on the write lock.
+	// The fetch and the tree extraction below are ONE critical section under the
+	// lock: a concurrent render's repack or rebuild between them could delete the
+	// packfiles these commits point at (see the Mirror struct). The expensive flate
+	// render that consumes the extracted trees runs after Trees returns, outside
+	// the lock, so renders still overlap there.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	head, base, err := m.fetch(fetchCtx, headRef, baseRef, auth)
+	if err != nil {
+		return nil, err
+	}
+
+	// The ephemeral work dir is created under the lock too: it's a couple of
+	// syscalls (no mirror I/O, so the extra hold is negligible), and creating it
+	// only after a successful fetch avoids orphaning a temp dir on a failed one.
 	if err := os.MkdirAll(m.workRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("gitclone: clone dir: %w", err)
 	}
@@ -148,12 +169,6 @@ func (m *Mirror) Trees(ctx context.Context, headRef, baseRef string) (_ *Result,
 			cleanup()
 		}
 	}()
-
-	// Object reads (merge-base walk + tree extraction) run under the read lock
-	// so no concurrent fetch mutates the store mid-read. The commit objects were
-	// resolved during fetch and stay valid here.
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	mergeBase := base
 	bases, err := head.MergeBase(base)
@@ -189,34 +204,19 @@ func (m *Mirror) fetchScope(ctx context.Context) (context.Context, context.Cance
 	return context.WithTimeout(ctx, m.fetchTimeout)
 }
 
-// fetch ensures the bare mirror exists (cloning it once), fetches the base and
-// head refs into it, and resolves both to commits — all under the write lock so
-// only one render mutates the store at a time. The write lock is why fetch is
-// bounded by its own (short) timeout: a slow or hung fetch holding it blocks
-// every other render's Trees call, so the bound caps that head-of-line blocking
-// instead of letting it run to the full DiffTimeout. The returned commits carry
-// their own storer reference, so they stay readable after the lock is released.
-func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base *object.Commit, err error) {
-	// Resolve the credential before taking the write lock: an App token mint is a
-	// network call, and holding the lock across it would stall every other render.
-	// Once minted it's cached, so subsequent cycles resolve without I/O.
-	auth, err := m.authFor(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+// fetch runs one fetch cycle and self-heals a corrupt mirror: if the fetch fails
+// because the object store is damaged, it discards the bare repo, re-seeds from a
+// clean clone, and retries once — go-git's incremental fetch can't repair a
+// damaged store on its own, since it advertises the broken refs as haves so the
+// forge never re-sends the missing objects. The caller holds the lock (so the
+// RemoveAll is safe — no other render is reading the store) and has resolved auth.
+// The bound on the fetch (Trees's fetchScope) caps how long this can hold the lock
+// and thus head-of-line-block every other render.
+func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string, auth *githttp.BasicAuth) (head, base *object.Commit, err error) {
 	head, base, err = m.fetchLocked(ctx, headRef, baseRef, auth)
 	if err == nil || !mirrorCorrupt(err) {
 		return head, base, err
 	}
-	// The object store is damaged. go-git's incremental fetch can't repair it — it
-	// advertises the broken refs as haves, so the forge never re-sends the missing
-	// objects — so discard the mirror, re-seed from a clean clone, and retry once.
-	// Removing the dir is safe here: the write lock excludes the read lock Trees
-	// holds while extracting.
 	slog.Default().Warn("rebuilding corrupt git mirror", "error", err, "dir", m.bareDir)
 	if rmErr := os.RemoveAll(m.bareDir); rmErr != nil {
 		return nil, nil, fmt.Errorf("gitclone: rebuild mirror: %w", rmErr)
@@ -226,8 +226,8 @@ func (m *Mirror) fetch(ctx context.Context, headRef, baseRef string) (head, base
 
 // fetchLocked performs one fetch cycle: open-or-seed the mirror, refresh the base
 // and head refs, repack if the packs have piled up, and resolve both commits. The
-// caller holds the write lock and has resolved auth. Split from fetch so the
-// self-heal path can re-run the whole cycle against a freshly re-seeded mirror.
+// caller holds the lock and has resolved auth. Split from fetch so the self-heal
+// path can re-run the whole cycle against a freshly re-seeded mirror.
 func (m *Mirror) fetchLocked(ctx context.Context, headRef, baseRef string, auth *githttp.BasicAuth) (head, base *object.Commit, err error) {
 	repo, err := m.openOrClone(ctx, baseRef, auth)
 	if err != nil {
@@ -328,7 +328,7 @@ var repackPackThreshold = 50
 // unreachable objects a force-push leaves behind are reclaimed too — then deletes
 // the superseded packs. That deletion invalidates the open handle's cached pack
 // set, so the caller must re-open the mirror before reading objects through it.
-// Caller holds the write lock.
+// Caller holds the lock.
 func (m *Mirror) maybeRepack(repo *git.Repository) (bool, error) {
 	n, err := m.countPacks()
 	if err != nil {
@@ -367,14 +367,13 @@ func (m *Mirror) countPacks() (int, error) {
 // openOrClone opens the bare mirror, seeding it with a single-branch bare clone
 // of the base branch on first use. A bare, single-branch clone avoids pulling
 // the repo's other (often many) branches; subsequent head/base refs are added
-// by explicit fetches. Caller holds the write lock.
+// by explicit fetches. Caller holds the lock.
 //
 // Deliberately opens a fresh *git.Repository per call rather than caching one on
-// the Mirror: go-git's storer mutates unsynchronized object-cache maps lazily on
-// read, so a shared handle read by several renders under the (shared) read lock
-// would data-race. A private handle per render keeps those reads goroutine-safe;
-// don't "optimize" this into a cached handle without moving all object reads
-// under the write lock.
+// the Mirror: a repack (maybeRepack) deletes the old packfiles, so a cached
+// handle's pack set would go stale, and go-git's storer also mutates
+// unsynchronized object-cache maps lazily on read. A fresh handle per render
+// sidesteps both.
 func (m *Mirror) openOrClone(ctx context.Context, baseRef string, auth *githttp.BasicAuth) (*git.Repository, error) {
 	repo, err := git.PlainOpen(m.bareDir)
 	if err == nil {

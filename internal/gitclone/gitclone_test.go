@@ -500,6 +500,57 @@ func TestMirror_Concurrent(t *testing.T) {
 	}
 }
 
+// TestMirror_ConcurrentRendersSurviveRepack reproduces the production race this
+// lock change fixes. With the repack threshold at 1, every fetch consolidates the
+// mirror and DELETES its old packfiles. Before the fix, a render resolved its
+// commits under the write lock, released it, then extracted under a separate read
+// lock — so a concurrent render's repack in the gap between the two deleted the
+// packfile the first render's commits still pointed at, surfacing as "packfile not
+// found" / "object not found" mid-extract. Holding one lock across fetch+extract
+// closes that gap: under aggressive repacking and concurrency, every render must
+// still succeed with the correct trees. Run with -race.
+func TestMirror_ConcurrentRendersSurviveRepack(t *testing.T) {
+	orig := repackPackThreshold
+	repackPackThreshold = 1 // every fetch repacks → deletes packs out from under concurrent renders
+	t.Cleanup(func() { repackPackThreshold = orig })
+
+	src := buildRepo(t)
+	m := newTestMirror(t, src)
+	// Seed once so the mirror exists with a pack to consolidate on the next fetch.
+	seed, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	if err != nil {
+		t.Fatalf("seed render: %v", err)
+	}
+	seed.Cleanup()
+
+	const goroutines, perGoroutine = 8, 6
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+	for g := range goroutines {
+		wg.Go(func() {
+			for range perGoroutine {
+				res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+				if err != nil {
+					errs[g] = err
+					return
+				}
+				got, ok := read(res.HeadDir, "app/config.yaml")
+				res.Cleanup()
+				if !ok || got != "replicas: 5\n" {
+					errs[g] = fmt.Errorf("head config.yaml = %q (ok=%v)", got, ok)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	for g, err := range errs {
+		if err != nil {
+			t.Errorf("goroutine %d: %v", g, err)
+		}
+	}
+}
+
 // TestMirror_SkipsOversizedFiles verifies extractTree drops blobs over
 // maxFileBytes (a hostile or accidental giant file) while still extracting the
 // normal ones.
