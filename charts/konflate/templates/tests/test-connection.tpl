@@ -31,12 +31,12 @@ spec:
           drop:
             - ALL
       # /readyz returns a static 200 (no repo/forge dependency), so this checks
-      # purely that the Service routes to a running, listening pod. wget writes to
-      # stdout (-O-) so the rootfs stays read-only; a non-2xx or refused
-      # connection exits non-zero and fails `helm test`.
+      # purely that the Service routes to a running, listening pod. curl -f fails on a
+      # non-2xx (or a refused connection), failing `helm test`; -sS stays quiet but
+      # still surfaces errors, and the body goes to stdout (no file write, so the
+      # rootfs stays read-only).
       command:
-        - wget
+        - curl
       args:
-        - -q
-        - -O-
+        - -fsS
         - http://{{ include "konflate.fullname" . }}:{{ .Values.service.port }}/readyz
