@@ -693,6 +693,11 @@
           "title": "fsGroup",
           "type": "integer"
         },
+        "fsGroupChangePolicy": {
+          "default": "OnRootMismatch",
+          "title": "fsGroupChangePolicy",
+          "type": "string"
+        },
         "runAsGroup": {
           "default": 65532,
           "title": "runAsGroup",
