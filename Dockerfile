@@ -18,11 +18,14 @@ COPY internal/web/ ./
 RUN npm run build
 
 # ---- Go build -------------------------------------------------------------
-FROM golang:${GO_VERSION} AS builder
+FROM golang:${GO_VERSION}-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 ARG REVISION=dev
+
+# upx (build stage only) compresses the final binary to shrink the image.
+RUN apk add --no-cache upx
 
 WORKDIR /workspace
 # Cache module downloads before copying source.
@@ -41,10 +44,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${REVISION}" \
     -o konflate ./cmd/konflate
 
+RUN upx --best --lzma konflate
+
 # ---- Runtime --------------------------------------------------------------
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/konflate /konflate
-USER 65532:65532
 EXPOSE 8080 9090
 ENTRYPOINT ["/konflate"]
