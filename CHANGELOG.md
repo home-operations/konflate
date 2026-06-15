@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.27](https://github.com/home-operations/konflate/compare/0.2.26...0.2.27) (2026-06-15)
+
+
+### Bug Fixes
+
+* **chart:** set fsGroupChangePolicy OnRootMismatch (stateful cache volume) ([#261](https://github.com/home-operations/konflate/issues/261)) ([97722b8](https://github.com/home-operations/konflate/commit/97722b814b6a527df67c8f37afec25038f0871fb))
+* **deps:** update module github.com/coder/websocket (v1.8.14 → v1.8.15) ([#256](https://github.com/home-operations/konflate/issues/256)) ([b56e208](https://github.com/home-operations/konflate/commit/b56e208cfa2e475431319d4ee670376c3278e375))
+
 ## [0.2.26](https://github.com/home-operations/konflate/compare/0.2.25...0.2.26) (2026-06-14)
 
 
