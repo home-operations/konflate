@@ -430,7 +430,11 @@ func buildHighlighter() (*built, error) {
 	if dark == nil {
 		dark = light
 	}
-	fmtr := chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventSurroundingPre(true))
+	// WithModeClasses makes WriteCSS emit mode-suffixed selectors (".chroma.light",
+	// ".bg.dark") keyed off each style's mode — chroma v2.27.0 gated this behind the
+	// option (it was unconditional before). scopedCSS rewrites that suffix below, so
+	// the option is load-bearing, not cosmetic.
+	fmtr := chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventSurroundingPre(true), chromahtml.WithModeClasses(true))
 	// The github / github-dark styles are theme variants: chroma emits selectors
 	// like ".chroma.light .err" / ".chroma.dark .err" (the theme as a second
 	// class on the wrapper). We rewrite that suffix into an ancestor class so the
@@ -464,7 +468,17 @@ func scopedCSS(fmtr *chromahtml.Formatter, style *chroma.Style, theme string) (s
 		return "", err
 	}
 	css := raw.String()
-	css = strings.ReplaceAll(css, ".chroma."+theme, "."+theme+" .chroma")
+	// Tripwire: chroma (with WithModeClasses) emits the mode as a compound class on
+	// the wrapper — ".chroma.light .err", ".bg.dark". The rewrite below depends on
+	// that exact shape; if a future chroma release changes it, the ReplaceAll would
+	// silently no-op and we'd ship unscoped rules that let the light/dark sheets
+	// collide. Fail here instead — loudly, at startup — rather than degrade quietly.
+	// (chroma v2.27.0 gating mode classes behind WithModeClasses was exactly this.)
+	compound := ".chroma." + theme
+	if !strings.Contains(css, compound) {
+		return "", fmt.Errorf("chroma CSS has no %q to scope; WithModeClasses off or chroma output changed", compound)
+	}
+	css = strings.ReplaceAll(css, compound, "."+theme+" .chroma")
 	css = strings.ReplaceAll(css, ".bg."+theme, "."+theme+" .bg")
 	return css, nil
 }
