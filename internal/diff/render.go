@@ -430,7 +430,11 @@ func buildHighlighter() (*built, error) {
 	if dark == nil {
 		dark = light
 	}
-	fmtr := chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventSurroundingPre(true))
+	// WithModeClasses makes WriteCSS emit mode-suffixed selectors (".chroma.light",
+	// ".bg.dark") keyed off each style's mode — chroma v2.27.0 gated this behind the
+	// option (it was unconditional before). scopedCSS rewrites that suffix below, so
+	// the option is load-bearing, not cosmetic.
+	fmtr := chromahtml.New(chromahtml.WithClasses(true), chromahtml.PreventSurroundingPre(true), chromahtml.WithModeClasses(true))
 	// The github / github-dark styles are theme variants: chroma emits selectors
 	// like ".chroma.light .err" / ".chroma.dark .err" (the theme as a second
 	// class on the wrapper). We rewrite that suffix into an ancestor class so the
