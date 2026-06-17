@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@mdi/js": "^7.4.47",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.1",
     "simple-icons": "^16.23.0",
