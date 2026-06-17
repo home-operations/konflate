@@ -468,7 +468,17 @@ func scopedCSS(fmtr *chromahtml.Formatter, style *chroma.Style, theme string) (s
 		return "", err
 	}
 	css := raw.String()
-	css = strings.ReplaceAll(css, ".chroma."+theme, "."+theme+" .chroma")
+	// Tripwire: chroma (with WithModeClasses) emits the mode as a compound class on
+	// the wrapper — ".chroma.light .err", ".bg.dark". The rewrite below depends on
+	// that exact shape; if a future chroma release changes it, the ReplaceAll would
+	// silently no-op and we'd ship unscoped rules that let the light/dark sheets
+	// collide. Fail here instead — loudly, at startup — rather than degrade quietly.
+	// (chroma v2.27.0 gating mode classes behind WithModeClasses was exactly this.)
+	compound := ".chroma." + theme
+	if !strings.Contains(css, compound) {
+		return "", fmt.Errorf("chroma CSS has no %q to scope; WithModeClasses off or chroma output changed", compound)
+	}
+	css = strings.ReplaceAll(css, compound, "."+theme+" .chroma")
 	css = strings.ReplaceAll(css, ".bg."+theme, "."+theme+" .bg")
 	return css, nil
 }

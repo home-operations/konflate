@@ -3,6 +3,9 @@ package diff
 import (
 	"strings"
 	"testing"
+
+	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
+	"github.com/alecthomas/chroma/v2/styles"
 )
 
 // TestRender_ChromaCSSThemesAreScoped guards the dual-theme fix: the light and
@@ -43,5 +46,17 @@ func TestRender_ChromaCSSThemesAreScoped(t *testing.T) {
 	// A token rule must be present in the ancestor-scoped form.
 	if !strings.Contains(css, ".light .chroma .") {
 		t.Error("ChromaCSS missing ancestor-scoped token rules (.light .chroma .<token>)")
+	}
+}
+
+// TestScopedCSS_FailsLoudWithoutModeClasses pins the resilience tripwire: when
+// chroma emits no mode-compound selectors (its default since v2.27.0 gated them
+// behind WithModeClasses), scopedCSS must error rather than silently return
+// unscoped CSS that would let the light/dark sheets collide.
+func TestScopedCSS_FailsLoudWithoutModeClasses(t *testing.T) {
+	t.Parallel()
+	fmtr := chromahtml.New(chromahtml.WithClasses(true)) // deliberately no WithModeClasses
+	if _, err := scopedCSS(fmtr, styles.Get("github"), "light"); err == nil {
+		t.Fatal("scopedCSS should error when chroma emits no mode-scoped selectors")
 	}
 }
