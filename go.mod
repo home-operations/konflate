@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-github/v88 v88.0.0
-	github.com/home-operations/flate v0.4.7
+	github.com/home-operations/flate v0.4.8
 	github.com/klauspost/compress v1.18.6
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -66,7 +66,7 @@ require (
 	github.com/fluxcd/pkg/apis/kustomize v1.19.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.30.0 // indirect
 	github.com/fluxcd/pkg/envsubst v1.7.0 // indirect
-	github.com/fluxcd/pkg/kustomize v1.34.0 // indirect
+	github.com/fluxcd/pkg/kustomize v1.35.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.18.0 // indirect
 	github.com/fluxcd/source-controller/api v1.8.5 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
