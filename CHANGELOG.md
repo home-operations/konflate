@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.29](https://github.com/home-operations/konflate/compare/0.2.28...0.2.29) (2026-06-18)
+
+
+### Features
+
+* **chart:** expose the Deployment update strategy (defaults to Recreate) ([#271](https://github.com/home-operations/konflate/issues/271)) ([7760c46](https://github.com/home-operations/konflate/commit/7760c46e60f0ca975b92a0fbc58f851994db80f0))
+
 ## [0.2.28](https://github.com/home-operations/konflate/compare/0.2.27...0.2.28) (2026-06-18)
 
 
