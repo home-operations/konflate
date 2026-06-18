@@ -1452,6 +1452,27 @@ func TestServer_HealthAndSecurityHeaders(t *testing.T) {
 	}
 }
 
+// TestServer_MonitoringHandler asserts the separate monitoring listener
+// (MetricsAddr) serves /metrics together with the /healthz and /readyz probes,
+// so chart probes can target it.
+func TestServer_MonitoringHandler(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())
+	h := s.monitoringHandler()
+
+	for _, path := range []string{"/healthz", "/readyz"} {
+		rec := do(h, "GET", path, nil, nil)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ok") {
+			t.Errorf("monitoring %s: %d %q", path, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := do(h, "GET", "/metrics", nil, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "konflate_") {
+		t.Errorf("monitoring /metrics: %d, body lacks konflate_ metrics", rec.Code)
+	}
+}
+
 // TestServer_WebsocketStatusEvents drives a real websocket client against a
 // real httptest server and asserts that diff-job status changes stream to it.
 func TestServer_WebsocketStatusEvents(t *testing.T) {

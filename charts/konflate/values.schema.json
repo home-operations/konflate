@@ -437,7 +437,7 @@
       "type": "object"
     },
     "livenessProbe": {
-      "description": "Liveness probe.",
+      "description": "Liveness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.",
       "properties": {
         "httpGet": {
           "properties": {
@@ -447,7 +447,7 @@
               "type": "string"
             },
             "port": {
-              "default": "http",
+              "default": "metrics",
               "title": "port",
               "type": "string"
             }
@@ -737,7 +737,7 @@
       "type": "string"
     },
     "readinessProbe": {
-      "description": "Readiness probe.",
+      "description": "Readiness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.",
       "properties": {
         "httpGet": {
           "properties": {
@@ -747,7 +747,7 @@
               "type": "string"
             },
             "port": {
-              "default": "http",
+              "default": "metrics",
               "title": "port",
               "type": "string"
             }
@@ -898,8 +898,8 @@
     "service": {
       "properties": {
         "metricsPort": {
-          "default": 9090,
-          "description": "Operational /metrics port.",
+          "default": 8081,
+          "description": "Monitoring port serving /metrics and the health/readiness probes.",
           "title": "metricsPort",
           "type": "integer"
         },

@@ -50,5 +50,5 @@ RUN upx --best --lzma konflate
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/konflate /konflate
-EXPOSE 8080 9090
+EXPOSE 8080 8081
 ENTRYPOINT ["/konflate"]
