@@ -10,6 +10,21 @@ tests:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/home-operations/konflate:0.0.0
 
+  - it: defaults to the Recreate update strategy (in-memory singleton + RWO cache)
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: renders an overridden strategy (exposed for parity; RollingUpdate unsupported)
+    set:
+      strategy:
+        type: RollingUpdate
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+
   - it: prefers the digest over the tag when set
     set:
       image.digest: sha256:deadbeef

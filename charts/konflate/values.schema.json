@@ -957,6 +957,19 @@
       "title": "startupProbe",
       "type": "object"
     },
+    "strategy": {
+      "description": "Deployment update strategy. **Keep `Recreate`** — konflate is a single instance with in-memory PR/diff state and a ReadWriteOnce cache PVC, so a RollingUpdate (which surges a second pod even at replicaCount 1) diverges the in-memory stores and/or wedges on the volume's Multi-Attach error. Exposed only for parity with the other charts; `RollingUpdate` is unsupported here.",
+      "properties": {
+        "type": {
+          "default": "Recreate",
+          "title": "type",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "strategy",
+      "type": "object"
+    },
     "terminationGracePeriodSeconds": {
       "default": 30,
       "description": "Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains.",

@@ -143,6 +143,7 @@ Kubernetes: `>=1.25.0-0`
 | serviceAccount.create | bool | `true` | Create a ServiceAccount. |
 | serviceAccount.name | string | `""` | ServiceAccount name; generated from the release name if empty. |
 | startupProbe | object | `{}` | Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it. |
+| strategy | object | `{"type":"Recreate"}` | Deployment update strategy. **Keep `Recreate`** — konflate is a single instance with in-memory PR/diff state and a ReadWriteOnce cache PVC, so a RollingUpdate (which surges a second pod even at replicaCount 1) diverges the in-memory stores and/or wedges on the volume's Multi-Attach error. Exposed only for parity with the other charts; `RollingUpdate` is unsupported here. |
 | terminationGracePeriodSeconds | int | `30` | Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains. |
 | tests.image.pullPolicy | string | `"IfNotPresent"` | `helm test` image pull policy. |
 | tests.image.repository | string | `"mirror.gcr.io/curlimages/curl"` | `helm test` connection-pod image; a gcr-mirrored curl, so the test never pulls from Docker Hub. |

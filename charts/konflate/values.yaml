@@ -24,6 +24,10 @@
 # -- Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time).
 replicaCount: 1
 
+# -- Deployment update strategy. **Keep `Recreate`** — konflate is a single instance with in-memory PR/diff state and a ReadWriteOnce cache PVC, so a RollingUpdate (which surges a second pod even at replicaCount 1) diverges the in-memory stores and/or wedges on the volume's Multi-Attach error. Exposed only for parity with the other charts; `RollingUpdate` is unsupported here.
+strategy:
+  type: Recreate
+
 image:
   # -- Image repository.
   repository: ghcr.io/home-operations/konflate
