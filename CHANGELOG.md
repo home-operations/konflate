@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.28](https://github.com/home-operations/konflate/compare/0.2.27...0.2.28) (2026-06-18)
+
+
+### Features
+
+* **deps:** update module github.com/alecthomas/chroma/v2 (v2.26.1 → v2.27.0) ([#265](https://github.com/home-operations/konflate/issues/265)) ([42b5b84](https://github.com/home-operations/konflate/commit/42b5b84f2981aa33369eb7e30cdc7d0efb1fc715))
+* **deps:** update playwright monorepo (1.60.0 → 1.61.0) ([#263](https://github.com/home-operations/konflate/issues/263)) ([4ff6449](https://github.com/home-operations/konflate/commit/4ff644946ef3e346981af95e52c3df7753329794))
+* serve metrics and health probes on 8081 ([#270](https://github.com/home-operations/konflate/issues/270)) ([fdf6245](https://github.com/home-operations/konflate/commit/fdf624501b9b67a4e4b94b6a275b7c3e08e0b6c4))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/home-operations/flate (v0.4.7 → v0.4.8) ([#264](https://github.com/home-operations/konflate/issues/264)) ([be3fb27](https://github.com/home-operations/konflate/commit/be3fb276675b3edf46270c2aee688dd930b4cf73))
+
 ## [0.2.27](https://github.com/home-operations/konflate/compare/0.2.26...0.2.27) (2026-06-15)
 
 
