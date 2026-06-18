@@ -202,7 +202,7 @@ spec:
               containerPort: 8080
               protocol: TCP
             - name: metrics
-              containerPort: 9090
+              containerPort: 8081
               protocol: TCP
           {{- with .Values.startupProbe }}
           startupProbe:

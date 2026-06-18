@@ -1,10 +1,11 @@
 {{- if .Values.networkPolicy.enabled }}
 {{- $np := .Values.networkPolicy }}
 {{- /* konflate's container ports (see deployment.tpl): the HTTP UI/API and the
-       separate metrics server. Ingress is limited to these; egress is shaped to
-       DNS + the configured TCP ports (konflate needs broad egress to render). */}}
+       separate monitoring server (/metrics + health probes). Ingress is limited
+       to these; egress is shaped to DNS + the configured TCP ports (konflate
+       needs broad egress to render). */}}
 {{- $http := 8080 }}
-{{- $metrics := 9090 }}
+{{- $metrics := 8081 }}
 {{- if eq $np.type "cilium" }}
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

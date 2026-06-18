@@ -244,8 +244,8 @@ service:
   type: ClusterIP
   # -- UI / API / websocket port.
   port: 8080
-  # -- Operational /metrics port.
-  metricsPort: 9090
+  # -- Monitoring port serving /metrics and the health/readiness probes.
+  metricsPort: 8081
 
 ingress:
   # -- Expose the UI via an Ingress.
@@ -344,25 +344,25 @@ resources:
     cpu: 50m
     memory: 256Mi
 
-# -- Liveness probe.
+# -- Liveness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.
 livenessProbe:
   httpGet:
     path: /healthz
-    port: http
+    port: metrics
   initialDelaySeconds: 10
   periodSeconds: 20
-# -- Readiness probe.
+# -- Readiness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.
 readinessProbe:
   httpGet:
     path: /readyz
-    port: http
+    port: metrics
   initialDelaySeconds: 5
   periodSeconds: 10
 # -- Startup probe (optional). Gates liveness/readiness while konflate starts — useful when a large persisted store (see `persistence`) makes the cold start slow, since it loads before serving. Empty disables it.
 startupProbe: {}
 #  httpGet:
 #    path: /readyz
-#    port: http
+#    port: metrics
 #  periodSeconds: 5
 #  failureThreshold: 30
 

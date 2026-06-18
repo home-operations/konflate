@@ -118,7 +118,7 @@ tests:
       startupProbe:
         httpGet:
           path: /readyz
-          port: http
+          port: metrics
         failureThreshold: 30
     asserts:
       - equal:

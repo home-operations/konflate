@@ -533,7 +533,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	metricsSrv := &http.Server{
 		Addr:              s.cfg.MetricsAddr,
-		Handler:           s.metrics.handler(),
+		Handler:           s.monitoringHandler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      30 * time.Second,
 	}
@@ -719,9 +719,22 @@ func (s *Server) refreshStale(now time.Time) {
 	}
 }
 
+// monitoringHandler builds the mux for the separate monitoring server
+// (MetricsAddr): /metrics plus the /healthz and /readyz probes. Consolidating
+// the operational surface here keeps it off the main, possibly public-facing
+// port; the probes also stay on the main mux for backward compatibility.
+func (s *Server) monitoringHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", handleHealth)
+	mux.HandleFunc("GET /readyz", handleHealth)
+	mux.Handle("GET /metrics", s.metrics.handler())
+	return mux
+}
+
 // mainHandler builds the main mux. Inbound trigger endpoints (webhook, push)
 // are served only when enabled; otherwise they explicitly return 501 so a
-// misconfiguration is visible rather than a silent 404.
+// misconfiguration is visible rather than a silent 404. The /healthz and
+// /readyz probes are served here too (and on the monitoring port).
 func (s *Server) mainHandler() http.Handler {
 	mux := http.NewServeMux()
 

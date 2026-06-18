@@ -181,12 +181,13 @@ type Config struct {
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
 
-	// MetricsAddr is the listen address for the separate operational server
-	// that serves /metrics. Kept off the main (potentially public-facing) port
-	// so operational detail is never exposed alongside the UI. Bind it to a
-	// loopback address (e.g. "127.0.0.1:9090") to restrict it to the host /
-	// a sidecar scraper. Health probes stay on the main port.
-	MetricsAddr string `env:"KONFLATE_METRICS_ADDR" envDefault:":9090"`
+	// MetricsAddr is the listen address for the separate monitoring server that
+	// serves /metrics together with the /healthz and /readyz probes. Kept off the
+	// main (potentially public-facing) port so operational detail and the probe
+	// surface are never exposed alongside the UI. Bind it to a loopback address
+	// (e.g. "127.0.0.1:8081") to restrict it to the host / a sidecar scraper. The
+	// probes are also served on the main port for backward compatibility.
+	MetricsAddr string `env:"KONFLATE_METRICS_ADDR" envDefault:":8081"`
 
 	// LogLevel controls slog verbosity: debug, info, warn, or error.
 	LogLevel string `env:"KONFLATE_LOG_LEVEL" envDefault:"info"`

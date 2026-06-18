@@ -31,7 +31,7 @@ tests:
       - contains:
           path: spec.ingress[0].ports
           content:
-            port: 9090
+            port: 8081
             protocol: TCP
       # Egress: DNS first, then the TCP egress ports (443 by default).
       - contains:
