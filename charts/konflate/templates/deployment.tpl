@@ -1,6 +1,6 @@
 {{- /*
   konflate is single-instance: its PR/diff state lives in memory and is served
-  from one pod (strategy: Recreate below). Two replicas wedge on the RWO cache
+  from one pod (strategy defaults to Recreate below). Two replicas wedge on the RWO cache
   volume's Multi-Attach error with persistence, or round-robin between divergent
   in-memory stores without it. Reject >1 at render so the misconfiguration is a
   clear install error rather than a confusing runtime one; 0 is allowed (pause).
@@ -22,9 +22,12 @@ metadata:
 spec:
   replicas: {{ .Values.replicaCount }}
   # konflate keeps PR/diff state in memory, so run a single instance and replace
-  # (rather than overlap) on rollout.
+  # (rather than overlap) on rollout; Recreate is the only supported value (the
+  # `strategy` knob is exposed for parity, but RollingUpdate is unsupported).
+  {{- with .Values.strategy }}
   strategy:
-    type: Recreate
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "konflate.selectorLabels" . | nindent 6 }}
