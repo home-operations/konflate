@@ -185,8 +185,10 @@ func sectionCautions(d *api.DiffResult, admonitions bool) string {
 	}
 	var b strings.Builder
 	if admonitions {
-		// [!CAUTION] renders its own "Caution" heading — no redundant title line.
-		b.WriteString("> [!CAUTION]\n")
+		// Amber [!WARNING] to match the caution list pill's colour (a notch below
+		// the red [!CAUTION] of a render failure). The alert header reads "Warning",
+		// so the block names itself.
+		fmt.Fprintf(&b, "> [!WARNING]\n> **⚠ %s**\n", plural(len(d.Warnings), "Caution", "Cautions"))
 		for _, wn := range d.Warnings {
 			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 		}
@@ -206,7 +208,8 @@ func sectionFailures(d *api.DiffResult, admonitions bool) string {
 	var b strings.Builder
 	title := fmt.Sprintf("%d render %s", len(d.Failures), plural(len(d.Failures), "failure", "failures"))
 	if admonitions {
-		fmt.Fprintf(&b, "> [!WARNING]\n> **%s**\n", title)
+		// Red [!CAUTION] to match the failure list pill — the top of the severity ramp.
+		fmt.Fprintf(&b, "> [!CAUTION]\n> **%s**\n", title)
 		for _, f := range d.Failures {
 			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(f.Parent), mdInline(f.Message))
 		}

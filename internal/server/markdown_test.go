@@ -38,9 +38,10 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"### konflate — summary",
 		"> [!NOTE]",
 		"+2 added · 3 changed · −1 removed** — 6 resources · 2 apps · 1 CRD",
-		"> [!CAUTION]",
+		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
+		"> [!WARNING]\n> **⚠ Caution**",
 		"> - `Deployment web/api` — replicas set to 0",
-		"> [!WARNING]",
+		"> [!CAUTION]\n> **1 render failure**",
 		"> - `HelmRelease media/plex` — values don't meet the schema",
 		"**Blast radius**",
 		// Sample capped at 3 direct names; count + sample reconcile to the headline.
@@ -55,10 +56,6 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
-	}
-	// The [!CAUTION] block is its own heading; don't repeat the word in a title line.
-	if strings.Contains(md, "> **Caution") {
-		t.Errorf("caution admonition should not carry a redundant title:\n%s", md)
 	}
 }
 
