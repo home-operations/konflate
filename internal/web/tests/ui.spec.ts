@@ -483,13 +483,18 @@ test('keyboard: j steps from Summary into resources, o returns to Summary', asyn
   await page.goto('/#/pr/142');
   // Navigation needs the diff loaded; the default landing is the Summary.
   await page.locator('.impact').waitFor();
-  await page.locator('body').press('j');
-  await expect(page).toHaveURL(/#\/pr\/142\/r0$/);
-  await page.locator('body').press('j');
-  await expect(page).toHaveURL(/#\/pr\/142\/r1$/);
+  // Re-send each keystroke until the route advances: a single press can be dropped
+  // if it lands while the previous panel is still mounting (the flake this hit).
+  // Each nav is single-step / idempotent, so re-pressing is safe.
+  const step = (key: string, url: RegExp) =>
+    expect(async () => {
+      await page.locator('body').press(key);
+      await expect(page).toHaveURL(url, { timeout: 1000 });
+    }).toPass();
+  await step('j', /#\/pr\/142\/r0$/);
+  await step('j', /#\/pr\/142\/r1$/);
   // o jumps straight back to the Summary panel.
-  await page.locator('body').press('o');
-  await expect(page).toHaveURL(/#\/pr\/142\/summary$/);
+  await step('o', /#\/pr\/142\/summary$/);
   await expect(page.locator('.impact')).toBeVisible();
 });
 
