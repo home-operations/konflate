@@ -172,6 +172,21 @@ Turning the fork gate on also activates flate's **SSRF egress guard** by default
 
 Keep the fork gate off on any public or shared instance.
 
+### List pills
+
+Above the PR list, a row of pills summarises the open set and doubles as a one-click filter (click a pill to narrow the list, click again to clear — or type `status:<name>` in the search box). Each shows a count of matching open PRs:
+
+| Pill        | Colour | Shows                                                                                                                                                                                                                                |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **open**    | blue   | The default view — every open, non-hidden PR.                                                                                                                                                                                        |
+| **failure** | red    | PRs with at least one resource flate could not render (broken templating), surfaced before merge.                                                                                                                                    |
+| **caution** | amber  | PRs carrying a heuristic danger flag — data-loss, privilege, RBAC, availability, or a major version bump. Advisory only; konflate never blocks.                                                                                      |
+| **routine** | green  | PRs whose diff is **only** container-image and/or chart-version changes — the `helm.sh/chart` / `app.kubernetes.io/version` labels and Flux source version refs — with no cautions and no failures. The ordinary Renovate/Flux bump. |
+| **merged**  | purple | The collapsed _Recently merged_ shelf (each diff frozen at merge time).                                                                                                                                                              |
+| **hidden**  | grey   | PRs excluded by the render gates above — listed but never rendered.                                                                                                                                                                  |
+
+> **`routine` describes the _shape_ of the diff, not a safety verdict.** It means konflate saw nothing change except image tags and chart-version metadata — it does **not** inspect what the new image does at runtime, so a routine-looking bump can still ship a regression, a new CVE, or a changed default. Treat it as "this is the easy pile to triage," not "this is safe to merge unread." (A _major_ version bump raises a caution, so it surfaces under **caution**, not **routine**.)
+
 ### Multi-cluster monorepos
 
 A konflate instance tracks **one repository and renders one cluster** — the Flux

@@ -46,10 +46,11 @@ type PRStatus struct {
 
 // Signals is the at-a-glance review summary for one PR's rendered diff.
 type Signals struct {
-	Resources int `json:"resources"` // changed/added/removed resources
-	Caution   int `json:"caution"`   // caution warnings (the sole severity)
-	Images    int `json:"images"`    // container-image changes
-	Failures  int `json:"failures"`  // resources flate could not render
+	Resources int  `json:"resources"` // changed/added/removed resources
+	Caution   int  `json:"caution"`   // caution warnings (the sole severity)
+	Images    int  `json:"images"`    // container-image changes
+	Failures  int  `json:"failures"`  // resources flate could not render
+	Routine   bool `json:"routine"`   // only image/chart-version changed, nothing flagged
 }
 
 // DiffEnvelope is the GET /api/prs/{n}/diff response: the job status plus the

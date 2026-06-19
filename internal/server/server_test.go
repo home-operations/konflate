@@ -629,7 +629,7 @@ func TestServer_SummaryMarkdown(t *testing.T) {
 		t.Errorf("content-type = %q, want text/markdown", ct)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"konflate — summary", "> [!NOTE]", "> [!CAUTION]", "`Deployment web/api`", "/#/pr/7"} {
+	for _, want := range []string{"konflate — summary", "> [!NOTE]", "> [!WARNING]", "`Deployment web/api`", "/#/pr/7"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("markdown body missing %q\n%s", want, body)
 		}

@@ -38,9 +38,10 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"### konflate — summary",
 		"> [!NOTE]",
 		"+2 added · 3 changed · −1 removed** — 6 resources · 2 apps · 1 CRD",
-		"> [!CAUTION]",
+		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
+		"> [!WARNING]\n> **⚠ Caution**",
 		"> - `Deployment web/api` — replicas set to 0",
-		"> [!WARNING]",
+		"> [!CAUTION]\n> **1 render failure**",
 		"> - `HelmRelease media/plex` — values don't meet the schema",
 		"**Blast radius**",
 		// Sample capped at 3 direct names; count + sample reconcile to the headline.
@@ -55,10 +56,6 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
-	}
-	// The [!CAUTION] block is its own heading; don't repeat the word in a title line.
-	if strings.Contains(md, "> **Caution") {
-		t.Errorf("caution admonition should not carry a redundant title:\n%s", md)
 	}
 }
 
@@ -76,6 +73,40 @@ func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	// No review URL → no link line.
 	if strings.Contains(md, "View the full rendered diff") {
 		t.Errorf("empty review URL should omit the link:\n%s", md)
+	}
+}
+
+func TestSummaryMarkdown_Routine(t *testing.T) {
+	t.Parallel()
+	env := api.DiffEnvelope{
+		Status: api.JobReady,
+		PR:     api.PR{Number: 7},
+		Diff: &api.DiffResult{
+			HeadSHA: "abcdef1234567890",
+			Summary: api.DiffSummary{Changed: 2},
+			Impact:  api.Impact{Resources: 2, Parents: 1},
+			Images:  []api.ImageChange{{Name: "ghcr.io/x", From: "1.0", To: "1.1"}},
+			Routine: true,
+		},
+	}
+	// GitHub flavour: a green [!TIP] naming itself, and — being routine — no
+	// caution/failure blocks.
+	md := summaryMarkdown(env, "", true)
+	for _, want := range []string{"> [!TIP]", "**Routine**"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
+		t.Errorf("a routine PR carries no caution/failure blocks:\n%s", md)
+	}
+	// Plain flavour: the bold line, no admonition syntax.
+	plain := summaryMarkdown(env, "", false)
+	if strings.Contains(plain, "[!TIP]") {
+		t.Errorf("plain markdown must not use admonitions:\n%s", plain)
+	}
+	if !strings.Contains(plain, "**Routine**") {
+		t.Errorf("plain routine line missing:\n%s", plain)
 	}
 }
 
