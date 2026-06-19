@@ -1921,16 +1921,39 @@ td.gutter.sign {
 .row-del {
   background: var(--del-bg);
 }
-/* The 3px inset status bar sits inside the code cell's base 10px left padding,
-   so changed-row text stays column-aligned with context rows. An extra
-   padding-left here previously pushed every +/− line 3px to the right. */
+/* The 3px status bar sits inside the code cell's base 10px left padding, so
+   changed-row text stays column-aligned with context rows (an extra
+   padding-left here previously pushed every +/− line 3px to the right).
+   It's painted as a real ::before strip rather than an inset box-shadow: in a
+   border-collapse table every code cell shares one column, so the bars are at
+   the same x by layout — but inset shadows on stacked cells rasterize against
+   the (often fractional, on HiDPI) column edge independently, so the red (del)
+   and green (add) bars could land a device-pixel apart and read as a step at
+   their junction. A background fill pinned to left:0 shares one exact edge, so
+   the bars form a continuous red→green line. */
 tr.row-add td.code,
-td.code.row-add {
-  box-shadow: inset 3px 0 0 var(--add-bar);
-}
+td.code.row-add,
 tr.row-del td.code,
 td.code.row-del {
-  box-shadow: inset 3px 0 0 var(--del-bar);
+  position: relative;
+}
+tr.row-add td.code::before,
+td.code.row-add::before,
+tr.row-del td.code::before,
+td.code.row-del::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  pointer-events: none;
+}
+tr.row-add td.code::before,
+td.code.row-add::before {
+  background: var(--add-bar);
+}
+tr.row-del td.code::before,
+td.code.row-del::before {
+  background: var(--del-bar);
 }
 .row-add td.gutter.sign {
   color: var(--add-bar);
