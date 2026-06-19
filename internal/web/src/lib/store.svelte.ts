@@ -19,7 +19,7 @@ import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = unfiltered;
 // 'open' narrows to just the open set, hiding the merged shelf).
-export type StatusFilter = '' | 'open' | 'caution' | 'failure' | 'merged' | 'hidden';
+export type StatusFilter = '' | 'open' | 'caution' | 'failure' | 'routine' | 'merged' | 'hidden';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -129,7 +129,7 @@ const FACETS = ['status', 'author', 'base', 'label'];
 // with matchesStatus again. ('hidden' was missing here, so `status:hidden` typed
 // in the filter or palette matched nothing — the pill worked only because it sets
 // statusFilter directly, bypassing this grammar.)
-const STATUS_VALUES = ['open', 'caution', 'failure', 'merged', 'hidden'] as const satisfies readonly StatusFilter[];
+const STATUS_VALUES = ['open', 'caution', 'failure', 'routine', 'merged', 'hidden'] as const satisfies readonly StatusFilter[];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -211,6 +211,11 @@ export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
       return p.open && !p.hidden && (p.signals?.caution ?? 0) > 0;
     case 'failure':
       return p.open && !p.hidden && (p.signals?.failures ?? 0) > 0;
+    case 'routine':
+      // Only image/chart-version fields changed, nothing flagged — the fast-merge
+      // pile. A diff-shape signal, not a runtime guarantee (see the server's
+      // DiffResult.Routine).
+      return p.open && !p.hidden && !!p.signals?.routine;
     case 'merged':
       return !p.open;
     case 'hidden':

@@ -61,6 +61,14 @@ type DiffResult struct {
 	// reviewer aid, not a gate.
 	Warnings []Warning `json:"warnings"`
 
+	// Routine is true when every changed resource differs only in container
+	// image references and/or chart-version metadata (the helm.sh/chart /
+	// app.kubernetes.io/version labels and Flux source version refs), with no
+	// warnings and no render failures — i.e. an ordinary image/chart-version
+	// bump. It is a property of the diff's *shape*, not a safety verdict:
+	// konflate does not inspect what the new image does at runtime.
+	Routine bool `json:"routine"`
+
 	// ChromaCSS is the combined light+dark chroma stylesheet. Injected
 	// once into a <style> tag on first diff load. Subsequent resource
 	// selections do not re-inject it. Contains both .chroma.light and

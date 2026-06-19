@@ -30,6 +30,7 @@ export interface Signals {
   caution: number; // caution warnings (the sole severity)
   images: number;
   failures: number;
+  routine: boolean; // only image/chart-version changed, nothing flagged
 }
 
 // CheckRollup is the PR head's rolled-up CI status (the forge's red/amber/green).

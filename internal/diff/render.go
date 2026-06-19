@@ -94,6 +94,11 @@ func Render(in RenderInput) (api.DiffResult, error) {
 		Warnings:  Lint(changes, in.Images, in.Parents),
 	}
 
+	// A "routine" PR is purely an image/chart-version bump with nothing flagged —
+	// the fast-merge pile. Gated on no warnings/failures so a major bump (which
+	// raises its own caution) surfaces under that pill, not this one.
+	out.Routine = onlyImageOrVersionChanges(changes) && len(out.Warnings) == 0 && len(out.Failures) == 0
+
 	// Summary reflects the true totals across every (real) change, even when the
 	// per-resource render below is capped — so the topbar counts and the impact
 	// banner agree on the real blast radius regardless of truncation.

@@ -303,6 +303,7 @@ func computeSignals(d *api.DiffResult) *api.Signals {
 		Caution:   len(d.Warnings), // every warning is a caution (the sole severity)
 		Images:    len(d.Images),
 		Failures:  len(d.Failures),
+		Routine:   d.Routine,
 	}
 }
 

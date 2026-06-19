@@ -112,6 +112,7 @@
     open: openPrs.length,
     caution: openPrs.filter((p) => (p.signals?.caution ?? 0) > 0).length,
     failure: openPrs.filter((p) => (p.signals?.failures ?? 0) > 0).length,
+    routine: openPrs.filter((p) => !!p.signals?.routine).length,
     merged: prs.filter((p) => !p.open).length,
     hidden: prs.filter((p) => p.hidden).length,
   }));
@@ -516,6 +517,9 @@
       {/if}
       {#if showPill(summary.caution, 'caution')}
         {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}
+      {/if}
+      {#if showPill(summary.routine, 'routine')}
+        {@render pill('routine', summary.routine, 'routine', 'Only image / chart-version bumps — nothing else changed (a diff-shape signal, not a runtime guarantee)')}
       {/if}
       {#if showPill(summary.merged, 'merged')}
         {@render pill('merged', summary.merged, 'merged', 'Only recently merged PRs')}
