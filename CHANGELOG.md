@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.31](https://github.com/home-operations/konflate/compare/0.2.30...0.2.31) (2026-06-19)
+
+
+### Bug Fixes
+
+* **diff:** make routine fire on real image/chart-version bumps ([#275](https://github.com/home-operations/konflate/issues/275)) ([adcc4d4](https://github.com/home-operations/konflate/commit/adcc4d4ec50aa7a5ef09345cfa7f87325346e8f5))
+
 ## [0.2.30](https://github.com/home-operations/konflate/compare/0.2.29...0.2.30) (2026-06-19)
 
 
