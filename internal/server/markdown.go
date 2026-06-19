@@ -25,7 +25,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 
 // summaryMarkdownBody is the marker-less summary body. It opens with an H3 title
 // (### konflate — summary); with admonitions=true the sections use GitHub-flavoured
-// alert blocks (> [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
+// alert blocks (> [!TIP] / > [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
 // lists that render anywhere. Every forge-controlled
 // value is escaped (see mdInline/mdCode) so a crafted resource name or a render
 // error can't break the table or inject HTML. Exposed to a custom comment
@@ -102,6 +102,7 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 		}
 	}
 	appendSection(sec.Impact)
+	appendSection(sec.Routine)
 	writeRefreshNote()
 	appendSection(sec.BlastRadius)
 	appendSection(sec.Cautions)
@@ -118,6 +119,7 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 // nothing to show. summaryMarkdownBody composes the same blocks for the default.
 type summarySections struct {
 	Impact      string // headline counts: +added · changed · −removed — N resources · …
+	Routine     string // image/chart-version-only bump, nothing flagged (green [!TIP])
 	BlastRadius string // downstream apps transitively depending on the changed ones
 	Cautions    string // danger-lint warnings
 	Failures    string // resources that failed to render
@@ -132,6 +134,7 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 	}
 	return summarySections{
 		Impact:      sectionImpact(d, admonitions),
+		Routine:     sectionRoutine(d, admonitions),
 		BlastRadius: sectionBlastRadius(d),
 		Cautions:    sectionCautions(d, admonitions),
 		Failures:    sectionFailures(d, admonitions),
@@ -159,6 +162,21 @@ func sectionImpact(d *api.DiffResult, admonitions bool) string {
 		return "> [!NOTE]\n> " + impact.String()
 	}
 	return impact.String()
+}
+
+// sectionRoutine surfaces a routine PR — only container-image and chart-version
+// changes, with nothing flagged. The GitHub flavour uses a green [!TIP], matching
+// the routine list pill's colour; plain keeps a bold line. Empty unless the diff
+// is routine. Like the pill, it describes the diff's shape, not runtime safety.
+func sectionRoutine(d *api.DiffResult, admonitions bool) string {
+	if !d.Routine {
+		return ""
+	}
+	const msg = "**Routine** — only container-image and chart-version changes; nothing else changed."
+	if admonitions {
+		return "> [!TIP]\n> " + msg
+	}
+	return msg
 }
 
 func sectionCautions(d *api.DiffResult, admonitions bool) string {

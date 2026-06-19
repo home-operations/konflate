@@ -79,6 +79,40 @@ func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	}
 }
 
+func TestSummaryMarkdown_Routine(t *testing.T) {
+	t.Parallel()
+	env := api.DiffEnvelope{
+		Status: api.JobReady,
+		PR:     api.PR{Number: 7},
+		Diff: &api.DiffResult{
+			HeadSHA: "abcdef1234567890",
+			Summary: api.DiffSummary{Changed: 2},
+			Impact:  api.Impact{Resources: 2, Parents: 1},
+			Images:  []api.ImageChange{{Name: "ghcr.io/x", From: "1.0", To: "1.1"}},
+			Routine: true,
+		},
+	}
+	// GitHub flavour: a green [!TIP] naming itself, and — being routine — no
+	// caution/failure blocks.
+	md := summaryMarkdown(env, "", true)
+	for _, want := range []string{"> [!TIP]", "**Routine**"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
+		t.Errorf("a routine PR carries no caution/failure blocks:\n%s", md)
+	}
+	// Plain flavour: the bold line, no admonition syntax.
+	plain := summaryMarkdown(env, "", false)
+	if strings.Contains(plain, "[!TIP]") {
+		t.Errorf("plain markdown must not use admonitions:\n%s", plain)
+	}
+	if !strings.Contains(plain, "**Routine**") {
+		t.Errorf("plain routine line missing:\n%s", plain)
+	}
+}
+
 func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
