@@ -3,19 +3,25 @@ package diff
 import (
 	"reflect"
 	"strconv"
+
+	"sigs.k8s.io/yaml"
 )
 
 // onlyImageOrVersionChanges reports whether every changed resource differs from
 // its prior render ONLY in container image references and/or chart-version
-// metadata — the "helm.sh/chart" / "app.kubernetes.io/version" labels and a Flux
-// source's version ref (OCIRepository/HelmRepository/GitRepository ref, or a
-// HelmRelease chart version). It is the structural half of the "routine" signal
-// (see api.DiffResult.Routine).
+// metadata — the "helm.sh/chart" / "app.kubernetes.io/version" labels, a Flux
+// source's version ref (OCIRepository/HelmRepository/GitRepository ref or a
+// HelmRelease chart version), and image refs pinned in values. It is the
+// structural half of the "routine" signal (see api.DiffResult.Routine).
+//
+// It compares the manifests in their marshaled (rendered) form — the same YAML
+// the diff shows — so a field that differs only in Go type/representation (e.g.
+// an int vs a float that marshal to identical text) is NOT counted: the reviewer
+// never sees it in the diff, so it must not flip a routine bump to non-routine.
 //
 // The bias is deliberately conservative: an added or removed resource, or any
-// single changed field outside the allowlist, makes the whole PR not routine.
-// A false "routine" must never hide a structural change, so when in doubt the
-// answer is no — at worst a genuinely-routine bump simply isn't flagged.
+// single *visible* changed field outside the allowlist, makes the whole PR not
+// routine. A false "routine" must never hide a structural change.
 func onlyImageOrVersionChanges(changes []Change) bool {
 	if len(changes) == 0 {
 		return false // nothing real changed — not a "routine bump" worth a pill
@@ -25,7 +31,10 @@ func onlyImageOrVersionChanges(changes []Change) bool {
 		if c.Status == statusAdded || c.Status == statusRemoved {
 			return false
 		}
-		paths := changedPaths(c.Old, c.New)
+		// Diff the normalized (marshal→reparse) manifests, not the raw maps: the
+		// raw values can differ only by Go type yet render identically, which would
+		// otherwise count as a phantom change the reviewer can't see.
+		paths := changedPaths(normalizeForDiff(c.Old), normalizeForDiff(c.New))
 		if len(paths) == 0 {
 			return false // marshaled-equal no-ops are dropped upstream; be safe
 		}
@@ -36,6 +45,26 @@ func onlyImageOrVersionChanges(changes []Change) bool {
 		}
 	}
 	return true
+}
+
+// normalizeForDiff round-trips a manifest through the same marshal the diff view
+// uses (sigs.k8s.io/yaml → JSON number/type rules), so both sides of a comparison
+// share one representation and only differences that actually render survive.
+// Returns the input unchanged if it can't be marshaled (changedPaths then falls
+// back to the raw values — no worse than before).
+func normalizeForDiff(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	b, err := yaml.Marshal(m)
+	if err != nil {
+		return m
+	}
+	var out map[string]any
+	if err := yaml.Unmarshal(b, &out); err != nil {
+		return m
+	}
+	return out
 }
 
 // changedPaths walks two manifests in parallel and returns the field paths whose
@@ -101,6 +130,12 @@ func routineField(kind string, path []string) bool {
 	// Any container's image ref: containers/initContainers/ephemeralContainers
 	// all expose it as an "image" leaf, as does a CR's single spec.image.
 	if path[len(path)-1] == "image" {
+		return true
+	}
+	// An image ref split across values — "<…>.image.tag" / "<…>.image.digest"
+	// (app-template / common-chart style, where a bump lands in a HelmRelease's
+	// spec.values rather than the rendered container's single image leaf).
+	if n := len(path); n >= 2 && path[n-2] == "image" && (path[n-1] == "tag" || path[n-1] == "digest") {
 		return true
 	}
 	// Chart-version metadata Helm/Flux stamp onto every rendered resource.

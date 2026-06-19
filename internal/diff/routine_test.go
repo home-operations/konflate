@@ -122,6 +122,42 @@ func TestOnlyImageOrVersionChanges(t *testing.T) {
 				Old: podSpec(map[string]any{"name": "app", "image": "x:1"})}},
 			want: false,
 		},
+		{
+			// PR 11139: app-template HelmRelease pins the image in values as
+			// spec.values…image.tag — a routine digest/tag bump, not the rendered
+			// container's image leaf.
+			name: "image tag pinned in HelmRelease values",
+			changes: []Change{{Status: "changed", Kind: "HelmRelease",
+				Old: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"repository": "ghcr.io/x", "tag": "1.0.0@sha256:aaa"}}}},
+				New: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"repository": "ghcr.io/x", "tag": "1.0.0@sha256:bbb"}}}}}},
+			want: true,
+		},
+		{
+			name: "image digest pinned in values",
+			changes: []Change{{Status: "changed", Kind: "HelmRelease",
+				Old: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"digest": "sha256:aaa"}}}},
+				New: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"digest": "sha256:bbb"}}}}}},
+			want: true,
+		},
+		{
+			// PR 11140: a chart re-render leaves a field differing only by Go type
+			// (int vs float64) that marshals to identical YAML — invisible in the
+			// diff, so it must not defeat routine. The only shown change is the label.
+			name: "type-only field difference is ignored (phantom diff)",
+			changes: []Change{{Status: "changed", Kind: "ServiceMonitor",
+				Old: map[string]any{"metadata": map[string]any{"labels": map[string]any{"helm.sh/chart": "x-0.16.1"}}, "spec": map[string]any{"port": 9633}},
+				New: map[string]any{"metadata": map[string]any{"labels": map[string]any{"helm.sh/chart": "x-0.17.0"}}, "spec": map[string]any{"port": float64(9633)}}}},
+			want: true,
+		},
+		{
+			// Changing the image *repository* (not just tag/digest) is a source swap,
+			// not a routine version bump — negative control on the values rule.
+			name: "image repository change in values is not routine",
+			changes: []Change{{Status: "changed", Kind: "HelmRelease",
+				Old: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"repository": "ghcr.io/x", "tag": "1.0"}}}},
+				New: map[string]any{"spec": map[string]any{"values": map[string]any{"image": map[string]any{"repository": "ghcr.io/y", "tag": "1.0"}}}}}},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
