@@ -1903,15 +1903,16 @@ td.gutter.sign {
 .row-del {
   background: var(--del-bg);
 }
+/* The 3px inset status bar sits inside the code cell's base 10px left padding,
+   so changed-row text stays column-aligned with context rows. An extra
+   padding-left here previously pushed every +/− line 3px to the right. */
 tr.row-add td.code,
 td.code.row-add {
   box-shadow: inset 3px 0 0 var(--add-bar);
-  padding-left: 13px;
 }
 tr.row-del td.code,
 td.code.row-del {
   box-shadow: inset 3px 0 0 var(--del-bar);
-  padding-left: 13px;
 }
 .row-add td.gutter.sign {
   color: var(--add-bar);
