@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.30](https://github.com/home-operations/konflate/compare/0.2.29...0.2.30) (2026-06-19)
+
+
+### Features
+
+* **web:** routine PR filter + diff-row alignment fix ([#273](https://github.com/home-operations/konflate/issues/273)) ([5ab38ce](https://github.com/home-operations/konflate/commit/5ab38ce66cf7d612a172fc66735267b2f904f1df))
+
 ## [0.2.29](https://github.com/home-operations/konflate/compare/0.2.28...0.2.29) (2026-06-18)
 
 
