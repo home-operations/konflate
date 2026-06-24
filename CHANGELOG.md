@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.32](https://github.com/home-operations/konflate/compare/0.2.31...0.2.32) (2026-06-24)
+
+
+### Features
+
+* **container:** update image mirror.gcr.io/curlimages/curl (8.20.0 → 8.21.0) ([#291](https://github.com/home-operations/konflate/issues/291)) ([1cd2c47](https://github.com/home-operations/konflate/commit/1cd2c47908f688ec7db3c7441a31dd96ca8f5375))
+* **deps:** update dependency simple-icons (16.23.0 → 16.24.0) ([#280](https://github.com/home-operations/konflate/issues/280)) ([22d2092](https://github.com/home-operations/konflate/commit/22d209211d77878401c219043849057a6708e9b4))
+* **deps:** update dependency svelte-check (4.6.0 → 4.7.1) ([#285](https://github.com/home-operations/konflate/issues/285)) ([57752ff](https://github.com/home-operations/konflate/commit/57752ffbca5f28d350b7d996b4f64d66ca0d8af3))
+* **deps:** update dependency vite (8.0.16 → 8.1.0) ([#284](https://github.com/home-operations/konflate/issues/284)) ([b697e96](https://github.com/home-operations/konflate/commit/b697e9629f3226f3e9ee4885bdcef4c5c0a0847d))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.39.0 → v2.40.0) ([#281](https://github.com/home-operations/konflate/issues/281)) ([370bb7f](https://github.com/home-operations/konflate/commit/370bb7fc7acf349952fd3e302741df78f20e2dc6))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.40.1 → v2.42.0) ([#289](https://github.com/home-operations/konflate/issues/289)) ([495d59b](https://github.com/home-operations/konflate/commit/495d59b6a8946a30b241d30574a6c6a5d6c58804))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @playwright/test (1.61.0 → 1.61.1) ([#288](https://github.com/home-operations/konflate/issues/288)) ([9f07601](https://github.com/home-operations/konflate/commit/9f07601a7672de5192f441628dc269b2ed7d468a))
+* **deps:** update dependency svelte (5.56.3 → 5.56.4) ([#287](https://github.com/home-operations/konflate/issues/287)) ([62311e5](https://github.com/home-operations/konflate/commit/62311e5dab97c900b29d3c90aa6045d7bf492966))
+* **deps:** update module github.com/home-operations/flate (v0.4.8 → v0.4.9) ([#277](https://github.com/home-operations/konflate/issues/277)) ([7c41d3c](https://github.com/home-operations/konflate/commit/7c41d3c4784562dfcb5f9d7d5c77a0e8f698d23d))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.40.0 → v2.40.1) ([#283](https://github.com/home-operations/konflate/issues/283)) ([2c5bae2](https://github.com/home-operations/konflate/commit/2c5bae2175a05fc5598b03fb5833b2cf12e85789))
+
 ## [0.2.31](https://github.com/home-operations/konflate/compare/0.2.30...0.2.31) (2026-06-19)
 
 
