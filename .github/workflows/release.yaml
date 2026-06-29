@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write # keyless Cosign signing of the published chart
+      id-token: write
       packages: write
     env:
       VERSION: ${{ github.event.release.tag_name }}
@@ -97,7 +97,7 @@ jobs:
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
-          cache: false # publishing job — avoid restoring a poisonable cache
+          cache: false
           experimental: true
           install_args: --locked
 
@@ -109,10 +109,7 @@ jobs:
           yq -i '.image.digest = strenv(DIGEST)' charts/konflate/values.yaml
 
       - name: Package Helm chart
-        run: |
-          helm package charts/konflate \
-            --version "${VERSION}" \
-            --app-version "${VERSION}"
+        run: helm package charts/konflate --version "${VERSION}" --app-version "${VERSION}"
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -122,9 +119,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Helm chart to GHCR (OCI)
-        run: |-
-          helm push "konflate-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+        run: helm push "konflate-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
 
       - name: Sign the published chart with Cosign
-        run: |-
-          cosign sign --yes "ghcr.io/${{ github.repository_owner }}/charts/konflate:${VERSION}"
+        run: cosign sign --yes "ghcr.io/${{ github.repository_owner }}/charts/konflate:${VERSION}"

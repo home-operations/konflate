@@ -82,15 +82,12 @@ jobs:
           install_args: --locked
 
       - name: Create Kind cluster
+        id: kind
+        background: true
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           cluster_name: konflate-e2e
           wait: 60s
-
-      - name: Cluster info
-        run: |
-          kubectl version
-          kubectl get nodes
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -113,6 +110,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - wait: kind
+
+      - name: Cluster info
+        run: |
+          kubectl version
+          kubectl get nodes
+
       - name: Load image into kind
         run: kind load docker-image ghcr.io/home-operations/konflate:e2e --name konflate-e2e
 
@@ -121,7 +125,5 @@ jobs:
           KONFLATE_TEST_IMAGE_TAG: e2e
           KONFLATE_TEST_PULL_POLICY: Never
         run: |-
-          # kind-action writes the kubeconfig to ~/.kube/config but does not export
-          # KUBECONFIG to later steps, so set it explicitly for the mise task.
           export KUBECONFIG="${HOME}/.kube/config"
           mise run helm-test
