@@ -24,6 +24,11 @@ func TestRenderedStatusDescription(t *testing.T) {
 			&api.Signals{Resources: 12, Caution: 2, Failures: 1},
 			"12 resources changed, 2 cautions, 1 render failure",
 		},
+		{
+			"blocking ranks before caution",
+			&api.Signals{Resources: 5, Blocking: 1, Caution: 2},
+			"5 resources changed, 1 blocker, 2 cautions",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

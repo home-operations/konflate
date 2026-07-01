@@ -188,7 +188,7 @@ func writePRLine(b *strings.Builder, p api.PRStatus) {
 }
 
 // signalSummary joins the non-zero rendered-diff signals (omitting any that are
-// zero), e.g. "11 resources, 1 caution, 1 image change, 1 render failure".
+// zero), e.g. "11 resources, 1 blocker, 1 caution, 1 image change, 1 render failure".
 func signalSummary(s *api.Signals) string {
 	if s == nil {
 		return ""
@@ -196,6 +196,9 @@ func signalSummary(s *api.Signals) string {
 	var parts []string
 	if s.Resources > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s", s.Resources, plural(s.Resources, "resource", "resources")))
+	}
+	if s.Blocking > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", s.Blocking, plural(s.Blocking, "blocker", "blockers")))
 	}
 	if s.Caution > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s", s.Caution, plural(s.Caution, "caution", "cautions")))

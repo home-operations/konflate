@@ -31,7 +31,7 @@ func TestStore_PersistsAcrossRestart(t *testing.T) {
 	// First process: render an open PR (#1) and render-then-merge another (#2).
 	s1 := open()
 	s1.upsertPR(api.PR{Number: 1, HeadSHA: "a", Open: true}, false)
-	s1.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a", Warnings: []api.Warning{{}}})
+	s1.setResult(1, api.DiffResult{PRNumber: 1, HeadSHA: "a", Warnings: []api.Warning{{Level: api.LevelCaution}}})
 	s1.upsertPR(api.PR{Number: 2, HeadSHA: "b", Open: true}, false)
 	s1.setResult(2, api.DiffResult{PRNumber: 2, HeadSHA: "b"})
 	s1.markClosed(2, s1.now())

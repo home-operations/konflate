@@ -36,12 +36,12 @@ const (
 	statusRemoved = "removed"
 )
 
-// Lint runs the danger-lint rules over the changed resources (and the diff's
-// image changes) and returns the warnings, most-severe first (all dangers
-// before all cautions). parents carries the Flux-semantic facts about each
-// producing Kustomization/HelmRelease (suspend/prune — see ParentInfo); nil
-// is fine and simply mutes the parent-aware rules. Advisory only — konflate
-// never blocks on these; they are a reviewer aid.
+// Lint runs the diff-lint rules over the changed resources (and the diff's image
+// changes) and returns the warnings in rule order. parents carries the
+// Flux-semantic facts about each producing Kustomization/HelmRelease
+// (suspend/prune — see ParentInfo); nil is fine and simply mutes the
+// parent-aware rules. Every rule is api.LevelCaution today (advisory → a neutral
+// check); the summary groups warnings by tier (see api.WarningsByLevel).
 func Lint(changes []Change, images []api.ImageChange, parents map[string]ParentInfo) []api.Warning {
 	var warnings []api.Warning
 	add := func(rule, detail string, c Change) {

@@ -341,12 +341,12 @@ func (s *Server) checkResult(pr api.PR, st api.JobStatus, sig *api.Signals, errM
 	return res
 }
 
-// checkConclusion maps a render verdict to a Check Run conclusion: a render error
-// or any render failure fails the check; cautions are a non-blocking neutral; an
-// otherwise-clean render passes.
+// checkConclusion maps a render verdict to a Check Run conclusion: a render error,
+// any render failure, or a blocking-tier warning fails the check; cautions are a
+// non-blocking neutral; an otherwise-clean render passes.
 func checkConclusion(st api.JobStatus, sig *api.Signals) string {
 	switch {
-	case st == api.JobError, sig != nil && sig.Failures > 0:
+	case st == api.JobError, sig != nil && sig.Failures > 0, sig != nil && sig.Blocking > 0:
 		return provider.CheckFailure
 	case sig != nil && sig.Caution > 0:
 		return provider.CheckNeutral
@@ -390,6 +390,9 @@ func renderedStatusDescription(sig *api.Signals) string {
 		return "Rendered the diff"
 	}
 	d := fmt.Sprintf("%d %s changed", sig.Resources, plural(sig.Resources, "resource", "resources"))
+	if sig.Blocking > 0 {
+		d += fmt.Sprintf(", %d %s", sig.Blocking, plural(sig.Blocking, "blocker", "blockers"))
+	}
 	if sig.Caution > 0 {
 		d += fmt.Sprintf(", %d %s", sig.Caution, plural(sig.Caution, "caution", "cautions"))
 	}

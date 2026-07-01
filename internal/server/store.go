@@ -300,7 +300,8 @@ func (s *store) persistRecord(number int, rec persist.Record, prev uint64) {
 func computeSignals(d *api.DiffResult) *api.Signals {
 	return &api.Signals{
 		Resources: len(d.Resources),
-		Caution:   len(d.Warnings), // every warning is a caution (the sole severity)
+		Caution:   len(api.WarningsByLevel(d.Warnings, api.LevelCaution)),
+		Blocking:  len(api.WarningsByLevel(d.Warnings, api.LevelBlocking)),
 		Images:    len(d.Images),
 		Failures:  len(d.Failures),
 		Routine:   d.Routine,

@@ -27,7 +27,8 @@ export interface PR {
 
 export interface Signals {
   resources: number;
-  caution: number; // caution warnings (the sole severity)
+  caution: number; // caution-tier warnings (advisory → neutral check)
+  blocking: number; // blocking-tier warnings (fail the check); 0 today
   images: number;
   failures: number;
   routine: boolean; // only image/chart-version changed, nothing flagged
@@ -82,7 +83,7 @@ export interface RenderFailure {
 }
 
 export interface Warning {
-  level: 'caution'; // the sole severity
+  level: 'caution' | 'blocking';
   rule: string;
   resource: string;
   detail: string;
