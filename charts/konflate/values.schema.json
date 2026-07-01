@@ -72,6 +72,12 @@
           "title": "helmTemplateCacheMb",
           "type": "string"
         },
+        "imageVerifyTimeout": {
+          "default": "",
+          "description": "Timeout for a single registry existence check (see `verifyImages`). Empty = default (5s).",
+          "title": "imageVerifyTimeout",
+          "type": "string"
+        },
         "logFormat": {
           "default": "json",
           "description": "Log format: json or text.",
@@ -184,6 +190,12 @@
           "default": false,
           "description": "Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set.",
           "title": "statusChecks",
+          "type": "boolean"
+        },
+        "verifyImages": {
+          "default": false,
+          "description": "Verify that each container image a PR newly references exists in its registry (a HEAD on the tag/digest), raising a caution for any that is absent — catching a typo'd or not-yet-pushed image before it ImagePullBackOffs in-cluster. Off by default. Only trusted (non-fork) PRs are checked: a fork's images are attacker-chosen (an SSRF vector). For private registries, mount a dockerconfigjson and point `DOCKER_CONFIG` at it via `config.extraEnv` + `volumes`/`volumeMounts` (go-containerregistry's keychain, host-scoped); konflate never reads a manifest's `imagePullSecrets`.",
+          "title": "verifyImages",
           "type": "boolean"
         }
       },

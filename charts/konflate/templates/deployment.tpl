@@ -98,6 +98,14 @@ spec:
             - name: KONFLATE_MCP
               value: "true"
             {{- end }}
+            {{- if .Values.config.verifyImages }}
+            - name: KONFLATE_VERIFY_IMAGES
+              value: "true"
+            {{- end }}
+            {{- if ne (toString .Values.config.imageVerifyTimeout) "" }}
+            - name: KONFLATE_IMAGE_VERIFY_TIMEOUT
+              value: {{ tpl (toString .Values.config.imageVerifyTimeout) $ | quote }}
+            {{- end }}
             {{- if ne (toString .Values.config.maxDiffResources) "" }}
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}

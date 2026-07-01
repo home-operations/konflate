@@ -107,6 +107,10 @@ config:
   restrictEgress: ""
   # -- Serve a read-only [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` so an AI agent can query konflate's rendered-diff analysis (open PRs + their summaries). Read-only — the same data as the API, triggering no render or write. Off by default (it's a new surface); secure it at your ingress if you expose it.
   mcp: false
+  # -- Verify that each container image a PR newly references exists in its registry (a HEAD on the tag/digest), raising a caution for any that is absent — catching a typo'd or not-yet-pushed image before it ImagePullBackOffs in-cluster. Off by default. Only trusted (non-fork) PRs are checked: a fork's images are attacker-chosen (an SSRF vector). For private registries, mount a dockerconfigjson and point `DOCKER_CONFIG` at it via `config.extraEnv` + `volumes`/`volumeMounts` (go-containerregistry's keychain, host-scoped); konflate never reads a manifest's `imagePullSecrets`.
+  verifyImages: false
+  # -- Timeout for a single registry existence check (see `verifyImages`). Empty = default (5s).
+  imageVerifyTimeout: ""
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
   # --- flate render tuning (advanced) ---------------------------------------

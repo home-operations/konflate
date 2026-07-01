@@ -28,6 +28,7 @@ import (
 	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/persist"
 	"github.com/home-operations/konflate/internal/provider"
+	"github.com/home-operations/konflate/internal/registry"
 )
 
 // Engine renders a pull request into a diff. Declared here (rather than imported
@@ -47,8 +48,11 @@ type Server struct {
 	// the commit-status fallback instead of retrying a write that can't succeed.
 	checksRejected atomic.Bool
 	engine         Engine
-	ui             fs.FS
-	log            *slog.Logger
+	// imageCheck verifies a PR's newly-referenced container images exist in their
+	// registries (see verifyImages); nil unless KONFLATE_VERIFY_IMAGES is on.
+	imageCheck imageChecker
+	ui         fs.FS
+	log        *slog.Logger
 
 	// Version is the build version (main stamps it from ldflags after New);
 	// served at /api/meta for the UI footer. "dev" or empty for local builds.
@@ -107,9 +111,18 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 		log.Warn("write-back disabled (no commit statuses will be posted)", "error", werr)
 	}
 
+	// Optional image-existence verification: a registry client (ambient docker
+	// keychain, so operator-mounted creds reach private registries) when
+	// KONFLATE_VERIFY_IMAGES is on, else nil — the render path skips the check.
+	var imageCheck imageChecker
+	if cfg.VerifyImagesEnabled() {
+		imageCheck = registry.New()
+	}
+
 	s := &Server{
 		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
-		store: newStore(), hub: newHub(log), metrics: newMetrics(), sync: newSyncTracker(),
+		imageCheck: imageCheck,
+		store:      newStore(), hub: newHub(log), metrics: newMetrics(), sync: newSyncTracker(),
 		avatarKey:    avatarKey,
 		mergeTmpl:    newMergeTemplate(cfg, log),
 		commentTmpl:  newCommentTemplate(cfg, log),
@@ -130,6 +143,27 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 	}
 
 	return s
+}
+
+// renderFunc is the diff producer wired into the queue: the engine's Diff, plus —
+// when KONFLATE_VERIFY_IMAGES is on — a registry existence check over the head's
+// newly-referenced images for TRUSTED PRs, appending an image-not-found caution for
+// any that's absent. A fork's images are attacker-chosen, so they are never dialed
+// (SSRF); see verifyImages and Config.VerifyImages.
+func (s *Server) renderFunc() diffFunc {
+	if s.imageCheck == nil {
+		return s.engine.Diff
+	}
+	return func(ctx context.Context, pr api.PR) (api.DiffResult, error) {
+		res, err := s.engine.Diff(ctx, pr)
+		if err != nil || pr.Fork {
+			return res, err
+		}
+		if w := verifyImages(ctx, s.imageCheck, res.Images, s.cfg.ImageVerifyTimeout, s.log); len(w) > 0 {
+			res.Warnings = append(res.Warnings, w...)
+		}
+		return res, err
+	}
 }
 
 // Write-back tuning. forgeWriteTimeout is the overall budget for one write
@@ -524,7 +558,7 @@ func (s *Server) Run(ctx context.Context) error {
 		report = s.reportOutcome
 	}
 	s.queue = newQueue(
-		gctx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone,
+		gctx, s.renderFunc(), s.store, s.hub.broadcast, s.reconcileHeadGone,
 		s.metrics, s.log, s.cfg.MaxDiffConcurrency, report,
 	)
 

@@ -55,6 +55,7 @@ Kubernetes: `>=1.25.0-0`
 | config.fetchTimeout | string | `""` | Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables. |
 | config.helmRenderCacheMb | string | `""` | Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables. |
 | config.helmTemplateCacheMb | string | `""` | Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables. |
+| config.imageVerifyTimeout | string | `""` | Timeout for a single registry existence check (see `verifyImages`). Empty = default (5s). |
 | config.logFormat | string | `"json"` | Log format: json or text. |
 | config.logLevel | string | `"info"` | Log level: debug, info, warn, or error. |
 | config.maxDiffConcurrency | int | `0` | Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4). |
@@ -74,6 +75,7 @@ Kubernetes: `>=1.25.0-0`
 | config.sourceRetryAttempts | string | `""` | Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry. |
 | config.statusCheckName | string | `""` | Name the commit status konflate posts under (the required-check name in branch-protection rules). Empty uses the default, "Konflate". |
 | config.statusChecks | bool | `false` | Opt-in: post a commit status on each rendered PR head. Needs a write credential (`secret.writeToken`, or the GitHub App) and stays off until both are set. |
+| config.verifyImages | bool | `false` | Verify that each container image a PR newly references exists in its registry (a HEAD on the tag/digest), raising a caution for any that is absent — catching a typo'd or not-yet-pushed image before it ImagePullBackOffs in-cluster. Off by default. Only trusted (non-fork) PRs are checked: a fork's images are attacker-chosen (an SSRF vector). For private registries, mount a dockerconfigjson and point `DOCKER_CONFIG` at it via `config.extraEnv` + `volumes`/`volumeMounts` (go-containerregistry's keychain, host-scoped); konflate never reads a manifest's `imagePullSecrets`. |
 | deploymentAnnotations | object | `{}` | Annotations added to the Deployment object (e.g. `reloader.stakater.com/auto: "true"` to roll the pod when the mounted Secret / PR-comment-template ConfigMap changes). Pod-level annotations go in `podAnnotations`. |
 | fullnameOverride | string | `""` | Override the full release name. |
 | httpRoute.additionalRules | list | `[]` | Custom rules prepended before the default rule (templated). |

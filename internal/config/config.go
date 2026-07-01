@@ -178,6 +178,22 @@ type Config struct {
 	// read-only-to-the-outside posture; off by default since it's a new surface.
 	MCP bool `env:"KONFLATE_MCP" envDefault:"false"`
 
+	// VerifyImages, when true, checks each container image a PR's rendered manifests
+	// newly reference against its registry (a HEAD on the tag/digest) and raises a
+	// caution for any that is definitively absent — catching a typo'd or not-yet-pushed
+	// image before it ImagePullBackOffs in-cluster (see VerifyImagesEnabled). Off by
+	// default. Only TRUSTED (non-fork) PRs are verified: a fork's manifests are
+	// attacker-controlled, so dialing a registry named there is an SSRF vector — fork
+	// verification (behind an egress allowlist) is a deliberate follow-up. Private
+	// registries authenticate via a docker config mounted for the pod (DOCKER_CONFIG /
+	// go-containerregistry's keychain), never a manifest's imagePullSecrets, which
+	// konflate can't resolve (it renders YAML and holds no cluster/decryption state).
+	VerifyImages bool `env:"KONFLATE_VERIFY_IMAGES" envDefault:"false"`
+
+	// ImageVerifyTimeout bounds a single registry existence check (see VerifyImages).
+	// The per-render work is also bounded by DiffTimeout.
+	ImageVerifyTimeout time.Duration `env:"KONFLATE_IMAGE_VERIFY_TIMEOUT" envDefault:"5s"`
+
 	// Port is the main HTTP server listen port (UI, API, /ws, /hooks).
 	Port int `env:"KONFLATE_PORT" envDefault:"8080"`
 
@@ -369,6 +385,10 @@ func (c *Config) PushEnabled() bool { return c.PushToken != "" }
 
 // MCPEnabled reports whether the read-only MCP endpoint at /mcp should be served.
 func (c *Config) MCPEnabled() bool { return c.MCP }
+
+// VerifyImagesEnabled reports whether konflate checks that a PR's newly-referenced
+// container images exist in their registries (see VerifyImages).
+func (c *Config) VerifyImagesEnabled() bool { return c.VerifyImages }
 
 // EgressRestricted reports whether flate's SSRF egress guard should block source
 // fetches to private / loopback / link-local / cloud-metadata addresses (and
