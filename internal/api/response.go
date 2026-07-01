@@ -47,7 +47,8 @@ type PRStatus struct {
 // Signals is the at-a-glance review summary for one PR's rendered diff.
 type Signals struct {
 	Resources int  `json:"resources"` // changed/added/removed resources
-	Caution   int  `json:"caution"`   // caution warnings (the sole severity)
+	Caution   int  `json:"caution"`   // caution-tier warnings (advisory → neutral check)
+	Blocking  int  `json:"blocking"`  // blocking-tier warnings (fail the check); 0 today
 	Images    int  `json:"images"`    // container-image changes
 	Failures  int  `json:"failures"`  // resources flate could not render
 	Routine   bool `json:"routine"`   // only image/chart-version changed, nothing flagged

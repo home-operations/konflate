@@ -191,7 +191,7 @@ func (q *queue) run(pr api.PR) {
 				sig = computeSignals(&res) // PR closed mid-render; nothing stored
 			}
 			q.log.Info("diff rendered", "pr", pr.Number, "duration", time.Since(start).Round(time.Millisecond),
-				"resources", sig.Resources, "caution", sig.Caution, "images", sig.Images, "failures", sig.Failures)
+				"resources", sig.Resources, "blocking", sig.Blocking, "caution", sig.Caution, "images", sig.Images, "failures", sig.Failures)
 			q.emit(pr.Number, api.JobReady, "")
 			if q.report != nil {
 				q.report(pr, api.JobReady, sig, "")

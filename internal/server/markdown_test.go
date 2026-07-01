@@ -30,6 +30,44 @@ func sampleSummaryEnv() api.DiffEnvelope {
 	}
 }
 
+func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
+	t.Parallel()
+	env := api.DiffEnvelope{
+		Status: api.JobReady,
+		PR:     api.PR{Number: 7},
+		Diff: &api.DiffResult{
+			HeadSHA: "abc1234",
+			Summary: api.DiffSummary{Changed: 1},
+			Impact:  api.Impact{Resources: 1},
+			Warnings: []api.Warning{
+				{Level: api.LevelBlocking, Rule: "image-not-found", Resource: "Deployment web/api", Detail: "image ghcr.io/x:9.9.9 not found upstream"},
+				{Level: api.LevelCaution, Rule: "replicas-zero", Resource: "Deployment web/api", Detail: "replicas set to 0"},
+			},
+		},
+	}
+	// Blocking → red [!CAUTION] "Blocker"; caution → amber [!WARNING], its own block.
+	md := summaryMarkdown(env, "", true)
+	for _, want := range []string{
+		"> [!CAUTION]\n> **⛔ Blocker**",
+		"> - `Deployment web/api` — image ghcr.io/x:9.9.9 not found upstream",
+		"> [!WARNING]\n> **⚠ Caution**",
+		"> - `Deployment web/api` — replicas set to 0",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("blocking markdown missing %q\n---\n%s", want, md)
+		}
+	}
+	// The blocking finding must not be double-counted into the caution block — with
+	// one caution the header stays singular ("Caution", never plural "Cautions").
+	if strings.Contains(md, "**⚠ Cautions**") {
+		t.Errorf("blocking warning leaked into the caution count:\n%s", md)
+	}
+	// Blocking (higher severity) renders before the caution block.
+	if bi, ci := strings.Index(md, "⛔ Blocker"), strings.Index(md, "⚠ Caution"); bi < 0 || ci < 0 || bi > ci {
+		t.Errorf("blocking block should render before caution (blocking=%d caution=%d)\n%s", bi, ci, md)
+	}
+}
+
 func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	t.Parallel()
 	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true)

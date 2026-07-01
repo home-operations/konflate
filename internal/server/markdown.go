@@ -105,6 +105,7 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	appendSection(sec.Routine)
 	writeRefreshNote()
 	appendSection(sec.BlastRadius)
+	appendSection(sec.Blocking)
 	appendSection(sec.Cautions)
 	appendSection(sec.Failures)
 	appendSection(sec.Images)
@@ -121,7 +122,8 @@ type summarySections struct {
 	Impact      string // headline counts: +added · changed · −removed — N resources · …
 	Routine     string // image/chart-version-only bump, nothing flagged (green [!TIP])
 	BlastRadius string // downstream apps transitively depending on the changed ones
-	Cautions    string // danger-lint warnings
+	Blocking    string // blocking-tier warnings — fail the check (red [!CAUTION])
+	Cautions    string // caution-tier warnings — advisory (amber [!WARNING])
 	Failures    string // resources that failed to render
 	Images      string // container image changes (a Markdown table)
 }
@@ -136,6 +138,7 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 		Impact:      sectionImpact(d, admonitions),
 		Routine:     sectionRoutine(d, admonitions),
 		BlastRadius: sectionBlastRadius(d),
+		Blocking:    sectionBlocking(d, admonitions),
 		Cautions:    sectionCautions(d, admonitions),
 		Failures:    sectionFailures(d, admonitions),
 		Images:      sectionImages(d),
@@ -179,22 +182,47 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 	return msg
 }
 
+// sectionBlocking renders the blocking-tier warnings — findings that fail the
+// check (see checkConclusion). Red [!CAUTION], the top of the ramp, above the
+// amber cautions. Empty unless a rule emitted a LevelBlocking warning (none do
+// yet).
+func sectionBlocking(d *api.DiffResult, admonitions bool) string {
+	ws := api.WarningsByLevel(d.Warnings, api.LevelBlocking)
+	if len(ws) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	if admonitions {
+		fmt.Fprintf(&b, "> [!CAUTION]\n> **⛔ %s**\n", plural(len(ws), "Blocker", "Blockers"))
+		for _, wn := range ws {
+			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
+		}
+	} else {
+		fmt.Fprintf(&b, "**⛔ %s**\n", plural(len(ws), "Blocker", "Blockers"))
+		for _, wn := range ws {
+			fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 func sectionCautions(d *api.DiffResult, admonitions bool) string {
-	if len(d.Warnings) == 0 {
+	ws := api.WarningsByLevel(d.Warnings, api.LevelCaution)
+	if len(ws) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	if admonitions {
 		// Amber [!WARNING] to match the caution list pill's colour (a notch below
-		// the red [!CAUTION] of a render failure). The alert header reads "Warning",
-		// so the block names itself.
-		fmt.Fprintf(&b, "> [!WARNING]\n> **⚠ %s**\n", plural(len(d.Warnings), "Caution", "Cautions"))
-		for _, wn := range d.Warnings {
+		// the red [!CAUTION] of a blocker or render failure). The alert header
+		// reads "Warning", so the block names itself.
+		fmt.Fprintf(&b, "> [!WARNING]\n> **⚠ %s**\n", plural(len(ws), "Caution", "Cautions"))
+		for _, wn := range ws {
 			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 		}
 	} else {
-		fmt.Fprintf(&b, "**⚠ %s**\n", plural(len(d.Warnings), "Caution", "Cautions"))
-		for _, wn := range d.Warnings {
+		fmt.Fprintf(&b, "**⚠ %s**\n", plural(len(ws), "Caution", "Cautions"))
+		for _, wn := range ws {
 			fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
 		}
 	}

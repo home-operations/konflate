@@ -54,6 +54,7 @@ func TestCheckConclusion(t *testing.T) {
 	}{
 		{"render error fails", api.JobError, nil, provider.CheckFailure},
 		{"render failures fail", api.JobReady, &api.Signals{Failures: 1, Caution: 2}, provider.CheckFailure},
+		{"blocking warning fails", api.JobReady, &api.Signals{Blocking: 1, Caution: 2}, provider.CheckFailure},
 		{"cautions are neutral (non-blocking)", api.JobReady, &api.Signals{Caution: 1}, provider.CheckNeutral},
 		{"a clean render passes", api.JobReady, &api.Signals{Resources: 3}, provider.CheckSuccess},
 		{"a ready render with no signals passes", api.JobReady, nil, provider.CheckSuccess},

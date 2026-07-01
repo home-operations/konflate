@@ -56,9 +56,10 @@ type DiffResult struct {
 	// surfaces here, before merge, instead of failing in-cluster.
 	Failures []RenderFailure `json:"failures"`
 
-	// Warnings are heuristic danger flags over the rendered diff (data-loss,
-	// privilege, RBAC, availability). Advisory; never block — konflate is a
-	// reviewer aid, not a gate.
+	// Warnings are heuristic flags over the rendered diff (data-loss, privilege,
+	// RBAC, availability). Advisory by default (LevelCaution → a neutral check);
+	// a LevelBlocking warning escalates the check to a failure. Every rule is a
+	// caution today, so konflate stays a reviewer aid, not a gate.
 	Warnings []Warning `json:"warnings"`
 
 	// Routine is true when every changed resource differs only in container
@@ -137,20 +138,41 @@ type RenderFailure struct {
 	Message string `json:"message"` // the render/reconcile error
 }
 
-// LevelCaution is the sole warning severity — every heuristic flag over the
-// rendered diff is a caution (rendered red in the UI). Kept as a named value of
-// [Warning.Level] so the contract is explicit and a future severity tier is a
-// small change.
-const LevelCaution = "caution"
+// Level is a warning's severity tier. It is a string type so the JSON contract
+// (and the generated TypeScript union) stays the plain value.
+type Level string
 
-// Warning is one heuristic flag over the rendered diff. Level is always
-// [LevelCaution]; Rule is a stable machine id (e.g. "removed-statefulset",
-// "privileged", "rbac-widened", "replicas-zero", "removed-crd").
+const (
+	// LevelCaution is advisory: the reviewer should look, but it does not block —
+	// cautions map the PR's check to a neutral conclusion (see checkConclusion).
+	// Every heuristic diff flag is a caution today.
+	LevelCaution Level = "caution"
+	// LevelBlocking escalates the PR's check to a failing conclusion — for a
+	// finding that means the change would not deploy (e.g. an image tag missing
+	// upstream). No rule emits it yet; it is the promotion target for such a rule.
+	LevelBlocking Level = "blocking"
+)
+
+// Warning is one heuristic flag over the rendered diff. Rule is a stable machine
+// id (e.g. "removed-statefulset", "privileged", "rbac-widened", "replicas-zero").
 type Warning struct {
-	Level    string `json:"level"`
+	Level    Level  `json:"level"`
 	Rule     string `json:"rule"`
 	Resource string `json:"resource"` // "Kind ns/name" the warning concerns
 	Detail   string `json:"detail"`   // human-readable explanation
+}
+
+// WarningsByLevel returns the subset of ws at the given severity level,
+// preserving order — used to render each tier in its own summary block and to
+// count the per-tier [Signals].
+func WarningsByLevel(ws []Warning, l Level) []Warning {
+	out := make([]Warning, 0, len(ws))
+	for _, w := range ws {
+		if w.Level == l {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // DiffTreeParent is the top level of the sidebar tree: a Flux object

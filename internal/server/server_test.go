@@ -1273,7 +1273,7 @@ func TestServer_SignalsInList(t *testing.T) {
 			Resources: []api.DiffResource{{ID: "r0"}, {ID: "r1"}},
 			Images:    []api.ImageChange{{Name: "ghcr.io/x"}},
 			Failures:  []api.RenderFailure{{Parent: "HR a/b"}},
-			Warnings:  []api.Warning{{Level: "danger"}, {Level: "caution"}, {Level: "caution"}},
+			Warnings:  []api.Warning{{Level: api.LevelBlocking}, {Level: api.LevelCaution}, {Level: api.LevelCaution}},
 		}, nil
 	}}
 	pr := api.PR{Number: 3, HeadRef: "f", BaseRef: "main"}
@@ -1289,7 +1289,7 @@ func TestServer_SignalsInList(t *testing.T) {
 		t.Fatalf("expected signals on the ready PR: %+v", list)
 	}
 	got := *list[0].Signals
-	want := api.Signals{Resources: 2, Caution: 3, Images: 1, Failures: 1}
+	want := api.Signals{Resources: 2, Caution: 2, Blocking: 1, Images: 1, Failures: 1}
 	if got != want {
 		t.Errorf("signals = %+v, want %+v", got, want)
 	}
