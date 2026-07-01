@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.33](https://github.com/home-operations/konflate/compare/0.2.32...0.2.33) (2026-07-01)
+
+
+### Features
+
+* **deps:** update module github.com/klauspost/compress (v1.18.7 → v1.19.0) ([#307](https://github.com/home-operations/konflate/issues/307)) ([d1eca0b](https://github.com/home-operations/konflate/commit/d1eca0b974505292b66e93267df757b8ec62a036))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.42.0 → v2.43.0) ([#292](https://github.com/home-operations/konflate/issues/292)) ([1cb15b3](https://github.com/home-operations/konflate/commit/1cb15b381298599b03bc65542c688167829e46f6))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.43.0 → v2.44.0) ([#300](https://github.com/home-operations/konflate/issues/300)) ([b32ae6c](https://github.com/home-operations/konflate/commit/b32ae6c2826ffb17bc16a3fbb9e1887d0a448a6f))
+* verify PR images exist upstream (KONFLATE_VERIFY_IMAGES) ([#306](https://github.com/home-operations/konflate/issues/306)) ([b13dd86](https://github.com/home-operations/konflate/commit/b13dd863b9e2c9bb8da69b16852a2d431682a3eb))
+
+
+### Bug Fixes
+
+* **deps:** update dependency simple-icons (16.24.0 → 16.24.1) ([#297](https://github.com/home-operations/konflate/issues/297)) ([bed11f2](https://github.com/home-operations/konflate/commit/bed11f2123e7a9ca6e508f10e9902f566d7351a5))
+* **deps:** update dependency vite (8.1.0 → 8.1.2) ([#302](https://github.com/home-operations/konflate/issues/302)) ([bf6c281](https://github.com/home-operations/konflate/commit/bf6c2810f7d387685d621878231df5d4d99ff42f))
+* **deps:** update module github.com/home-operations/flate (v0.4.9 → v0.4.10) ([#294](https://github.com/home-operations/konflate/issues/294)) ([a04940d](https://github.com/home-operations/konflate/commit/a04940dc73c65e81b7a662e71697e486be4abda4))
+* **deps:** update module github.com/klauspost/compress (v1.18.6 → v1.18.7) ([#303](https://github.com/home-operations/konflate/issues/303)) ([d201691](https://github.com/home-operations/konflate/commit/d2016913719413147686baaa5b5e05741e0c520e))
+* **deps:** update tailwindcss monorepo (4.3.1 → 4.3.2) ([#299](https://github.com/home-operations/konflate/issues/299)) ([ebe0dcc](https://github.com/home-operations/konflate/commit/ebe0dcc427f3fbba6d836934da17bfa80ff286cf))
+
+
+### Code Refactoring
+
+* **lint:** tiered warning severity (caution + blocking) ([#305](https://github.com/home-operations/konflate/issues/305)) ([b52309c](https://github.com/home-operations/konflate/commit/b52309c82cad79d67ab6a571190ba92c17fc971b))
+
 ## [0.2.32](https://github.com/home-operations/konflate/compare/0.2.31...0.2.32) (2026-06-24)
 
 
