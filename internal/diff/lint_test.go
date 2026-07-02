@@ -241,6 +241,30 @@ func TestLint_MajorChartBump(t *testing.T) {
 	}
 }
 
+// TestLint_MajorChartBump_BuildMetadata: Helm renders the helm.sh/chart label with
+// build metadata sanitized ("1.0.0+build.5" → "1.0.0_build.5"). splitChart must
+// still recognize the version (regex) and hand majorOf valid semver (de-sanitize),
+// or the bump silently never fires.
+func TestLint_MajorChartBump_BuildMetadata(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "Deployment", Name: "a", Parent: "HelmRelease app",
+			OldChart: "app-1.0.0_build.5", NewChart: "app-2.0.0_build.9", Old: map[string]any{}, New: map[string]any{}},
+	}
+	n, w := countRule(Lint(changes, nil, nil), "major-chart-bump")
+	if n != 1 {
+		t.Fatalf("major-chart-bump count = %d, want 1 (a build-metadata label must still fire)", n)
+	}
+	if w.Resource != "app" {
+		t.Errorf("major-chart-bump resource = %q, want app", w.Resource)
+	}
+	// splitChart must un-sanitize the underscore back to a "+" so the version is
+	// valid semver in the detail (and for majorOf).
+	if _, ver := splitChart("app-1.0.0_build.5"); ver != "1.0.0+build.5" {
+		t.Errorf("splitChart version = %q, want 1.0.0+build.5", ver)
+	}
+}
+
 func TestMajorOf(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

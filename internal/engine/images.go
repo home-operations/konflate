@@ -124,7 +124,20 @@ func reconcileRelocations(in []api.ImageChange) []api.ImageChange {
 			out = append(out, ic)
 		}
 	}
-	return append(out, merged...)
+	// A merged move can coincide with a real transition already present — the same
+	// repo bumped in place on another resource that wasn't part of the rename. Fold
+	// it into that entry (union refs) by (name,from,to) rather than appending a
+	// duplicate, so the image isn't listed — and its major bump flagged — twice.
+	for _, m := range merged {
+		if i := slices.IndexFunc(out, func(e api.ImageChange) bool {
+			return e.Name == m.Name && e.From == m.From && e.To == m.To
+		}); i >= 0 {
+			out[i].Refs = mergeRefs(out[i].Refs, m.Refs)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // mergeRefs unions two already-sorted reference lists into one sorted, deduped list.

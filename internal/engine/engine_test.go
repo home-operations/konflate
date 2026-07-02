@@ -405,6 +405,35 @@ func TestImageChanges_AmbiguousNotMerged(t *testing.T) {
 	}
 }
 
+// TestImageChanges_MergedMoveFoldsIntoRealBump: one resource bumps an image in
+// place (A→B) while a rename relocates the same image at the same versions on
+// another (a pure removal at A + a pure addition at B). The reconciled move
+// (A→B) coincides with the real bump, so it must fold into that single entry
+// (unioning refs) — not append a duplicate that lists the image, and flags its
+// major bump, twice.
+func TestImageChanges_MergedMoveFoldsIntoRealBump(t *testing.T) {
+	t.Parallel()
+	changes := []diff.Change{
+		{Status: "changed", Kind: "Deployment", Namespace: "apps", Name: "web",
+			Old: deploy("apps", "web", "reg/app:1.0.0"), New: deploy("apps", "web", "reg/app:2.0.0")},
+		{Status: "removed", Kind: "Deployment", Namespace: "apps", Name: "old",
+			Old: deploy("apps", "old", "reg/app:1.0.0"), New: nil},
+		{Status: "added", Kind: "Deployment", Namespace: "apps", Name: "new",
+			Old: nil, New: deploy("apps", "new", "reg/app:2.0.0")},
+	}
+	got := imageChanges(changes)
+	if len(got) != 1 {
+		t.Fatalf("a merged move coinciding with a real bump must fold into one entry, got %d: %+v", len(got), got)
+	}
+	c := got[0]
+	if c.Name != "reg/app" || c.From != "1.0.0" || c.To != "2.0.0" {
+		t.Errorf("got %+v, want reg/app 1.0.0→2.0.0", c)
+	}
+	if len(c.Refs) != 3 {
+		t.Errorf("folded entry should union all three referencing resources, got %v", c.Refs)
+	}
+}
+
 // splitImageRef's behavior now lives in flate's image.Split (tested in
 // flate); konflate's collectImages composes image.Extract + image.Split,
 // exercised end to end by TestImageChanges above.

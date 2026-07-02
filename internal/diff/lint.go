@@ -187,15 +187,21 @@ func imageBumpWarnings(images []api.ImageChange) []api.Warning {
 
 // chartLabelRe splits a "helm.sh/chart" label ("<name>-<version>") into name and
 // version. The version is the trailing "[v]<major>.<minor>…" run, so a chart
-// name that itself contains hyphens (e.g. "cert-manager") stays intact.
-var chartLabelRe = regexp.MustCompile(`^(.*)-(v?\d+\.\d+[0-9A-Za-z.+-]*)$`)
+// name that itself contains hyphens (e.g. "cert-manager") stays intact. The class
+// includes "_" because Helm renders the label as
+// `{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}`, so a build-metadata
+// version ("1.2.3+build" → label "…-1.2.3_build") carries an underscore.
+var chartLabelRe = regexp.MustCompile(`^(.*)-(v?\d+\.\d+[0-9A-Za-z._+-]*)$`)
 
 func splitChart(label string) (name, version string) {
 	m := chartLabelRe.FindStringSubmatch(label)
 	if m == nil {
 		return "", ""
 	}
-	return m[1], m[2]
+	// Undo Helm's "+"→"_" label sanitization so the version is valid semver again
+	// (chart names contain no "_", so the only "_" is the build separator) — else
+	// majorOf's strict semver parse rejects it and the bump silently never fires.
+	return m[1], strings.ReplaceAll(m[2], "_", "+")
 }
 
 // isMajorBump reports whether two semver-ish versions differ in their major
