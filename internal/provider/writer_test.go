@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -113,6 +114,40 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		}
 		if created.StartedAt == "" || created.StartedAt != created.CompletedAt {
 			t.Errorf("create started_at=%q completed_at=%q, want equal and non-empty", created.StartedAt, created.CompletedAt)
+		}
+	})
+
+	t.Run("clamps an over-length title and summary", func(t *testing.T) {
+		t.Parallel()
+		var created struct {
+			Output struct{ Title, Summary string } `json:"output"`
+		}
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/acme/web/commits/"+sha+"/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"total_count":0,"check_runs":[]}`))
+		})
+		mux.HandleFunc("/repos/acme/web/check-runs", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&created)
+			_, _ = w.Write([]byte(`{"id":1}`))
+		})
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
+		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+			Name:       "konflate",
+			Conclusion: CheckNeutral,
+			Title:      strings.Repeat("t", githubTitleMax+50),  // GitHub caps title at 255
+			Summary:    strings.Repeat("s", githubBodyMax+5000), // and summary at 65535
+		})
+		if err != nil {
+			t.Fatalf("CheckRun: %v", err)
+		}
+		if len(created.Output.Title) > githubTitleMax {
+			t.Errorf("posted title is %d chars; GitHub caps it at %d", len(created.Output.Title), githubTitleMax)
+		}
+		if len(created.Output.Summary) > githubBodyMax {
+			t.Errorf("posted summary is %d chars; GitHub caps it at %d", len(created.Output.Summary), githubBodyMax)
 		}
 	})
 
@@ -508,6 +543,23 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		}
 		assertNoop(t, sink)
 	})
+	t.Run("clamps an over-length body to the GitHub cap", func(t *testing.T) {
+		t.Parallel()
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(`[]`, &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		huge := upsertMarker + "\n" + strings.Repeat("x", githubBodyMax+5000)
+		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, huge); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		if !sink.created {
+			t.Fatal("want a created comment")
+		}
+		if len(sink.body) > githubBodyMax {
+			t.Errorf("posted body is %d bytes; GitHub rejects anything over %d", len(sink.body), githubBodyMax)
+		}
+	})
 }
 
 func TestGitlabWriter_UpsertComment(t *testing.T) {
@@ -664,6 +716,62 @@ func TestRejectedIf(t *testing.T) {
 		if err := rejectedIf(s, base); errors.Is(err, ErrWriteAuthRejected) || !errors.Is(err, base) {
 			t.Errorf("status %d: want a plain (transient) error, got %v", s, err)
 		}
+	}
+}
+
+// TestGitHubReject: a rate limit surfaces as HTTP 403 but is transient, so it must
+// NOT be latched as a permanent credential rejection (which would disable write-back
+// until a restart); a genuine 403/404 still is, and a 5xx stays transient.
+func TestGitHubReject(t *testing.T) {
+	t.Parallel()
+	// Even with a 403 response in hand, a primary rate-limit error stays transient.
+	rlResp := &github.Response{Response: &http.Response{StatusCode: http.StatusForbidden}}
+	rl := &github.RateLimitError{Rate: github.Rate{Reset: github.Timestamp{Time: time.Now().Add(time.Minute)}}}
+	if err := githubReject(rlResp, fmt.Errorf("github: verify: %w", rl)); errors.Is(err, ErrWriteAuthRejected) {
+		t.Errorf("a primary rate-limit 403 must stay transient, got a rejection: %v", err)
+	}
+	// A secondary/abuse limit is also a transient 403.
+	ab := &github.AbuseRateLimitError{}
+	if err := githubReject(rlResp, fmt.Errorf("github: verify: %w", ab)); errors.Is(err, ErrWriteAuthRejected) {
+		t.Errorf("a secondary rate-limit 403 must stay transient, got a rejection: %v", err)
+	}
+	// A genuine 403 (missing permission / wrong installation) is a permanent rejection.
+	forbidden := &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusForbidden}}
+	if err := githubReject(nil, fmt.Errorf("github: verify: %w", forbidden)); !errors.Is(err, ErrWriteAuthRejected) {
+		t.Errorf("a genuine 403 must be a permanent rejection, got %v", err)
+	}
+	// A transient server error stays transient.
+	srvErr := &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusInternalServerError}}
+	if err := githubReject(nil, fmt.Errorf("github: verify: %w", srvErr)); errors.Is(err, ErrWriteAuthRejected) {
+		t.Errorf("a 500 must stay transient, got a rejection: %v", err)
+	}
+}
+
+// TestClamp: a value over its GitHub cap is truncated on a rune boundary with a
+// visible marker (GitHub 422s an over-length check-run summary/title or comment
+// body, and that 422 wouldn't fall back to a commit status — the outcome would go
+// unreported).
+func TestClamp(t *testing.T) {
+	t.Parallel()
+	if got := clamp("under the cap", githubBodyMax, bodyTruncMarker); got != "under the cap" {
+		t.Errorf("a value under the cap must be returned verbatim, got %q", got)
+	}
+	long := strings.Repeat("x", githubBodyMax+1000)
+	got := clamp(long, githubBodyMax, bodyTruncMarker)
+	if len(got) > githubBodyMax {
+		t.Errorf("clamped body is %d bytes, want <= %d", len(got), githubBodyMax)
+	}
+	if !strings.HasSuffix(got, bodyTruncMarker) {
+		t.Errorf("a clamped body must carry the truncation marker, got tail %q", got[len(got)-16:])
+	}
+	// The tighter title cap (255) is enforced too.
+	if gt := clamp(strings.Repeat("t", githubTitleMax+50), githubTitleMax, "…"); len(gt) > githubTitleMax {
+		t.Errorf("clamped title is %d bytes, want <= %d", len(gt), githubTitleMax)
+	}
+	// A cut landing mid multi-byte rune must not split it — the result stays valid UTF-8.
+	multi := strings.Repeat("é", githubBodyMax) // 2 bytes each → the cap lands mid-rune
+	if !utf8.ValidString(clamp(multi, githubBodyMax, bodyTruncMarker)) {
+		t.Error("clamp split a multi-byte rune (result is not valid UTF-8)")
 	}
 }
 

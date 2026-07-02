@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -404,7 +405,9 @@ func (w *githubWriter) ChecksSupported() bool { return w.app }
 // elapsed time and GitHub should display none.
 func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult) error {
 	completed, now := "completed", github.Timestamp{Time: time.Now()}
-	output := &github.CheckRunOutput{Title: &res.Title, Summary: &res.Summary}
+	title := clamp(res.Title, githubTitleMax, "…")
+	summary := clamp(res.Summary, githubBodyMax, bodyTruncMarker)
+	output := &github.CheckRunOutput{Title: &title, Summary: &summary}
 
 	id, err := w.findCheckRun(ctx, pr.HeadSHA, res.Name)
 	if err != nil {
@@ -438,7 +441,7 @@ func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult)
 		req.Header.Set("Accept", "application/vnd.github.antiope-preview+json")
 		resp, err := w.client.Do(req, nil)
 		if err != nil {
-			return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: update check run #%d: %w", pr.Number, err))
+			return githubReject(resp, fmt.Errorf("github: update check run #%d: %w", pr.Number, err))
 		}
 		return nil
 	}
@@ -453,7 +456,7 @@ func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult)
 		Output:      output,
 	})
 	if err != nil {
-		return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: create check run #%d: %w", pr.Number, err))
+		return githubReject(resp, fmt.Errorf("github: create check run #%d: %w", pr.Number, err))
 	}
 	return nil
 }
@@ -471,7 +474,7 @@ func (w *githubWriter) findCheckRun(ctx context.Context, sha, name string) (int6
 		ListOptions: github.ListOptions{PerPage: 1},
 	})
 	if err != nil {
-		return 0, rejectedIf(githubStatus(resp, err), fmt.Errorf("github: list check runs: %w", err))
+		return 0, githubReject(resp, fmt.Errorf("github: list check runs: %w", err))
 	}
 	for _, r := range runs.CheckRuns {
 		return r.GetID(), nil
@@ -480,6 +483,7 @@ func (w *githubWriter) findCheckRun(ctx context.Context, sha, name string) (int6
 }
 
 func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, body string) error {
+	body = clamp(body, githubBodyMax, bodyTruncMarker) // GitHub 422s an over-length body; clamp so the outcome still posts
 	self, err := w.self.get(ctx)
 	if err != nil {
 		return fmt.Errorf("github: %w", err)
@@ -515,7 +519,7 @@ func (w *githubWriter) Verify(ctx context.Context) error {
 	if err == nil {
 		return nil
 	}
-	return rejectedIf(githubStatus(resp, err), fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
+	return githubReject(resp, fmt.Errorf("github: verify %s/%s: %w", w.owner, w.repo, err))
 }
 
 // githubStatus extracts the HTTP status behind a write-client error: the API
@@ -530,6 +534,48 @@ func githubStatus(resp *github.Response, err error) int {
 		return apiErr.Response.StatusCode
 	}
 	return 0
+}
+
+// githubReject classifies a github write-back error's permanence. A rate limit —
+// primary or a secondary/abuse limit, both of which surface as HTTP 403 — is
+// transient: it clears when the window resets, so it must NOT be latched as a
+// permanent credential rejection that disables write-back (a temporary 403 would
+// otherwise wedge it off for good). Any other genuine auth status (401/403/404)
+// is wrapped ErrWriteAuthRejected so the caller can fall back to a commit status.
+// err is matched through its wrapped chain, so callers pass their annotated error.
+func githubReject(resp *github.Response, err error) error {
+	if _, ok := RateLimit(err); ok {
+		return err
+	}
+	return rejectedIf(githubStatus(resp, err), err)
+}
+
+// GitHub rejects a check-run output summary over 65535 chars, an output title
+// over 255, or an issue-comment body over 65536, with a 422 — which isn't an auth
+// rejection, so it wouldn't fall back to a commit status and the whole render
+// outcome would go unreported. Clamp each to its cap before posting. Byte caps are
+// conservative against GitHub's character limits (bytes >= chars).
+const (
+	githubBodyMax   = 65535 // check-run output summary / issue-comment body
+	githubTitleMax  = 255   // check-run output title
+	bodyTruncMarker = "\n\n_…(truncated)_"
+)
+
+// clamp truncates s to at most max bytes on a rune boundary, appending marker (a
+// short string that must itself fit within max) so a clamped value is visibly
+// incomplete rather than silently cut.
+func clamp(s string, max int, marker string) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := max - len(marker)
+	if cut < 0 {
+		cut = 0
+	}
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut-- // don't split a multi-byte rune
+	}
+	return s[:cut] + marker
 }
 
 // --- Forgejo ---

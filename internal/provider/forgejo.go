@@ -92,15 +92,34 @@ func (p *forgejoProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollu
 	if pr.HeadSHA == "" {
 		return api.CheckRollup{}, nil
 	}
-	cs, resp, err := p.client.GetCombinedStatus(p.owner, p.repo, pr.HeadSHA)
-	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return api.CheckRollup{}, nil
+	// GetCombinedStatus can't page (the SDK method takes no ListOptions), so a
+	// commit with more contexts than the server's default page size would silently
+	// drop the rest of the rollup. List the raw statuses across all pages instead
+	// and reduce to the latest per context ourselves — what the combined endpoint
+	// does server-side — using the same all-pages loop ListPRs uses. Status IDs are
+	// monotonic (a DB auto-increment), so the highest ID for a context is its latest.
+	latest := map[string]*forgejo.Status{}
+	opts := forgejo.ListStatusesOption{ListOptions: forgejo.ListOptions{PageSize: 50}}
+	for {
+		statuses, resp, err := p.client.ListStatuses(p.owner, p.repo, pr.HeadSHA, opts)
+		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotFound {
+				return api.CheckRollup{}, nil // the commit simply has no statuses
+			}
+			return api.CheckRollup{}, fmt.Errorf("forgejo: list statuses #%d: %w", pr.Number, err)
 		}
-		return api.CheckRollup{}, fmt.Errorf("forgejo: combined status #%d: %w", pr.Number, err)
+		for _, s := range statuses {
+			if cur, ok := latest[s.Context]; !ok || s.ID > cur.ID {
+				latest[s.Context] = s
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	var passed, failed, pending int
-	for _, s := range cs.Statuses {
+	for _, s := range latest {
 		switch string(s.State) {
 		case stateSuccess, "warning":
 			passed++

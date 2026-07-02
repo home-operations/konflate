@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/google/go-github/v88/github"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -61,5 +62,65 @@ func TestGitHubProvider_ChecksNoSHA(t *testing.T) {
 	got, err := p.Checks(context.Background(), api.PR{Number: 1})
 	if err != nil || got.State != api.CheckNone {
 		t.Fatalf("got %+v, %v; want none / no error", got, err)
+	}
+}
+
+// TestForgejoProvider_ChecksPagesAndDedups verifies the rollup walks ALL pages of
+// commit statuses (GetCombinedStatus couldn't page, silently dropping contexts past
+// the server's default page size) and reduces to the latest status per context —
+// highest id wins — matching the combined endpoint's server-side dedup.
+func TestForgejoProvider_ChecksPagesAndDedups(t *testing.T) {
+	t.Parallel()
+	const sha = "deadbeefcafe"
+	var combinedHit bool
+	mux := http.NewServeMux()
+	// The old, unpaged combined-status endpoint must no longer be used. (The Forgejo
+	// SDK prefixes every path with /api/v1.)
+	mux.HandleFunc("/api/v1/repos/acme/web/commits/"+sha+"/status", func(w http.ResponseWriter, _ *http.Request) {
+		combinedHit = true
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/api/v1/repos/acme/web/commits/"+sha+"/statuses", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			_, _ = w.Write([]byte(`[` +
+				`{"id":4,"status":"pending","context":"ci/lint"},` +
+				`{"id":2,"status":"warning","context":"ci/warn"}]`))
+			return
+		}
+		// Page 1 advertises a next page via the Link header (what the SDK reads). It
+		// also lists ci/build twice: the newer (id 5, success) must win over the
+		// stale (id 1, pending), or the pending count would be wrong.
+		w.Header().Set("Link", `<?page=2>; rel="next"`)
+		_, _ = w.Write([]byte(`[` +
+			`{"id":1,"status":"pending","context":"ci/build"},` +
+			`{"id":5,"status":"success","context":"ci/build"},` +
+			`{"id":3,"status":"failure","context":"ci/test"}]`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client, err := forgejo.NewClient(srv.URL,
+		forgejo.SetForgejoVersion(forgejo.Version()), forgejo.SetToken("tok"))
+	if err != nil {
+		t.Fatalf("forgejo.NewClient: %v", err)
+	}
+	p := &forgejoProvider{client: client, owner: "acme", repo: "web"}
+
+	got, err := p.Checks(context.Background(), api.PR{Number: 7, HeadSHA: sha})
+	if err != nil {
+		t.Fatalf("Checks: %v", err)
+	}
+	if combinedHit {
+		t.Error("Checks still hit the unpaged combined-status endpoint")
+	}
+	// ci/build→success + ci/warn→warning (both passed), ci/test→failure, ci/lint→pending.
+	// Total 4 (not 5) proves the stale ci/build pending was deduped away; passed 2 and a
+	// present failure prove the second page wasn't dropped.
+	if got.Total != 4 || got.Passed != 2 || got.Failed != 1 {
+		t.Errorf("rollup = %+v, want total 4 / passed 2 / failed 1", got)
+	}
+	if got.State != api.CheckFailure {
+		t.Errorf("state = %q, want failure (a failed context is present)", got.State)
 	}
 }
