@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -154,8 +156,11 @@ func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 	// What a malicious PR might craft into a render error: a pipe (table break),
 	// raw HTML (injection), and a newline (would split the list item).
 	env.Diff.Failures = []api.RenderFailure{{
-		Parent:  "HelmRelease ns/app",
-		Message: "boom | <script>alert(1)</script>\nsecond line",
+		Parent: "HelmRelease ns/app",
+		// A pipe (table break), raw HTML, a newline (would split the list item), and
+		// Markdown that — unescaped — would inject a clickable link, a remote image,
+		// and a code span into konflate's own comment/check-run.
+		Message: "boom | <script>alert(1)</script>\nsecond line [click](https://evil.example) ![x](https://evil.example/p.png) `code`",
 	}}
 	md := summaryMarkdown(env, "", true)
 	if strings.Contains(md, "<script>") {
@@ -169,6 +174,33 @@ func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 	}
 	if strings.Contains(md, "\nsecond line") {
 		t.Errorf("a newline in a message must collapse to a space:\n%s", md)
+	}
+	// The Markdown link/image syntax must be defanged: the brackets are
+	// backslash-escaped, so no [text](url) link or ![alt](url) image forms.
+	if strings.Contains(md, "[click](") || strings.Contains(md, "![x](") {
+		t.Errorf("forge text must not inject a Markdown link or image:\n%s", md)
+	}
+	if !strings.Contains(md, `\[click\]`) || !strings.Contains(md, `\!\[x\]`) {
+		t.Errorf("expected escaped link/image brackets:\n%s", md)
+	}
+	// A backtick must be escaped so it can't open a code span mid-message.
+	if !strings.Contains(md, "\\`code\\`") {
+		t.Errorf("expected escaped code-span backticks:\n%s", md)
+	}
+}
+
+func TestMdInline_DefangsMarkdown(t *testing.T) {
+	t.Parallel()
+	// Backslash-escaped punctuation renders as the literal character in GFM, so a
+	// link/image/code/emphasis attempt is inert while the text reads unchanged.
+	got := mdInline("a [l](u) ![i](u) `c` *b* _e_ ~s~ | <x>")
+	want := "a \\[l\\]\\(u\\) \\!\\[i\\]\\(u\\) \\`c\\` \\*b\\* \\_e\\_ \\~s\\~ \\| &lt;x&gt;"
+	if got != want {
+		t.Errorf("mdInline mismatch:\n got %q\nwant %q", got, want)
+	}
+	// A lone backslash is escaped first, so it can't consume a following escape.
+	if got := mdInline(`\`); got != `\\` {
+		t.Errorf("a backslash must be escaped, got %q", got)
 	}
 }
 
@@ -229,5 +261,42 @@ func TestShortVer(t *testing.T) {
 		if got := shortVer(c.in); got != c.want {
 			t.Errorf("shortVer(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// TestReviewURLFromRequest_RejectsInjection: the request-controlled host/scheme
+// are embedded straight into a Markdown link, so a value carrying link-breakout
+// characters must be rejected (fall back to the request Host, or drop the link),
+// and a forged scheme clamped to https.
+func TestReviewURLFromRequest_RejectsInjection(t *testing.T) {
+	t.Parallel()
+	// A well-formed forwarded host + proto → the normal review URL.
+	r := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
+	r.Header.Set("X-Forwarded-Host", "konflate.example")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	if got := reviewURLFromRequest(r, 7); got != "https://konflate.example/#/pr/7" {
+		t.Errorf("valid host/proto: got %q", got)
+	}
+	// An X-Forwarded-Host carrying Markdown link-breakout characters is ignored in
+	// favour of the (clean) request Host, so no second link is injected.
+	r2 := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
+	r2.Host = "konflate.example"
+	r2.Header.Set("X-Forwarded-Proto", "https")
+	r2.Header.Set("X-Forwarded-Host", "evil.example) [inject](https://attacker.example")
+	if got := reviewURLFromRequest(r2, 7); got != "https://konflate.example/#/pr/7" {
+		t.Errorf("injected X-Forwarded-Host must fall back to the request Host, got %q", got)
+	}
+	// A forged X-Forwarded-Proto is clamped to https.
+	r3 := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
+	r3.Host = "konflate.example"
+	r3.Header.Set("X-Forwarded-Proto", "javascript:alert(1)//")
+	if got := reviewURLFromRequest(r3, 7); got != "https://konflate.example/#/pr/7" {
+		t.Errorf("forged scheme must clamp to https, got %q", got)
+	}
+	// No usable host at all → no link (rather than a malformed one).
+	r4 := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
+	r4.Host = "bad host) with (spaces"
+	if got := reviewURLFromRequest(r4, 7); got != "" {
+		t.Errorf("an unusable host must yield no link, got %q", got)
 	}
 }
