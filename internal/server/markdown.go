@@ -186,68 +186,65 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 // check (see checkConclusion). Red [!CAUTION], the top of the ramp, above the
 // amber cautions. Empty unless a rule emitted a LevelBlocking warning (none do
 // yet).
-func sectionBlocking(d *api.DiffResult, admonitions bool) string {
-	ws := api.WarningsByLevel(d.Warnings, api.LevelBlocking)
-	if len(ws) == 0 {
+// mdItem is one "- `code` — detail" line in a summary block.
+type mdItem struct{ code, detail string }
+
+// mdBlock renders a summary block: a header — a GitHub admonition (> [!ALERT] +
+// bold line) when admonitions, else a plain bold line — then one "- `code` —
+// detail" item per entry (mdCode/mdInline escape the forge-controlled halves).
+// The admonition and plain headers can differ: the plain form carries the
+// severity glyph the admonition box would otherwise supply. Empty when no items.
+func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, items []mdItem) string {
+	if len(items) == 0 {
 		return ""
 	}
 	var b strings.Builder
+	prefix := "- "
 	if admonitions {
-		fmt.Fprintf(&b, "> [!CAUTION]\n> **⛔ %s**\n", plural(len(ws), "Blocker", "Blockers"))
-		for _, wn := range ws {
-			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
-		}
+		fmt.Fprintf(&b, "> [!%s]\n> **%s**\n", alert, admonitionHeader)
+		prefix = "> - "
 	} else {
-		fmt.Fprintf(&b, "**⛔ %s**\n", plural(len(ws), "Blocker", "Blockers"))
-		for _, wn := range ws {
-			fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
-		}
+		fmt.Fprintf(&b, "**%s**\n", plainHeader)
+	}
+	for _, it := range items {
+		fmt.Fprintf(&b, "%s`%s` — %s\n", prefix, mdCode(it.code), mdInline(it.detail))
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// warningItems maps warnings to block items (Resource → code, Detail → detail).
+func warningItems(ws []api.Warning) []mdItem {
+	items := make([]mdItem, len(ws))
+	for i, wn := range ws {
+		items[i] = mdItem{code: wn.Resource, detail: wn.Detail}
+	}
+	return items
+}
+
+func sectionBlocking(d *api.DiffResult, admonitions bool) string {
+	ws := api.WarningsByLevel(d.Warnings, api.LevelBlocking)
+	// Red [!CAUTION] — a blocker is the top of the severity ramp.
+	h := fmt.Sprintf("⛔ %s", plural(len(ws), "Blocker", "Blockers"))
+	return mdBlock(admonitions, "CAUTION", h, h, warningItems(ws))
 }
 
 func sectionCautions(d *api.DiffResult, admonitions bool) string {
 	ws := api.WarningsByLevel(d.Warnings, api.LevelCaution)
-	if len(ws) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	if admonitions {
-		// Amber [!WARNING] to match the caution list pill's colour (a notch below
-		// the red [!CAUTION] of a blocker or render failure). The alert header
-		// reads "Warning", so the block names itself.
-		fmt.Fprintf(&b, "> [!WARNING]\n> **⚠ %s**\n", plural(len(ws), "Caution", "Cautions"))
-		for _, wn := range ws {
-			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
-		}
-	} else {
-		fmt.Fprintf(&b, "**⚠ %s**\n", plural(len(ws), "Caution", "Cautions"))
-		for _, wn := range ws {
-			fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(wn.Resource), mdInline(wn.Detail))
-		}
-	}
-	return strings.TrimRight(b.String(), "\n")
+	// Amber [!WARNING] to match the caution list pill's colour (a notch below the
+	// red of a blocker or render failure); the alert header reads "Warning".
+	h := fmt.Sprintf("⚠ %s", plural(len(ws), "Caution", "Cautions"))
+	return mdBlock(admonitions, "WARNING", h, h, warningItems(ws))
 }
 
 func sectionFailures(d *api.DiffResult, admonitions bool) string {
-	if len(d.Failures) == 0 {
-		return ""
+	items := make([]mdItem, len(d.Failures))
+	for i, f := range d.Failures {
+		items[i] = mdItem{code: f.Parent, detail: f.Message}
 	}
-	var b strings.Builder
-	title := fmt.Sprintf("%d render %s", len(d.Failures), plural(len(d.Failures), "failure", "failures"))
-	if admonitions {
-		// Red [!CAUTION] to match the failure list pill — the top of the severity ramp.
-		fmt.Fprintf(&b, "> [!CAUTION]\n> **%s**\n", title)
-		for _, f := range d.Failures {
-			fmt.Fprintf(&b, "> - `%s` — %s\n", mdCode(f.Parent), mdInline(f.Message))
-		}
-	} else {
-		fmt.Fprintf(&b, "**⛔ Render failures (%d)**\n", len(d.Failures))
-		for _, f := range d.Failures {
-			fmt.Fprintf(&b, "- `%s` — %s\n", mdCode(f.Parent), mdInline(f.Message))
-		}
-	}
-	return strings.TrimRight(b.String(), "\n")
+	// Red [!CAUTION] like a blocker; the plain form adds the ⛔ glyph the box drops.
+	admHeader := fmt.Sprintf("%d render %s", len(d.Failures), plural(len(d.Failures), "failure", "failures"))
+	plainHeader := fmt.Sprintf("⛔ Render failures (%d)", len(d.Failures))
+	return mdBlock(admonitions, "CAUTION", admHeader, plainHeader, items)
 }
 
 func sectionImages(d *api.DiffResult) string {

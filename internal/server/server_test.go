@@ -1598,3 +1598,131 @@ func TestMeta_FeaturesReflectAuth(t *testing.T) {
 		})
 	}
 }
+
+// TestRefreshPR_SkipsUnchangedRenderedHead verifies a metadata-only webhook
+// (labeled/edited — same head SHA, already rendered) does not re-render, while a
+// genuinely new head SHA does. Avoids a full render per chatty PR-metadata event.
+func TestRefreshPR_SkipsUnchangedRenderedHead(t *testing.T) {
+	t.Parallel()
+	var renders atomic.Int32
+	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		renders.Add(1)
+		return api.DiffResult{PRNumber: pr.Number, HeadSHA: pr.HeadSHA}, nil
+	}}
+	prov := &fakeProvider{}
+	prov.setDetail(api.PR{Number: 1, Open: true, HeadRef: "f", BaseRef: "main", HeadSHA: "abc"})
+	s := newTestServer(t, ghCfg("tok"), prov, eng)
+
+	// First webhook renders the head (no prior render → the gate lets it through).
+	if err := s.refreshPR(s.runCtx, 1, "webhook", false); err != nil {
+		t.Fatalf("refreshPR: %v", err)
+	}
+	if env := waitFor(t, s, 1); env.Status != api.JobReady {
+		t.Fatalf("first render status = %s, want ready", env.Status)
+	}
+	if n := renders.Load(); n != 1 {
+		t.Fatalf("first refresh rendered %d times, want 1", n)
+	}
+
+	// A metadata-only webhook (same head SHA, already rendered) must not re-render.
+	if err := s.refreshPR(s.runCtx, 1, "webhook", false); err != nil {
+		t.Fatalf("refreshPR (metadata): %v", err)
+	}
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if n := renders.Load(); n != 1 {
+			t.Fatalf("a metadata-only refresh re-rendered (count=%d)", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// A new head SHA re-renders.
+	prov.setDetail(api.PR{Number: 1, Open: true, HeadRef: "f", BaseRef: "main", HeadSHA: "def"})
+	if err := s.refreshPR(s.runCtx, 1, "webhook", false); err != nil {
+		t.Fatalf("refreshPR (new SHA): %v", err)
+	}
+	renderedDef := func() bool {
+		env, ok := s.store.get(1)
+		return ok && env.Status == api.JobReady && env.Diff != nil && env.Diff.HeadSHA == "def"
+	}
+	dl := time.Now().Add(2 * time.Second)
+	for time.Now().Before(dl) && !renderedDef() {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !renderedDef() {
+		t.Fatal("a new head SHA never re-rendered to def")
+	}
+	if n := renders.Load(); n != 2 {
+		t.Fatalf("total renders = %d, want 2 (initial + new-SHA; the metadata refresh skipped)", n)
+	}
+
+	// A retarget (same head SHA, new base ref → a different merge-base) re-renders.
+	prov.setDetail(api.PR{Number: 1, Open: true, HeadRef: "f", BaseRef: "develop", HeadSHA: "def"})
+	if err := s.refreshPR(s.runCtx, 1, "webhook", false); err != nil {
+		t.Fatalf("refreshPR (retarget): %v", err)
+	}
+	dl = time.Now().Add(2 * time.Second)
+	for time.Now().Before(dl) && renders.Load() < 3 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := renders.Load(); n != 3 {
+		t.Fatalf("a base-ref retarget must re-render; renders = %d, want 3", n)
+	}
+
+	// The push endpoint forces a re-render even on an unchanged, already-rendered
+	// head+base (the CI trigger's whole point) — force bypasses the gate.
+	if err := s.refreshPR(s.runCtx, 1, "push", true); err != nil {
+		t.Fatalf("refreshPR (forced): %v", err)
+	}
+	dl = time.Now().Add(2 * time.Second)
+	for time.Now().Before(dl) && renders.Load() < 4 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := renders.Load(); n != 4 {
+		t.Fatalf("a forced refresh must re-render an unchanged head; renders = %d, want 4", n)
+	}
+}
+
+// TestRefreshList_RerendersOnBaseRetarget verifies the poll/relist path re-renders
+// a PR whose base was retargeted (same head SHA, new base → new merge-base), the
+// only trigger in webhook-less polling mode besides the staleness backstop.
+func TestRefreshList_RerendersOnBaseRetarget(t *testing.T) {
+	t.Parallel()
+	var renders atomic.Int32
+	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
+		renders.Add(1)
+		return api.DiffResult{PRNumber: pr.Number, HeadSHA: pr.HeadSHA}, nil
+	}}
+	prov := &fakeProvider{}
+	prov.setPRs(api.PR{Number: 1, Open: true, HeadRef: "f", BaseRef: "main", HeadSHA: "abc"})
+	s := newTestServer(t, ghCfg("tok"), prov, eng)
+
+	s.refreshList(s.runCtx)
+	if env := waitFor(t, s, 1); env.Status != api.JobReady {
+		t.Fatalf("first render status = %s, want ready", env.Status)
+	}
+	if n := renders.Load(); n != 1 {
+		t.Fatalf("first list render count = %d, want 1", n)
+	}
+
+	// An unchanged relist must not re-render.
+	s.refreshList(s.runCtx)
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if n := renders.Load(); n != 1 {
+			t.Fatalf("an unchanged relist re-rendered (count=%d)", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// A base retarget (same head, new base) must re-render.
+	prov.setPRs(api.PR{Number: 1, Open: true, HeadRef: "f", BaseRef: "develop", HeadSHA: "abc"})
+	s.refreshList(s.runCtx)
+	dl := time.Now().Add(2 * time.Second)
+	for time.Now().Before(dl) && renders.Load() < 2 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := renders.Load(); n != 2 {
+		t.Fatalf("a base retarget via the list must re-render; renders = %d, want 2", n)
+	}
+}

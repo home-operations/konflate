@@ -92,8 +92,8 @@ func (c *Client) Exists(ctx context.Context, ref string) (bool, error) {
 // isNotFound reports whether err is the registry definitively saying the
 // tag/digest is absent (HTTP 404), as opposed to an auth or transport failure.
 func isNotFound(err error) bool {
-	var te *transport.Error
-	return errors.As(err, &te) && te.StatusCode == http.StatusNotFound
+	te, ok := errors.AsType[*transport.Error](err)
+	return ok && te.StatusCode == http.StatusNotFound
 }
 
 func (c *Client) cached(ref string) (found, ok bool) {
