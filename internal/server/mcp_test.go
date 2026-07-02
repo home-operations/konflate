@@ -363,3 +363,43 @@ func resourceText(rr *mcp.ReadResourceResult) string {
 	}
 	return b.String()
 }
+
+// TestWritePRLine_FlattensTitle: the MCP list is one line per PR, parsed by line,
+// so a forge-controlled title with a newline/control char must be flattened.
+func TestWritePRLine_FlattensTitle(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	writePRLine(&b, api.PRStatus{
+		PR:     api.PR{Number: 7, Title: "line one\nline two\r\tmore", Open: true},
+		Status: api.JobReady,
+	})
+	out := b.String()
+	if n := strings.Count(out, "\n"); n != 1 || !strings.HasSuffix(out, "\n") {
+		t.Errorf("title not flattened to a single line (%d newlines): %q", n, out)
+	}
+	if strings.Contains(out, "line one\nline two") {
+		t.Errorf("a raw newline survived into the listing: %q", out)
+	}
+}
+
+// TestRenderDiffText_TruncatesLargeDiff: a diff far larger than the MCP byte
+// budget is truncated (with a note) rather than fully stripped-then-discarded.
+func TestRenderDiffText_TruncatesLargeDiff(t *testing.T) {
+	t.Parallel()
+	big := strings.Repeat("x", 4096) // plain text: stripHTML is a no-op
+	var resources []api.DiffResource
+	for i := 0; i < 64; i++ { // ~256 KiB, well over the 96 KiB budget
+		resources = append(resources, api.DiffResource{
+			Status:  "changed",
+			Title:   fmt.Sprintf("Deployment ns/app-%d", i),
+			Unified: []api.UnifiedRow{{Kind: "ctx", HTML: big}},
+		})
+	}
+	out := renderDiffText(resources, 0)
+	if len(out) > mcpDiffMaxBytes+1024 {
+		t.Errorf("output not truncated to the budget: %d bytes", len(out))
+	}
+	if !strings.Contains(out, "output truncated") {
+		t.Errorf("truncated output is missing the note:\n…%s", out[max(0, len(out)-160):])
+	}
+}

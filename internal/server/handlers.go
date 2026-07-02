@@ -386,7 +386,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid PR number")
 		return
 	}
-	if err := s.refreshPR(r.Context(), number, "push"); err != nil {
+	if err := s.refreshPR(r.Context(), number, "push", true); err != nil {
 		s.log.Warn("push: fetch PR failed", "pr", number, "error", err)
 		writeError(w, http.StatusBadGateway, "could not fetch PR from forge")
 		return
@@ -397,7 +397,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 // refreshPR fetches a single PR from the forge and enqueues its diff. Shared by
 // the push endpoint (synchronous, surfaces fetch errors) and the webhook
 // (fire-and-forget).
-func (s *Server) refreshPR(ctx context.Context, number int, reason string) error {
+func (s *Server) refreshPR(ctx context.Context, number int, reason string, force bool) error {
 	pr, err := s.prov.GetPR(ctx, number)
 	if err != nil {
 		return err
@@ -409,7 +409,23 @@ func (s *Server) refreshPR(ctx context.Context, number int, reason string) error
 		s.reconcileState(pr)
 		return nil
 	}
+	// Read the last-rendered state BEFORE upserting this PR's metadata, so the gate
+	// compares against what was actually rendered, not the values just written.
+	prev, hadPrev := s.store.get(number)
 	s.store.upsertPR(pr, false)
+	// Skip the re-render only when the head SHA AND the base ref are both unchanged
+	// and already rendered — a metadata-only webhook (labeled/edited/assigned/…),
+	// where the upserted metadata (labels/title) is all that changed. A new push
+	// (advanced head), a retarget (base changed → a different merge-base → a
+	// different diff), a first sighting, a prior error/pending, or a newly-allowed
+	// PR all fall through and enqueue. force skips the gate: the push endpoint is an
+	// explicit "re-render now" honouring a base-branch move or manual retry the head
+	// SHA can't reflect.
+	if !force && hadPrev && prev.Status == api.JobReady && prev.Diff != nil &&
+		prev.Diff.HeadSHA == pr.HeadSHA && prev.PR.BaseRef == pr.BaseRef && pr.HeadSHA != "" {
+		s.log.Debug("skipping render; head and base unchanged and already rendered", "pr", number, "reason", reason)
+		return nil
+	}
 	s.log.Info("queuing render", "pr", number, "reason", reason)
 	s.queue.enqueue(pr)
 	return nil
@@ -505,7 +521,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		s.requestCheckRefresh(ev.HeadSHA)
 	case ev.PR > 0 && !ev.Relist:
 		go func() {
-			if err := s.refreshPR(s.runCtx, ev.PR, "webhook"); err != nil {
+			if err := s.refreshPR(s.runCtx, ev.PR, "webhook", false); err != nil {
 				s.log.Warn("webhook: refresh PR failed", "pr", ev.PR, "error", err)
 			}
 		}()
@@ -560,13 +576,15 @@ func (s *Server) refreshList(ctx context.Context) {
 		// set: a PR reappearing in it is genuinely open again, so it un-shelves a
 		// previously-merged PR (a reopen) and reports it so we re-render.
 		reopened := s.store.markOpen(pr, !allowed)
-		// Render a PR that is newly tracked, reopened, whose head advanced, or that
+		// Render a PR that is newly tracked, reopened, whose head advanced or whose
+		// base was retargeted (a different merge-base → a different diff), or that
 		// just became filter-allowed without a push (e.g. draft → ready under a
-		// !pr.draft filter). That last case is easy to miss: in polling mode nothing
-		// else enqueues it, and the staleness backstop skips never-rendered jobs, so
-		// it would sit pending forever.
+		// !pr.draft filter). Those last two are easy to miss: in polling mode nothing
+		// else enqueues them, and the staleness backstop skips never-rendered jobs, so
+		// they would sit pending / stale forever.
 		nowAllowed := known && prev.Hidden && allowed
-		if allowed && (!known || reopened || prev.PR.HeadSHA != pr.HeadSHA || nowAllowed) {
+		retargeted := known && prev.PR.BaseRef != pr.BaseRef
+		if allowed && (!known || reopened || prev.PR.HeadSHA != pr.HeadSHA || retargeted || nowAllowed) {
 			reason := "head advanced"
 			switch {
 			case !known:
@@ -578,7 +596,10 @@ func (s *Server) refreshList(ctx context.Context) {
 			case nowAllowed:
 				reason = "filter now admits"
 				unhidden++
+			case prev.PR.HeadSHA != pr.HeadSHA:
+				advanced++
 			default:
+				reason = "base retarget"
 				advanced++
 			}
 			s.log.Debug("queuing render", "pr", pr.Number, "reason", reason)

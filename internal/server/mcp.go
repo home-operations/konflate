@@ -184,7 +184,9 @@ func writePRLine(b *strings.Builder, p api.PRStatus) {
 	if sig := signalSummary(p.Signals); sig != "" {
 		fmt.Fprintf(b, " [%s]", sig)
 	}
-	fmt.Fprintf(b, " %s\n", p.Title)
+	// oneLine flattens the forge-controlled title: a newline/control char would
+	// otherwise break this one-line-per-PR listing (each line is parsed as a PR).
+	fmt.Fprintf(b, " %s\n", oneLine(p.Title))
 }
 
 // signalSummary joins the non-zero rendered-diff signals (omitting any that are
@@ -314,11 +316,18 @@ func (s *Server) mcpPRDiff(_ context.Context, _ *mcp.CallToolRequest, in mcpDiff
 // and the pr-diff resource so both stay consistent and bounded.
 func renderDiffText(resources []api.DiffResource, renderTruncated int) string {
 	var b strings.Builder
+	overflow := false
 	for i := range resources {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
 		writeResourceDiff(&b, resources[i])
+		// Stop once the budget is filled: otherwise a multi-MB diff strips every
+		// row's chroma HTML back to text only to discard all but the first 96 KiB.
+		if b.Len() >= mcpDiffMaxBytes {
+			overflow = i < len(resources)-1 // resources we won't render
+			break
+		}
 	}
 	body := b.String()
 
@@ -329,6 +338,9 @@ func renderDiffText(resources []api.DiffResource, renderTruncated int) string {
 			cut = cut[:nl]
 		}
 		body = cut
+		overflow = true
+	}
+	if overflow {
 		notes = append(notes, "… output truncated; use get_pr_diff with the `resource` argument to fetch one resource at a time …")
 	}
 	if renderTruncated > 0 {
@@ -386,6 +398,9 @@ func (s *Server) mcpReadDiffResource(_ context.Context, req *mcp.ReadResourceReq
 func writeResourceDiff(b *strings.Builder, r api.DiffResource) {
 	fmt.Fprintf(b, "%s %s\n", r.Status, r.Title)
 	for _, row := range r.Unified {
+		if b.Len() >= mcpDiffMaxBytes {
+			break // a single huge resource: don't strip past the budget renderDiffText will trim to
+		}
 		switch {
 		case row.Folded:
 			continue
