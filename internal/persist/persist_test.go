@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,39 @@ import (
 
 	"github.com/home-operations/konflate/internal/api"
 )
+
+// TestSaveEncodedMatchesFullMarshal guards the double-marshal dedup: the wire
+// struct + pre-serialized Result path must write JSON byte-identical to marshaling
+// the whole Record (the pre-refactor form).
+func TestSaveEncodedMatchesFullMarshal(t *testing.T) {
+	t.Parallel()
+	p := newTestStore(t)
+	rec := Record{
+		PR:     api.PR{Number: 9, Title: "x", HeadSHA: "sha"},
+		Status: api.JobReady,
+		Result: &api.DiffResult{PRNumber: 9, HeadSHA: "sha",
+			Warnings: []api.Warning{{Rule: "r", Resource: "res", Detail: "d"}}},
+		Updated: time.Now().Truncate(time.Second).UTC(),
+	}
+	want, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("marshal Record: %v", err)
+	}
+	if err := p.Save(rec); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	blob, err := os.ReadFile(p.path(9))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	got, err := zDec.DecodeAll(blob, nil)
+	if err != nil {
+		t.Fatalf("decompress: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("on-disk JSON differs from a full Record marshal:\n got %s\nwant %s", got, want)
+	}
+}
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()

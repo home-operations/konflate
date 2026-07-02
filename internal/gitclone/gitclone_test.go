@@ -120,7 +120,7 @@ func TestMirror_RepacksWhenPacksAccumulate(t *testing.T) {
 		if last != nil {
 			last.Cleanup()
 		}
-		last, err = m.Trees(context.Background(), "refs/heads/feature", "master")
+		last, err = m.Trees(t.Context(), "refs/heads/feature", "master")
 		if err != nil {
 			t.Fatalf("render %d: %v", i, err)
 		}
@@ -167,7 +167,7 @@ func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
 	m := newTestMirror(t, src)
 
 	// First render seeds the mirror.
-	first, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	first, err := m.Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("seed render: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestMirror_RebuildsOnCorruptObjectStore(t *testing.T) {
 	}
 
 	// Second render must self-heal (rebuild) and still return correct trees.
-	res, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	res, err := m.Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("render after corruption should self-heal, got: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestMirror_AuthFor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m := NewMirror(t.TempDir(), t.TempDir(), "https://example.test/x.git", tc.token, 0)
-			auth, err := m.authFor(context.Background())
+			auth, err := m.authFor(t.Context())
 			switch {
 			case tc.wantErr:
 				if err == nil {
@@ -479,7 +479,7 @@ func TestMirror_HeadRefGone(t *testing.T) {
 
 	// "master" (the base) exists; pull request 999 does not, so its head ref is
 	// absent — fetching it must report the ref as gone rather than an opaque error.
-	_, err := newTestMirror(t, src).Trees(context.Background(), "refs/pull/999/head", "master")
+	_, err := newTestMirror(t, src).Trees(t.Context(), "refs/pull/999/head", "master")
 	if !errors.Is(err, ErrHeadRefGone) {
 		t.Fatalf("Trees with a missing head ref: got %v, want ErrHeadRefGone", err)
 	}
@@ -510,7 +510,7 @@ func TestMirror_ForkPullHead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/pull/1/head", "master")
+	res, err := newTestMirror(t, src).Trees(t.Context(), "refs/pull/1/head", "master")
 	if err != nil {
 		t.Fatalf("Trees via pull head ref: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestMirror_MergeBaseTrees(t *testing.T) {
 	src := buildRepo(t)
 
 	// the default branch from PlainInit is "master"
-	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
+	res, err := newTestMirror(t, src).Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestMirror_Reuse(t *testing.T) {
 	src := buildRepo(t)
 	m := newTestMirror(t, src)
 
-	first, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	first, err := m.Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees (first): %v", err)
 	}
@@ -548,7 +548,7 @@ func TestMirror_Reuse(t *testing.T) {
 		t.Fatalf("mirror bare repo not present after first render: %v", err)
 	}
 
-	second, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	second, err := m.Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees (reuse): %v", err)
 	}
@@ -609,7 +609,7 @@ func TestMirror_ConcurrentRendersSurviveRepack(t *testing.T) {
 	src := buildRepo(t)
 	m := newTestMirror(t, src)
 	// Seed once so the mirror exists with a pack to consolidate on the next fetch.
-	seed, err := m.Trees(context.Background(), "refs/heads/feature", "master")
+	seed, err := m.Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("seed render: %v", err)
 	}
@@ -673,7 +673,7 @@ func TestMirror_SkipsOversizedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
+	res, err := newTestMirror(t, src).Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}
@@ -723,7 +723,7 @@ func TestMirror_ExtractsNestedDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := newTestMirror(t, src).Trees(context.Background(), "refs/heads/feature", "master")
+	res, err := newTestMirror(t, src).Trees(t.Context(), "refs/heads/feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}
@@ -772,7 +772,7 @@ func TestMirror_ExtractsSymlinkAsRegularFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := newTestMirror(t, src).Trees(context.Background(), "feature", "master")
+	res, err := newTestMirror(t, src).Trees(t.Context(), "feature", "master")
 	if err != nil {
 		t.Fatalf("Trees: %v", err)
 	}

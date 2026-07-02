@@ -42,7 +42,7 @@ func TestVerifyImages(t *testing.T) {
 		{Name: "private.example.com/x", To: "1.0"},     // indeterminate → skipped, never flagged
 		{Name: "ghcr.io/removed", From: "1.0", To: ""}, // a removal → not checked
 	}
-	got := verifyImages(context.Background(), chk, images, 0, discardLog())
+	got := verifyImages(t.Context(), chk, images, 0, discardLog())
 
 	if len(got) != 1 {
 		t.Fatalf("want exactly 1 image-not-found caution, got %d: %+v", len(got), got)
@@ -84,7 +84,7 @@ func TestRenderFuncSkipsForkPRs(t *testing.T) {
 	render := s.renderFunc()
 
 	// Trusted (non-fork) PR: the image is verified and the missing one flagged.
-	res, err := render(context.Background(), api.PR{Number: 1})
+	res, err := render(t.Context(), api.PR{Number: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestRenderFuncSkipsForkPRs(t *testing.T) {
 
 	// Fork PR: never dialed, never flagged — a fork's images are attacker-chosen (SSRF).
 	before := len(chk.calls)
-	res, err = render(context.Background(), api.PR{Number: 2, Fork: true})
+	res, err = render(t.Context(), api.PR{Number: 2, Fork: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestVerifyImagesAppliesPerDialTimeout(t *testing.T) {
 		_, sawDeadline = ctx.Deadline()
 		return true, nil
 	})
-	verifyImages(context.Background(), chk, images, 50*time.Millisecond, discardLog())
+	verifyImages(t.Context(), chk, images, 50*time.Millisecond, discardLog())
 	if !sawDeadline {
 		t.Error("a positive timeout must give each registry dial a context deadline")
 	}
@@ -141,7 +141,7 @@ func TestVerifyImagesAppliesPerDialTimeout(t *testing.T) {
 		_, sawDeadline = ctx.Deadline()
 		return true, nil
 	})
-	verifyImages(context.Background(), chk, images, 0, discardLog())
+	verifyImages(t.Context(), chk, images, 0, discardLog())
 	if sawDeadline {
 		t.Error("timeout=0 must dial with the parent context (no added deadline)")
 	}

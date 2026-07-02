@@ -58,7 +58,7 @@ func TestGitHubWriter_SetStatus(t *testing.T) {
 
 	wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
 
-	err := wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+	err := wr.SetStatus(t.Context(), api.PR{Number: 7, HeadSHA: sha}, Status{
 		State: StatusSuccess, Description: "rendered", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		t.Cleanup(srv.Close)
 
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
-		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+		err := wr.CheckRun(t.Context(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
 			Name: "konflate", Conclusion: CheckNeutral, Title: "1 caution",
 			Summary: "### konflate — summary", DetailsURL: "https://k.example/#/pr/7",
 		})
@@ -134,7 +134,7 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		t.Cleanup(srv.Close)
 
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
-		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+		err := wr.CheckRun(t.Context(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
 			Name:       "konflate",
 			Conclusion: CheckNeutral,
 			Title:      strings.Repeat("t", githubTitleMax+50),  // GitHub caps title at 255
@@ -178,7 +178,7 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		t.Cleanup(srv.Close)
 
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
-		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
+		err := wr.CheckRun(t.Context(), api.PR{Number: 7, HeadSHA: sha}, CheckResult{
 			Name: "konflate", Conclusion: CheckSuccess, Title: "clean", Summary: "ok",
 		})
 		if err != nil {
@@ -204,7 +204,7 @@ func TestGitHubWriter_CheckRun(t *testing.T) {
 		t.Cleanup(srv.Close)
 
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", app: true}
-		err := wr.CheckRun(context.Background(), api.PR{Number: 7, HeadSHA: sha},
+		err := wr.CheckRun(t.Context(), api.PR{Number: 7, HeadSHA: sha},
 			CheckResult{Name: "konflate", Conclusion: CheckSuccess})
 		if !errors.Is(err, ErrWriteAuthRejected) {
 			t.Fatalf("CheckRun on a 403 = %v, want ErrWriteAuthRejected", err)
@@ -338,7 +338,7 @@ func TestForgejoWriter_SetStatus(t *testing.T) {
 	}
 	wr := &forgejoWriter{client: client, owner: "acme", repo: "web"}
 
-	err = wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+	err = wr.SetStatus(t.Context(), api.PR{Number: 7, HeadSHA: sha}, Status{
 		State: StatusFailure, Description: "render failed", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
 	})
 	if err != nil {
@@ -372,7 +372,7 @@ func TestGitlabWriter_SetStatus(t *testing.T) {
 	}
 	wr := &gitlabWriter{client: client, project: "acme/web"}
 
-	err = wr.SetStatus(context.Background(), api.PR{Number: 7, HeadSHA: sha}, Status{
+	err = wr.SetStatus(t.Context(), api.PR{Number: 7, HeadSHA: sha}, Status{
 		State: StatusSuccess, Description: "rendered", TargetURL: "https://k.example/#/pr/7", Context: "konflate",
 	})
 	if err != nil {
@@ -504,7 +504,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
@@ -515,7 +515,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
@@ -526,7 +526,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted comment
@@ -538,7 +538,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		t.Cleanup(srv.Close)
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		// Same body as the listed comment — konflate must skip the no-op edit.
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertNoop(t, sink)
@@ -550,7 +550,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		t.Cleanup(srv.Close)
 		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
 		huge := upsertMarker + "\n" + strings.Repeat("x", githubBodyMax+5000)
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, huge); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, huge); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		if !sink.created {
@@ -578,7 +578,7 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
 		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
@@ -589,7 +589,7 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
@@ -600,7 +600,7 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted note
@@ -611,7 +611,7 @@ func TestGitlabWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &gitlabWriter{client: newClient(t, srv.URL), project: "acme/web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertNoop(t, sink)
@@ -634,7 +634,7 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
 		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink)
@@ -645,7 +645,7 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertEdited(t, sink)
@@ -656,7 +656,7 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertCreated(t, sink) // posts its own; must not edit the planted comment
@@ -667,7 +667,7 @@ func TestForgejoWriter_UpsertComment(t *testing.T) {
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
 		wr := &forgejoWriter{client: newClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
-		if err := wr.UpsertComment(context.Background(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
 		assertNoop(t, sink)
@@ -804,7 +804,7 @@ func TestGitHubWriter_Verify(t *testing.T) {
 			t.Parallel()
 			srv := statusServer(t, tc.status)
 			wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web"}
-			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+			checkVerify(t, wr.Verify(t.Context()), tc.wantErr, tc.wantRej)
 		})
 	}
 }
@@ -820,7 +820,7 @@ func TestGitlabWriter_Verify(t *testing.T) {
 				t.Fatalf("gitlab.NewClient: %v", err)
 			}
 			wr := &gitlabWriter{client: client, project: "acme/web"}
-			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+			checkVerify(t, wr.Verify(t.Context()), tc.wantErr, tc.wantRej)
 		})
 	}
 }
@@ -837,7 +837,7 @@ func TestForgejoWriter_Verify(t *testing.T) {
 				t.Fatalf("forgejo.NewClient: %v", err)
 			}
 			wr := &forgejoWriter{client: client, owner: "acme", repo: "web"}
-			checkVerify(t, wr.Verify(context.Background()), tc.wantErr, tc.wantRej)
+			checkVerify(t, wr.Verify(t.Context()), tc.wantErr, tc.wantRej)
 		})
 	}
 }

@@ -36,7 +36,7 @@ func TestVerifyWriteBack(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := &Server{cfg: &config.Config{}, log: discardLog(), writer: stubWriter{verifyErr: tc.verifyErr}}
-			s.verifyWriteBack(context.Background())
+			s.verifyWriteBack(t.Context())
 			if (s.writer == nil) != tc.wantDisabled {
 				t.Errorf("write-back disabled = %v, want %v", s.writer == nil, tc.wantDisabled)
 			}
@@ -144,7 +144,7 @@ func TestRetryWrite(t *testing.T) {
 	t.Run("succeeds on the first try", func(t *testing.T) {
 		t.Parallel()
 		calls := 0
-		err := retryWrite(context.Background(), 3, time.Millisecond, func() error { calls++; return nil })
+		err := retryWrite(t.Context(), 3, time.Millisecond, func() error { calls++; return nil })
 		if err != nil || calls != 1 {
 			t.Fatalf("calls=%d err=%v; want 1 call, no error", calls, err)
 		}
@@ -153,7 +153,7 @@ func TestRetryWrite(t *testing.T) {
 	t.Run("retries a transient failure then succeeds", func(t *testing.T) {
 		t.Parallel()
 		calls := 0
-		err := retryWrite(context.Background(), 3, time.Millisecond, func() error {
+		err := retryWrite(t.Context(), 3, time.Millisecond, func() error {
 			calls++
 			if calls < 3 {
 				return errors.New("forge unavailable")
@@ -169,7 +169,7 @@ func TestRetryWrite(t *testing.T) {
 		t.Parallel()
 		want := errors.New("solar flare")
 		calls := 0
-		err := retryWrite(context.Background(), 3, time.Millisecond, func() error { calls++; return want })
+		err := retryWrite(t.Context(), 3, time.Millisecond, func() error { calls++; return want })
 		if calls != 3 || !errors.Is(err, want) {
 			t.Fatalf("calls=%d err=%v; want 3 calls and the last error %v", calls, err, want)
 		}

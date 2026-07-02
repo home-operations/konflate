@@ -184,10 +184,27 @@ func writePRLine(b *strings.Builder, p api.PRStatus) {
 	if sig := signalSummary(p.Signals); sig != "" {
 		fmt.Fprintf(b, " [%s]", sig)
 	}
-	// oneLine flattens the forge-controlled title: a newline/control char would
-	// otherwise break this one-line-per-PR listing (each line is parsed as a PR).
-	fmt.Fprintf(b, " %s\n", oneLine(p.Title))
+	// mdListText defangs the forge-controlled title: it flattens control chars
+	// (which would break this one-line-per-PR listing) and escapes the link/image
+	// brackets so a crafted title can't inject a clickable link or remote image
+	// into an MCP client that renders the tool text as Markdown.
+	fmt.Fprintf(b, " %s\n", mdListText(p.Title))
 }
+
+// mdListText prepares forge-controlled text for a one-line MCP listing: oneLine
+// flattens control characters, then the escapes neutralise the Markdown/HTML that
+// could inject content into a client rendering the tool text — the link/image
+// brackets ([text](url), ![alt](url)), the code-span backtick, and the angle
+// brackets (an <url> autolink or a raw <script> HTML tag). Ordinary punctuation
+// (parentheses, underscores, *) is left so a normal title like "feat(scope): …"
+// reads cleanly; a bare autolinked URL is left too — its destination is visible,
+// so it isn't the spoofing vector a hidden-destination link is (same stance as
+// mdInline).
+func mdListText(s string) string {
+	return mdListReplacer.Replace(oneLine(s))
+}
+
+var mdListReplacer = strings.NewReplacer("[", `\[`, "]", `\]`, "`", "\\`", "<", `\<`, ">", `\>`)
 
 // signalSummary joins the non-zero rendered-diff signals (omitting any that are
 // zero), e.g. "11 resources, 1 blocker, 1 caution, 1 image change, 1 render failure".

@@ -26,7 +26,7 @@ func TestMCP_Tools(t *testing.T) {
 	s.refreshList(s.runCtx)
 	waitFor(t, s, 7)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cs := mcpClientFor(t, s)
 
 	// tools/list advertises exactly the three read-only tools.
@@ -96,7 +96,7 @@ func TestMCP_Tools(t *testing.T) {
 // tool-level error result, returning the successful result.
 func mustCallTool(t *testing.T, cs *mcp.ClientSession, name string, args any) *mcp.CallToolResult {
 	t.Helper()
-	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
+	res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		t.Fatalf("%s: transport error: %v", name, err)
 	}
@@ -173,7 +173,7 @@ func TestMCP_DiffResource(t *testing.T) {
 	s.refreshList(s.runCtx)
 	waitFor(t, s, 7)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cs := mcpClientFor(t, s)
 
 	// resources/templates/list advertises the pr-diff template.
@@ -280,7 +280,7 @@ func TestMCP_Pagination(t *testing.T) {
 	}
 
 	// A non-numeric cursor is a recoverable tool error, not a transport failure.
-	if res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_pull_requests", Arguments: map[string]any{"cursor": "abc"}}); err != nil || !res.IsError {
+	if res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "list_pull_requests", Arguments: map[string]any{"cursor": "abc"}}); err != nil || !res.IsError {
 		t.Errorf("list_pull_requests(cursor=abc): want a tool error (err=%v)", err)
 	}
 }
@@ -289,7 +289,7 @@ func TestMCP_Pagination(t *testing.T) {
 // registers cleanups to close both sessions.
 func mcpClientFor(t *testing.T, s *Server) *mcp.ClientSession {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	clientT, serverT := mcp.NewInMemoryTransports()
 	ss, err := s.mcpServer().Connect(ctx, serverT, nil)
 	if err != nil {
@@ -364,13 +364,15 @@ func resourceText(rr *mcp.ReadResourceResult) string {
 	return b.String()
 }
 
-// TestWritePRLine_FlattensTitle: the MCP list is one line per PR, parsed by line,
-// so a forge-controlled title with a newline/control char must be flattened.
-func TestWritePRLine_FlattensTitle(t *testing.T) {
+// TestWritePRLine_DefangsTitle: the MCP list is one line per PR (parsed by line),
+// so a forge-controlled title must be flattened to a single line AND have its
+// Markdown neutralised, so a client rendering the tool text can't get an injected
+// link/image out of a crafted title.
+func TestWritePRLine_DefangsTitle(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
 	writePRLine(&b, api.PRStatus{
-		PR:     api.PR{Number: 7, Title: "line one\nline two\r\tmore", Open: true},
+		PR:     api.PR{Number: 7, Title: "line one\nline two [x](https://evil.example)", Open: true},
 		Status: api.JobReady,
 	})
 	out := b.String()
@@ -379,6 +381,38 @@ func TestWritePRLine_FlattensTitle(t *testing.T) {
 	}
 	if strings.Contains(out, "line one\nline two") {
 		t.Errorf("a raw newline survived into the listing: %q", out)
+	}
+	if strings.Contains(out, "[x](") {
+		t.Errorf("a title Markdown link was not defanged: %q", out)
+	}
+	if !strings.Contains(out, `\[x\]`) {
+		t.Errorf("expected the title's link brackets escaped: %q", out)
+	}
+
+	// Angle brackets (autolink / raw HTML) and backticks (code span) are defanged too.
+	var b2 strings.Builder
+	writePRLine(&b2, api.PRStatus{
+		PR:     api.PR{Number: 8, Title: "<https://evil.example> and `code` <script>x</script>", Open: true},
+		Status: api.JobReady,
+	})
+	inj := b2.String()
+	for _, esc := range []string{`\<`, `\>`, "\\`"} {
+		if !strings.Contains(inj, esc) {
+			t.Errorf("expected %q escaped in the listing: %q", esc, inj)
+		}
+	}
+	// No intact autolink / HTML tag / code span survives (the escapes break each).
+	for _, raw := range []string{"<https://evil.example>", "<script>", "</script>", "`code`"} {
+		if strings.Contains(inj, raw) {
+			t.Errorf("intact %q survived into the listing: %q", raw, inj)
+		}
+	}
+
+	// A normal conventional-commit title is left untouched (parens not escaped).
+	var b3 strings.Builder
+	writePRLine(&b3, api.PRStatus{PR: api.PR{Number: 9, Title: "feat(scope): add the_thing", Open: true}, Status: api.JobReady})
+	if !strings.Contains(b3.String(), "feat(scope): add the_thing") {
+		t.Errorf("a normal title must not be mangled: %q", b3.String())
 	}
 }
 
