@@ -1491,3 +1491,67 @@ test("'/' finds text across lazy-mounted diff sections and jumps to hits", async
   await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/#\/$|\/$/);
 });
+
+test('] review navigation walks the on-screen sorted list, not raw server order', async ({ page }) => {
+  await stubApi(page); // 142's diff is stubbed; add the one the nav lands on.
+  await page.route('**/api/prs/131/diff', (r) =>
+    r.fulfill({ json: { status: 'error', pr: samplePRs[2], error: 'render failed' } }),
+  );
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(3); // list loaded → store.prs populated
+
+  // Default sort is newest-first by created, so the visible order is
+  // [138 (Jun 3), 142 (Jun 1), 131 (May 30)] — deliberately unlike the raw
+  // /api/prs order [142, 138, 131]. From a settled 142, ] must land on the next
+  // *visible* PR (131), never 138 (which is next only in the raw server order).
+  await page.locator('.card-shell[data-pr="142"]').click();
+  await expect(page).toHaveURL(/#\/pr\/142$/);
+  await page.keyboard.press(']');
+  await expect(page).toHaveURL(/#\/pr\/131$/);
+});
+
+test('a stale refresh-error banner clears when navigating to another PR', async ({ page }) => {
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
+  await page.routeWebSocket('**/ws', () => {});
+  // 142: last-good diff kept, but the refresh failed (banner). 131: errored with
+  // nothing to keep (carries no refresh error of its own).
+  await page.route('**/api/prs/142/diff', (r) =>
+    r.fulfill({ json: { ...diffEnvelope, refreshError: 'forge unreachable' } }),
+  );
+  await page.route('**/api/prs/131/diff', (r) =>
+    r.fulfill({ json: { status: 'error', pr: samplePRs[2], error: 'render failed' } }),
+  );
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(3);
+  await page.locator('.card-shell[data-pr="142"]').click();
+  await expect(page.locator('.refresh-strip')).toContainText("Couldn't refresh");
+
+  // In-app nav to the next visible PR (131) — the previous PR's banner must not linger.
+  await page.keyboard.press(']');
+  await expect(page).toHaveURL(/#\/pr\/131$/);
+  await expect(page.locator('.refresh-strip')).toHaveCount(0);
+});
+
+test('a row preview left "pending" refetches on re-expand instead of sticking', async ({ page }) => {
+  await page.route('**/api/meta', (r) => r.fulfill({ json: defaultMeta }));
+  await page.route('**/api/prs', (r) => r.fulfill({ json: samplePRs }));
+  await page.routeWebSocket('**/ws', () => {});
+  // First summary fetch: still rendering (pending); the next: the finished diff.
+  let calls = 0;
+  await page.route('**/api/prs/142/summary', (r) => {
+    calls++;
+    return calls === 1
+      ? r.fulfill({ json: { status: 'pending', pr: samplePRs[0] } })
+      : r.fulfill({ json: diffEnvelope });
+  });
+  await page.goto('/');
+
+  const card = page.locator('.card-li:has(.card-shell[data-pr="142"])');
+  await card.locator('.card-expand').click(); // expand → pending
+  await expect(card.locator('.card-preview .pv-msg')).toContainText('Still rendering');
+
+  await card.locator('.card-expand').click(); // collapse
+  await card.locator('.card-expand').click(); // re-expand → must refetch (not serve the cached pending)
+  await expect(card.locator('.card-preview .pv-caution')).toHaveCount(2);
+});

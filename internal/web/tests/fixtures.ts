@@ -24,6 +24,7 @@ export const samplePRs: PRStatus[] = [
     headRef: 'renovate/rook-ceph',
     headSha: 'a1b2c3d4e5f6',
     baseRef: 'main',
+    fork: false,
     createdAt: '2026-06-01T09:00:00Z',
     labels: [{ name: 'area/storage', color: '0e8a16' }],
     url: 'https://github.com/acme/home-ops/pull/142',
@@ -43,6 +44,7 @@ export const samplePRs: PRStatus[] = [
     headRef: 'chore/scale-web',
     headSha: 'f6e5d4c3',
     baseRef: 'staging',
+    fork: false,
     createdAt: '2026-06-03T08:00:00Z',
     labels: [],
     url: 'https://github.com/acme/home-ops/pull/138',
@@ -61,6 +63,7 @@ export const samplePRs: PRStatus[] = [
     headRef: 'fix/plex',
     headSha: 'deadbeef',
     baseRef: 'main',
+    fork: false,
     createdAt: '2026-05-30T10:00:00Z',
     labels: [{ name: 'area/media', color: 'd93f0b' }],
     url: 'https://github.com/acme/home-ops/pull/131',
@@ -81,6 +84,7 @@ export const samplePRs: PRStatus[] = [
     headRef: 'feat/loki',
     headSha: 'cafe1234',
     baseRef: 'main',
+    fork: false,
     createdAt: '2026-06-01T08:00:00Z',
     labels: [{ name: 'area/observability', color: '1d76db' }],
     url: 'https://github.com/acme/home-ops/pull/128',
@@ -128,6 +132,7 @@ export const sampleDiff: DiffResult = {
       detail: 'replicas set to 0 — the workload will be scaled to zero',
     },
   ],
+  routine: false, // has warnings + failures → not a routine bump
   chromaCss,
   tree: [
     {

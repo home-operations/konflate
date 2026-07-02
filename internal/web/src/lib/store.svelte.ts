@@ -250,6 +250,16 @@ export function sortPRs(list: PRStatus[]): PRStatus[] {
   });
 }
 
+// visiblePRs is the exact list the List view renders: the text-query-filtered
+// set, narrowed by the active status pill (or a `status:` facet in the query),
+// in the selected sort order. It is the single source of truth for "what's on
+// screen" — the List reads it, and adjacentPR walks it so the review's prev/next
+// navigation steps through PRs in the same order and subset the user sees.
+export function visiblePRs(): PRStatus[] {
+  const effective = statusFromQuery(store.query) ?? store.statusFilter;
+  return sortPRs(filteredPRs().filter((p) => matchesStatus(p, effective)));
+}
+
 export function currentPR(): PRStatus | null {
   const r = router.route;
   if (r.name !== 'review') return null;
@@ -281,9 +291,12 @@ export function selectables(): string[] {
 export function adjacentPR(delta: number): void {
   const r = router.route;
   if (r.name !== 'review') return;
-  const i = store.prs.findIndex((p) => p.number === r.pr);
+  // Walk the on-screen list (filtered + sorted), not the raw server order, so
+  // prev/next lands on the visually adjacent PR and never a filtered-out one.
+  const list = visiblePRs();
+  const i = list.findIndex((p) => p.number === r.pr);
   const j = i + delta;
-  if (i >= 0 && j >= 0 && j < store.prs.length) openPR(store.prs[j].number);
+  if (i >= 0 && j >= 0 && j < list.length) openPR(list[j].number);
 }
 
 // Move the selection by delta through [Summary, ...resources], clamped at the
@@ -339,6 +352,7 @@ export function ensureDiff(n: number): void {
   store.diffFor = n;
   store.diff = null;
   store.diffError = '';
+  store.diffRefreshError = ''; // clear the previous PR's refresh error until this one's envelope lands
   store.diffMergeCommand = '';
   store.diffHidden = false;
   store.loading = true;
@@ -364,7 +378,10 @@ async function loadDiff(n: number): Promise<void> {
 // auto-retry loop); reopen the PR for the live view.
 export function ensurePreview(n: number, headSha: string): void {
   const cur = store.previews[n];
-  if (cur && cur.headSha === headSha) return;
+  // A settled (ready/error) preview for this sha is served from cache; a still-
+  // 'pending' one is refetched — the render may have finished since it was first
+  // opened, and this call (a user re-expand) is the retrigger.
+  if (cur && cur.headSha === headSha && cur.state !== 'pending') return;
   store.previews[n] = { state: 'loading', headSha };
   void loadPreview(n, headSha);
 }
@@ -441,6 +458,14 @@ export function connectWS(): void {
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.addEventListener('open', () => {
     store.connected = true;
+    // A reconnect (not the first connect) means we were disconnected: any events
+    // that fired during the gap were missed, so re-pull the authoritative list,
+    // meta, and the open diff rather than trusting the now-stale local state.
+    if (wsAttempt > 0) {
+      void loadMeta();
+      void loadPRs();
+      if (store.diffFor !== null) void loadDiff(store.diffFor);
+    }
     wsAttempt = 0; // reset the backoff once we're connected
   });
   ws.addEventListener('message', (e) => {
@@ -493,5 +518,9 @@ function onEvent(ev: WSEvent): void {
   if (ev.status === 'ready' || ev.status === 'error') {
     void loadPRs();
     if (ev.number === store.diffFor) void loadDiff(ev.number);
+    // A row whose preview was opened mid-render is cached 'pending'; now that it
+    // settled, refresh it in place so an open panel updates without a re-expand.
+    const pv = store.previews[ev.number];
+    if (pv && pv.state === 'pending') void loadPreview(ev.number, pv.headSha);
   }
 }
