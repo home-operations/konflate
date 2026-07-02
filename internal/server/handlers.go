@@ -530,6 +530,12 @@ func (s *Server) authorizedPush(r *http.Request) bool {
 // have left the open set. Runs at startup and once per RefreshInterval; a
 // verified webhook also calls it when the open-PR set may have changed.
 func (s *Server) refreshList(ctx context.Context) {
+	// Serialize list passes: the startup warm, the periodic tick, and a
+	// webhook-driven relist can otherwise overlap, and two lists carrying divergent
+	// open-set snapshots could interleave an un-shelve (markOpen) with a close
+	// (markClosed) for the same PR. One at a time also avoids a redundant double-list.
+	s.listMu.Lock()
+	defer s.listMu.Unlock()
 	if reset, blocked := s.rateLimitedUntil(); blocked {
 		s.log.Debug("refresh: skipping list while rate-limited", "until", reset)
 		return
@@ -550,19 +556,25 @@ func (s *Server) refreshList(ctx context.Context) {
 		allowed := s.prAllowed(pr)
 		open[pr.Number] = struct{}{}
 		prev, known := s.store.get(pr.Number)
-		s.store.upsertPR(pr, !allowed)
-		// Render a PR that is newly tracked, whose head advanced, or that just
-		// became filter-allowed without a push (e.g. draft → ready under a
-		// !pr.draft filter). That last case is easy to miss: in polling mode
-		// nothing else enqueues it, and the staleness backstop skips never-rendered
-		// jobs, so it would sit pending forever.
+		// markOpen (not upsertPR) here because the list is the authoritative open
+		// set: a PR reappearing in it is genuinely open again, so it un-shelves a
+		// previously-merged PR (a reopen) and reports it so we re-render.
+		reopened := s.store.markOpen(pr, !allowed)
+		// Render a PR that is newly tracked, reopened, whose head advanced, or that
+		// just became filter-allowed without a push (e.g. draft → ready under a
+		// !pr.draft filter). That last case is easy to miss: in polling mode nothing
+		// else enqueues it, and the staleness backstop skips never-rendered jobs, so
+		// it would sit pending forever.
 		nowAllowed := known && prev.Hidden && allowed
-		if allowed && (!known || prev.PR.HeadSHA != pr.HeadSHA || nowAllowed) {
+		if allowed && (!known || reopened || prev.PR.HeadSHA != pr.HeadSHA || nowAllowed) {
 			reason := "head advanced"
 			switch {
 			case !known:
 				reason = "new PR"
 				added++
+			case reopened:
+				reason = "reopened"
+				advanced++
 			case nowAllowed:
 				reason = "filter now admits"
 				unhidden++
@@ -728,7 +740,19 @@ func (s *Server) reconcileHeadGone(number int) {
 		s.log.Warn("reconcile head-gone PR failed", "pr", number, "error", err)
 		return
 	}
-	s.reconcileState(pr)
+	if pr.Open && s.prAllowed(pr) {
+		// The pull ref was gone mid-render but the PR is still open and admitted. A
+		// merge keeps refs/pull/N/head (see gitclone), and a deleted PR returns
+		// ErrPRNotFound above — so a missing pull ref on an open PR is the forge not
+		// having materialized it yet for a just-opened PR (an async-ref race), not a
+		// close. Re-enqueue so the first render isn't wedged in JobRunning forever
+		// (renderedAt stays zero, which the staleness backstop skips); it coalesces
+		// into a trailing render and succeeds once the ref appears.
+		s.store.upsertPR(pr, false)
+		s.queue.enqueue(pr)
+		return
+	}
+	s.reconcileState(pr) // merged / closed / no-longer-admitted: shelve or drop
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

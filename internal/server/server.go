@@ -65,6 +65,11 @@ type Server struct {
 	queue   *queue
 	runCtx  context.Context
 
+	// listMu serializes refreshList: startup warm, the periodic tick, and a
+	// webhook-driven relist must not overlap, or two divergent open-set snapshots
+	// could interleave an un-shelve (markOpen) with a close (markClosed).
+	listMu sync.Mutex
+
 	// prWrite serializes forge write-backs per PR (see writeBack): the queue can
 	// finish a PR's in-flight and trailing renders back-to-back, each firing a
 	// write-back, and two for the same PR must not race into duplicate comments.
