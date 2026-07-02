@@ -21,6 +21,7 @@ export interface PR {
   headRef: string;
   headSha: string;
   baseRef: string;
+  fork: boolean; // head is in a different repo than the base (an untrusted cross-repo PR)
   labels: Label[] | null;
   url: string;
 }
@@ -161,6 +162,7 @@ export interface DiffResult {
   images: ImageChange[] | null;
   failures: RenderFailure[] | null;
   warnings: Warning[] | null;
+  routine: boolean; // only image/chart-version metadata changed, nothing flagged (diff-shape, not a safety verdict)
   chromaCss: string;
   tree: DiffTreeParent[] | null;
   resources: DiffResource[] | null;

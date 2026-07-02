@@ -3,9 +3,7 @@
   import {
     store,
     filteredPRs,
-    matchesStatus,
-    statusFromQuery,
-    sortPRs,
+    visiblePRs,
     openPR,
     ensurePreview,
     type StatusFilter,
@@ -51,13 +49,11 @@
   // count, so the counts hold steady while a pill is active), then the active
   // pill narrows and the sort orders what's shown.
   const prs = $derived(filteredPRs());
-  // The active pill (or default = open, non-hidden) selects what's shown, then
-  // the sort orders it. Rendered as one flat list — merged and hidden PRs are
-  // reached via their pills, not a separate group. A typed `status:` facet acts
-  // like the matching pill, so `status:hidden` / `status:merged` in the search
-  // box reveal those sections instead of being re-hidden by the default pill.
-  const effectiveStatus = $derived(statusFromQuery(store.query) ?? store.statusFilter);
-  const shown = $derived(sortPRs(prs.filter((p) => matchesStatus(p, effectiveStatus))));
+  // What's shown: the query-filtered set narrowed by the active pill (or a typed
+  // `status:` facet — so `status:hidden` / `status:merged` reveal those sections)
+  // and sorted, rendered as one flat list. Delegated to visiblePRs, the store's
+  // single source of truth, so the review's prev/next navigation walks the same set.
+  const shown = $derived(visiblePRs());
   // The full open, non-hidden set — for the default-base heuristic and the pill
   // counts (which hold steady while a pill narrows what's shown).
   const openPrs = $derived(prs.filter((p) => p.open && !p.hidden));
