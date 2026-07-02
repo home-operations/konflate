@@ -90,11 +90,45 @@ func (s *Store) path(number int) string {
 	return filepath.Join(s.dir, strconv.Itoa(number)+fileSuffix)
 }
 
+// recordWire is Record with the (multi-MB) Result pre-serialized. It lets a
+// caller that has already marshaled the Result — to hash it for a change check —
+// save without walking the whole DiffResult a second time: json.Marshal copies
+// the RawMessage verbatim. The tags mirror Record exactly, so the on-disk JSON is
+// byte-identical to marshaling a Record.
+type recordWire struct {
+	PR         api.PR          `json:"pr"`
+	Status     api.JobStatus   `json:"status"`
+	Result     json.RawMessage `json:"result,omitempty"`
+	ErrMsg     string          `json:"errMsg,omitempty"`
+	RefreshErr string          `json:"refreshErr,omitempty"`
+	Updated    time.Time       `json:"updated"`
+	ClosedAt   time.Time       `json:"closedAt,omitzero"`
+	RenderedAt time.Time       `json:"renderedAt,omitzero"`
+}
+
 // Save writes rec atomically: the zstd-compressed JSON goes to a temp file that
 // is then renamed over the PR's file, so a reader (or a crash) never sees a
 // partial one.
 func (s *Store) Save(rec Record) error {
-	data, err := json.Marshal(rec)
+	var resultJSON json.RawMessage
+	if rec.Result != nil {
+		b, err := json.Marshal(rec.Result)
+		if err != nil {
+			return fmt.Errorf("persist: encode result: %w", err)
+		}
+		resultJSON = b
+	}
+	return s.SaveEncoded(rec, resultJSON)
+}
+
+// SaveEncoded is Save with the Result already serialized as resultJSON (nil when
+// there is none), so a caller that marshaled the Result to hash it doesn't pay to
+// walk the multi-MB struct again. The on-disk JSON is identical to Save's.
+func (s *Store) SaveEncoded(rec Record, resultJSON json.RawMessage) error {
+	data, err := json.Marshal(recordWire{
+		PR: rec.PR, Status: rec.Status, Result: resultJSON, ErrMsg: rec.ErrMsg,
+		RefreshErr: rec.RefreshErr, Updated: rec.Updated, ClosedAt: rec.ClosedAt, RenderedAt: rec.RenderedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("persist: encode: %w", err)
 	}

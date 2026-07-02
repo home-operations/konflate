@@ -133,22 +133,27 @@ func (j *job) record() persist.Record {
 // PR that produce the same diff (the common staleness-backstop case) hash equal,
 // so the store can skip rewriting the file; a real change (diff moved, merged,
 // metadata edited) hashes differently and is persisted.
-func contentDigest(rec persist.Record) uint64 {
+// resultJSON is rec.Result already serialized (nil when there is none); the whole
+// record is never re-marshaled, so the multi-MB result is walked once by the caller
+// and folded in here as raw bytes.
+func contentDigest(rec persist.Record, resultJSON []byte) uint64 {
 	rec.Updated, rec.RenderedAt = time.Time{}, time.Time{}
-	b, _ := json.Marshal(rec) // Record is always marshalable
+	rec.Result = nil // hashed via resultJSON below rather than re-marshaled
 	h := fnv.New64a()
+	b, _ := json.Marshal(rec) // metadata only now — small
 	_, _ = h.Write(b)
+	_, _ = h.Write(resultJSON)
 	return h.Sum64()
 }
 
 // save / del run the persistence I/O. Callers snapshot under s.mu, release it,
 // then call these — the file write/remove never holds the store lock. No-ops
 // when durability is disabled.
-func (s *store) save(rec persist.Record) error {
+func (s *store) save(rec persist.Record, resultJSON json.RawMessage) error {
 	if s.persist == nil {
 		return nil
 	}
-	if err := s.persist.Save(rec); err != nil {
+	if err := s.persist.SaveEncoded(rec, resultJSON); err != nil {
 		if s.log != nil {
 			s.log.Warn("persist render", "pr", rec.PR.Number, "error", err)
 		}
@@ -321,7 +326,14 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 // job's savedDigest with a hash whose file it then orphans.
 func (s *store) persistRecord(j *job, rec persist.Record, prev uint64) {
 	number := rec.PR.Number
-	d := contentDigest(rec)
+	// Serialize the (multi-MB) result once here, off the lock, and reuse it for both
+	// the content digest and the save — the two used to marshal the whole record
+	// independently.
+	var resultJSON json.RawMessage
+	if rec.Result != nil {
+		resultJSON, _ = json.Marshal(rec.Result) // DiffResult is plain data — always marshalable
+	}
+	d := contentDigest(rec, resultJSON)
 	// Record the in-memory content hash for the ETag first, independent of whether
 	// the save below succeeds — so a changed diff always revalidates (a fresh ETag)
 	// even while persistence is failing on a full/read-only volume.
@@ -334,7 +346,7 @@ func (s *store) persistRecord(j *job, rec persist.Record, prev uint64) {
 	if d == prev {
 		return // unchanged: nothing to write, and savedDigest is already current
 	}
-	if err := s.save(rec); err != nil {
+	if err := s.save(rec, resultJSON); err != nil {
 		return // leave savedDigest as-is so the next render retries the write
 	}
 	s.mu.Lock()

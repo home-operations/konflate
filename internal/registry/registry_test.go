@@ -28,7 +28,7 @@ func TestClientExists(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			c := newTestClient(func(context.Context, name.Reference) error { return tc.headErr })
-			found, err := c.Exists(context.Background(), "ghcr.io/x/y:1.0")
+			found, err := c.Exists(t.Context(), "ghcr.io/x/y:1.0")
 			if found != tc.wantFound || (err != nil) != tc.wantErr {
 				t.Fatalf("Exists = (%v, %v), want found=%v err=%v", found, err, tc.wantFound, tc.wantErr)
 			}
@@ -44,7 +44,7 @@ func TestClientCachesDefinitiveResults(t *testing.T) {
 	c.now = func() time.Time { return now }
 
 	for range 3 {
-		if found, err := c.Exists(context.Background(), "ghcr.io/x/y:1.0"); !found || err != nil {
+		if found, err := c.Exists(t.Context(), "ghcr.io/x/y:1.0"); !found || err != nil {
 			t.Fatalf("Exists = (%v, %v)", found, err)
 		}
 	}
@@ -53,7 +53,7 @@ func TestClientCachesDefinitiveResults(t *testing.T) {
 	}
 	// Past the TTL it re-dials.
 	now = now.Add(defaultTTL + time.Second)
-	if _, err := c.Exists(context.Background(), "ghcr.io/x/y:1.0"); err != nil {
+	if _, err := c.Exists(t.Context(), "ghcr.io/x/y:1.0"); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 2 {
@@ -65,8 +65,8 @@ func TestClientDoesNotCacheIndeterminate(t *testing.T) {
 	t.Parallel()
 	var calls int
 	c := newTestClient(func(context.Context, name.Reference) error { calls++; return errors.New("boom") })
-	_, _ = c.Exists(context.Background(), "ghcr.io/x/y:1.0")
-	_, _ = c.Exists(context.Background(), "ghcr.io/x/y:1.0")
+	_, _ = c.Exists(t.Context(), "ghcr.io/x/y:1.0")
+	_, _ = c.Exists(t.Context(), "ghcr.io/x/y:1.0")
 	if calls != 2 {
 		t.Errorf("indeterminate results must not be cached; dialed %d times, want 2", calls)
 	}
@@ -78,7 +78,7 @@ func TestClientUnparseableRefIsError(t *testing.T) {
 		t.Fatal("head must not be called on an unparseable ref")
 		return nil
 	})
-	if _, err := c.Exists(context.Background(), "BAD"); err == nil {
+	if _, err := c.Exists(t.Context(), "BAD"); err == nil {
 		t.Error("expected an error for an unparseable reference")
 	}
 }

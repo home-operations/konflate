@@ -1565,13 +1565,13 @@ func TestRefreshChecks_DisabledWhenAnonymous(t *testing.T) {
 	prs := []api.PR{{Number: 1, HeadSHA: "a"}, {Number: 2, HeadSHA: "b"}}
 
 	anon := &fakeProvider{prs: prs}
-	newTestServer(t, ghCfg(""), anon, okEngine()).refreshList(context.Background())
+	newTestServer(t, ghCfg(""), anon, okEngine()).refreshList(t.Context())
 	if _, checks := anon.callCounts(); checks != 0 {
 		t.Errorf("anonymous: Checks calls = %d, want 0 (CI-status polling must be off)", checks)
 	}
 
 	authed := &fakeProvider{prs: prs}
-	newTestServer(t, ghCfg("tok"), authed, okEngine()).refreshList(context.Background())
+	newTestServer(t, ghCfg("tok"), authed, okEngine()).refreshList(t.Context())
 	if _, checks := authed.callCounts(); checks != len(prs) {
 		t.Errorf("authenticated: Checks calls = %d, want %d (CI status polled per PR)", checks, len(prs))
 	}

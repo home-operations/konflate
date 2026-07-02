@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -48,7 +47,7 @@ func TestGitHubProvider_ListPRs(t *testing.T) {
 	}
 	p := &githubProvider{client: client, owner: "acme", repo: "web"}
 
-	prs, err := p.ListPRs(context.Background())
+	prs, err := p.ListPRs(t.Context())
 	if err != nil {
 		t.Fatalf("ListPRs: %v", err)
 	}
@@ -107,7 +106,7 @@ func TestGitHubProvider_ListPRsPaginates(t *testing.T) {
 	}
 	p := &githubProvider{client: client, owner: "acme", repo: "web"}
 
-	prs, err := p.ListPRs(context.Background())
+	prs, err := p.ListPRs(t.Context())
 	if err != nil {
 		t.Fatalf("ListPRs: %v", err)
 	}
@@ -138,7 +137,7 @@ func TestGitHubProvider_GetPRNotFound(t *testing.T) {
 	}
 	p := &githubProvider{client: client, owner: "acme", repo: "web"}
 
-	if _, err := p.GetPR(context.Background(), 9); !errors.Is(err, ErrPRNotFound) {
+	if _, err := p.GetPR(t.Context(), 9); !errors.Is(err, ErrPRNotFound) {
 		t.Fatalf("GetPR on a 404 = %v, want ErrPRNotFound", err)
 	}
 }
@@ -209,7 +208,7 @@ func TestGitTokenSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GitTokenSource (pat): %v", err)
 	}
-	if tok, err := src(context.Background()); err != nil || tok != "pat-123" {
+	if tok, err := src(t.Context()); err != nil || tok != "pat-123" {
 		t.Errorf("pat source = (%q, %v), want (\"pat-123\", nil)", tok, err)
 	}
 
@@ -218,7 +217,7 @@ func TestGitTokenSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GitTokenSource (anon): %v", err)
 	}
-	if tok, err := src(context.Background()); err != nil || tok != "" {
+	if tok, err := src(t.Context()); err != nil || tok != "" {
 		t.Errorf("anon source = (%q, %v), want (\"\", nil)", tok, err)
 	}
 

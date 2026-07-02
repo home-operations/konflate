@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,7 +39,7 @@ func TestGitHubProvider_Checks(t *testing.T) {
 	}
 	p := &githubProvider{client: client, owner: "acme", repo: "web"}
 
-	got, err := p.Checks(context.Background(), api.PR{Number: 7, HeadSHA: sha})
+	got, err := p.Checks(t.Context(), api.PR{Number: 7, HeadSHA: sha})
 	if err != nil {
 		t.Fatalf("Checks: %v", err)
 	}
@@ -59,7 +58,7 @@ func TestGitHubProvider_Checks(t *testing.T) {
 func TestGitHubProvider_ChecksNoSHA(t *testing.T) {
 	t.Parallel()
 	p := &githubProvider{owner: "acme", repo: "web"}
-	got, err := p.Checks(context.Background(), api.PR{Number: 1})
+	got, err := p.Checks(t.Context(), api.PR{Number: 1})
 	if err != nil || got.State != api.CheckNone {
 		t.Fatalf("got %+v, %v; want none / no error", got, err)
 	}
@@ -107,7 +106,7 @@ func TestForgejoProvider_ChecksPagesAndDedups(t *testing.T) {
 	}
 	p := &forgejoProvider{client: client, owner: "acme", repo: "web"}
 
-	got, err := p.Checks(context.Background(), api.PR{Number: 7, HeadSHA: sha})
+	got, err := p.Checks(t.Context(), api.PR{Number: 7, HeadSHA: sha})
 	if err != nil {
 		t.Fatalf("Checks: %v", err)
 	}
