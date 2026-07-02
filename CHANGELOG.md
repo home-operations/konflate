@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.34](https://github.com/home-operations/konflate/compare/0.2.33...0.2.34) (2026-07-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency vite (8.1.2 → 8.1.3) ([#308](https://github.com/home-operations/konflate/issues/308)) ([be08a2e](https://github.com/home-operations/konflate/commit/be08a2e9d4d48bfc135e1e984cb0b02d2a468de4))
+* **engine,diff:** dedup coincident image moves and recognize build-metadata chart labels ([#312](https://github.com/home-operations/konflate/issues/312)) ([556d90e](https://github.com/home-operations/konflate/commit/556d90efa404924bb66ec744b73f566a390f71be))
+* **provider:** make write-back survive rate limits, big diffs, and &gt;30 checks ([#311](https://github.com/home-operations/konflate/issues/311)) ([3072287](https://github.com/home-operations/konflate/commit/3072287fee326fc49e1637ebcc4501a828bffa89))
+* **server:** close five PR-lifecycle state-machine races ([#310](https://github.com/home-operations/konflate/issues/310)) ([c4f66d2](https://github.com/home-operations/konflate/commit/c4f66d23cc3bedeb606c9184a30f52ce0721ef73))
+* **server:** close Markdown injection into konflate's own PR comment and check-run ([#314](https://github.com/home-operations/konflate/issues/314)) ([2f71fd7](https://github.com/home-operations/konflate/commit/2f71fd7c1b5476710692e5746590db36342ffa14))
+* **web:** resync on ws reconnect, unstick row previews, fix nav order and type drift ([#313](https://github.com/home-operations/konflate/issues/313)) ([d5fc90c](https://github.com/home-operations/konflate/commit/d5fc90c68f0d69027eca29281a9671f3f2620921))
+
+
+### Performance Improvements
+
+* **persist:** serialize the record once per save; defang MCP title; t.Context tests ([#316](https://github.com/home-operations/konflate/issues/316)) ([c843efb](https://github.com/home-operations/konflate/commit/c843efbf3f52b0033d4bbc07e6f6b98486abf484))
+* **server:** skip redundant re-renders, bound MCP diff work, dedup summary blocks ([#315](https://github.com/home-operations/konflate/issues/315)) ([4368c4d](https://github.com/home-operations/konflate/commit/4368c4d082c9535dc5b547805ebebc9016f31a92))
+
 ## [0.2.33](https://github.com/home-operations/konflate/compare/0.2.32...0.2.33) (2026-07-01)
 
 
