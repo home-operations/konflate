@@ -15,11 +15,18 @@ import (
 // `api` types are the same ones the JSON API exposes.
 type commentTemplateData struct {
 	// PR is the pull request: .PR.Number, .PR.Title, .PR.Author, .PR.HeadRef,
-	// .PR.HeadSHA, .PR.BaseRef, .PR.URL, ...
+	// .PR.HeadSHA, .PR.BaseRef, .PR.URL, ... The free-text fields (Title, Author,
+	// HeadRef, BaseRef, and each Labels[].Name/.Color) are Markdown-escaped so a
+	// forge-controlled value embedded raw in the template can't inject into
+	// konflate's own comment; URL/HeadSHA/Number/State are structural and pass
+	// through unchanged (URL stays usable as a link target).
 	PR api.PR
 	// Diff is the rendered diff: .Diff.Impact.Resources, .Diff.Warnings,
 	// .Diff.Images, .Diff.Failures, ... Comments render on a successful render, so
-	// this is populated.
+	// this is populated. Its text fields (warning details, failure messages, image
+	// refs) are forge-controlled and raw — escape them with the `md`/`mdCode`
+	// template funcs when rendering them directly, or use the pre-escaped
+	// .Summary / .Sections instead.
 	Diff *api.DiffResult
 	// ReviewURL is konflate's review link for the PR, or "" when KONFLATE_PUBLIC_URL
 	// is unset.
@@ -48,7 +55,12 @@ func newCommentTemplate(cfg *config.Config, log *slog.Logger) *template.Template
 			"path", path, "error", err)
 		return nil
 	}
-	t, err := template.New("comment").Option("missingkey=error").Parse(string(src))
+	// md / mdCode let a template author Markdown-escape any raw forge-controlled
+	// field they render themselves (e.g. iterating .Diff.Warnings) — text/template
+	// does no escaping, and this comment is posted under konflate's own identity.
+	// The scalar .PR fields and the pre-rendered .Summary/.Sections are already safe.
+	funcs := template.FuncMap{"md": mdInline, "mdCode": mdCode}
+	t, err := template.New("comment").Funcs(funcs).Option("missingkey=error").Parse(string(src))
 	if err != nil {
 		log.Warn("invalid KONFLATE_PR_COMMENT_TEMPLATE_FILE; using the default comment body",
 			"path", path, "error", err)
@@ -69,8 +81,30 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 	if s.commentTmpl == nil {
 		return defaultBody()
 	}
+	// The comment is authored under konflate's own identity, so forge-controlled
+	// free-text PR fields must be Markdown-safe even when a custom template embeds
+	// them raw (text/template does not escape): a fork PR titled "[x](evil)" would
+	// otherwise inject a link. Escape them on a copy (the api.PR contract is
+	// preserved; Number/URL/HeadSHA stay usable as-is — URL is a link target).
+	pr := env.PR
+	pr.Title = mdInline(pr.Title)
+	pr.Author = mdInline(pr.Author)
+	pr.HeadRef = mdInline(pr.HeadRef)
+	pr.BaseRef = mdInline(pr.BaseRef)
+	// Labels are forge-controlled too. The struct copy above aliases the Labels
+	// slice, so deep-copy it before escaping each name/color — otherwise this would
+	// mutate the shared api.PR the rest of the request still reads.
+	if len(pr.Labels) > 0 {
+		labels := make([]api.Label, len(pr.Labels))
+		copy(labels, pr.Labels)
+		for i := range labels {
+			labels[i].Name = mdInline(labels[i].Name)
+			labels[i].Color = mdInline(labels[i].Color)
+		}
+		pr.Labels = labels
+	}
 	data := commentTemplateData{
-		PR:        env.PR,
+		PR:        pr,
 		Diff:      env.Diff,
 		ReviewURL: reviewURL,
 		Summary:   summaryMarkdownBody(env, reviewURL, admonitions),

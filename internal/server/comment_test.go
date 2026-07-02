@@ -28,7 +28,8 @@ func newCommentServer(t *testing.T, src string) *Server {
 		log: discardLog(),
 	}
 	if src != "" {
-		tmpl, err := template.New("comment").Option("missingkey=error").Parse(src)
+		funcs := template.FuncMap{"md": mdInline, "mdCode": mdCode}
+		tmpl, err := template.New("comment").Funcs(funcs).Option("missingkey=error").Parse(src)
 		if err != nil {
 			t.Fatalf("parse template: %v", err)
 		}
@@ -64,6 +65,44 @@ func TestCommentBody_CustomTemplate(t *testing.T) {
 	}
 	if !strings.Contains(body, "### konflate — summary") {
 		t.Errorf("custom body should embed the default summary via .Summary: %q", body)
+	}
+}
+
+// TestCommentBody_CustomTemplateEscapesForgeFields: a custom template that embeds
+// a forge-controlled PR field raw ({{ .PR.Title }}) must not let a malicious title
+// inject Markdown into konflate's own comment — the free-text fields are escaped.
+func TestCommentBody_CustomTemplateEscapesForgeFields(t *testing.T) {
+	t.Parallel()
+	env := readyEnvelope()
+	env.PR.Title = "[click](https://evil.example)"
+	env.PR.Author = "a](b) ![x](c)"
+	env.PR.Labels = []api.Label{{Name: "[lbl](https://evil.example)", Color: "0e8a16"}}
+	body := newCommentServer(t, "T: {{ .PR.Title }}\nA: {{ .PR.Author }}\nL:{{ range .PR.Labels }} {{ .Name }}{{ end }}").
+		commentBody(env)
+	if strings.Contains(body, "[click](") || strings.Contains(body, "![x](") || strings.Contains(body, "[lbl](") {
+		t.Errorf("a forge-controlled PR field/label must not inject a Markdown link/image:\n%s", body)
+	}
+	if !strings.Contains(body, `\[click\]`) || !strings.Contains(body, `\[lbl\]`) {
+		t.Errorf("expected the PR title and label brackets escaped:\n%s", body)
+	}
+	// Escaping the copy must not mutate the caller's slice (aliasing guard).
+	if env.PR.Labels[0].Name != "[lbl](https://evil.example)" {
+		t.Errorf("escaping a label mutated the shared PR.Labels slice: %q", env.PR.Labels[0].Name)
+	}
+}
+
+// TestCommentBody_TemplateMdFuncEscapesRawDiffText: raw forge-controlled .Diff
+// text a template renders itself can be escaped with the `md` func.
+func TestCommentBody_TemplateMdFuncEscapesRawDiffText(t *testing.T) {
+	t.Parallel()
+	env := readyEnvelope()
+	env.Diff.Failures = []api.RenderFailure{{Parent: "HelmRelease ns/app", Message: "[boom](https://evil.example)"}}
+	body := newCommentServer(t, "{{ range .Diff.Failures }}{{ md .Message }}{{ end }}").commentBody(env)
+	if strings.Contains(body, "[boom](") {
+		t.Errorf("the md func must defang a raw Diff message:\n%s", body)
+	}
+	if !strings.Contains(body, `\[boom\]`) {
+		t.Errorf("expected the md-escaped message:\n%s", body)
 	}
 }
 
