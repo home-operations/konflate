@@ -46,6 +46,7 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	st := newStore()
 	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
 	pr := api.PR{Number: 1}
+	st.upsertPR(pr, false) // record it first, mirroring the real flow (upsert before enqueue)
 
 	q.enqueue(pr)
 	<-started // first render is running
@@ -248,6 +249,8 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	st := newStore()
 	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
 
+	st.upsertPR(api.PR{Number: 1}, false) // record before enqueue, as the real flow does
+	st.upsertPR(api.PR{Number: 2}, false)
 	q.enqueue(api.PR{Number: 1})
 	q.enqueue(api.PR{Number: 2})
 

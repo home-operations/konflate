@@ -53,6 +53,12 @@ type job struct {
 	// interval even when nothing changed; comparing against this skips rewriting
 	// an identical multi-MB diff each time.
 	savedDigest uint64
+	// digest is the same content hash for the CURRENT in-memory diff. Unlike
+	// savedDigest (which only advances on a successful save) it is updated on every
+	// render, so it always reflects what a reader would receive — it backs the diff
+	// ETag, so a changed body revalidates even while persistence is failing. Both
+	// are zero until the first render / after a reload.
+	digest uint64
 }
 
 // store is the in-memory, concurrency-safe record of every known PR and the
@@ -162,7 +168,10 @@ func (s *store) del(number int) {
 
 // upsertPR records (or refreshes) a PR's metadata. A PR seen for the first time
 // starts in the pending state; an already-tracked PR keeps its current status
-// but takes the new metadata (title/labels/head may have changed).
+// (including a merged-shelf freeze) but takes the new metadata (title/labels/head
+// may have changed). It never un-shelves: a stale "open" snapshot from a point
+// fetch (a delayed webhook refreshPR racing a merge) must not revive a just-merged
+// PR — reopens are un-shelved only by the authoritative open-list path (markOpen).
 func (s *store) upsertPR(pr api.PR, hidden bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,8 +182,32 @@ func (s *store) upsertPR(pr api.PR, hidden bool) {
 	}
 	j.pr = pr
 	j.hidden = hidden
-	j.closedAt = time.Time{} // seen in the open set again (covers reopen)
 	j.updated = s.now()
+}
+
+// markOpen records a PR the current forge open-list reports as open. Like upsertPR
+// it creates/refreshes the job, but — because the list is the authoritative open
+// set — it also un-shelves a PR previously frozen as merged (a reopen), returning
+// true so the caller re-renders it. Point fetches use upsertPR (which preserves
+// the shelf), so only a full re-list can revive a merged PR; that keeps a stale
+// point "open" snapshot from racing markClosed to un-shelve one. refreshList is
+// serialized, so two overlapping lists can't interleave an un-shelve with a close.
+func (s *store) markOpen(pr api.PR, hidden bool) (reopened bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j := s.jobs[pr.Number]
+	if j == nil {
+		s.jobs[pr.Number] = &job{pr: pr, status: api.JobPending, updated: s.now(), hidden: hidden}
+		return false
+	}
+	if !j.closedAt.IsZero() {
+		j.closedAt = time.Time{} // reopened — the authoritative open list includes it again
+		reopened = true
+	}
+	j.pr = pr
+	j.hidden = hidden
+	j.updated = s.now()
+	return reopened
 }
 
 // setChecks updates a PR's CI rollup, reporting whether it actually changed so
@@ -220,19 +253,18 @@ func (s *store) prByHeadSHA(sha string) (api.PR, bool) {
 	return api.PR{}, false
 }
 
-// setStatus transitions a PR to status, recording its metadata if new. A PR
-// already frozen on the merged shelf is left untouched, so a render that was
-// enqueued before the PR merged cannot drag it back into a live state.
+// setStatus transitions a known, still-open PR to status. It no-ops for a PR the
+// store no longer knows — one dropped (abandoned/pruned) while its render sat
+// queued behind the semaphore — and for one frozen on the merged shelf: a render
+// enqueued before the PR left the open set must neither recreate nor revive it.
+// (upsertPR/markOpen are the only creators, and a PR is always recorded before it
+// is enqueued, so a nil job here means the PR was removed, never a first render.)
 func (s *store) setStatus(pr api.PR, status api.JobStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j := s.jobs[pr.Number]
-	if j != nil && !j.closedAt.IsZero() {
+	if j == nil || !j.closedAt.IsZero() {
 		return
-	}
-	if j == nil {
-		j = &job{pr: pr}
-		s.jobs[pr.Number] = j
 	}
 	j.pr = pr
 	j.status = status
@@ -270,7 +302,7 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 	// safe to read unlocked — j.result is replaced wholesale, never mutated in
 	// place, and per-PR coalescing means no second setResult for this PR runs
 	// concurrently.
-	s.persistRecord(number, rec, prev)
+	s.persistRecord(j, rec, prev)
 	return sig
 }
 
@@ -281,8 +313,24 @@ func (s *store) setResult(number int, result api.DiffResult) *api.Signals {
 // skipping it as "already on disk" (which would strand stale content that a
 // restart then restores). The costly marshal runs off the store lock; the digest
 // is committed under a brief re-lock.
-func (s *store) persistRecord(number int, rec persist.Record, prev uint64) {
+// persistRecord takes the *job it is persisting (not just the number) so it can
+// tell, after the off-lock save, whether that exact job is still the live one for
+// its number — it may have been dropped (abandoned/pruned) or replaced by a fresh
+// job (a reopen) meanwhile. Both digest commits are guarded on that identity, so a
+// stale render can neither revive a removed PR's ETag nor clobber a replacement
+// job's savedDigest with a hash whose file it then orphans.
+func (s *store) persistRecord(j *job, rec persist.Record, prev uint64) {
+	number := rec.PR.Number
 	d := contentDigest(rec)
+	// Record the in-memory content hash for the ETag first, independent of whether
+	// the save below succeeds — so a changed diff always revalidates (a fresh ETag)
+	// even while persistence is failing on a full/read-only volume.
+	s.mu.Lock()
+	if s.jobs[number] == j {
+		j.digest = d
+	}
+	s.mu.Unlock()
+
 	if d == prev {
 		return // unchanged: nothing to write, and savedDigest is already current
 	}
@@ -290,10 +338,16 @@ func (s *store) persistRecord(number int, rec persist.Record, prev uint64) {
 		return // leave savedDigest as-is so the next render retries the write
 	}
 	s.mu.Lock()
-	if j := s.jobs[number]; j != nil {
+	if s.jobs[number] == j {
 		j.savedDigest = d
+		s.mu.Unlock()
+		return
 	}
 	s.mu.Unlock()
+	// j was dropped or replaced while this save ran off the lock: the file just
+	// written belongs to a job that is no longer live, and a restart would resurrect
+	// it. Delete it — a replacement job persists its own render separately.
+	s.del(number)
 }
 
 // computeSignals reduces a diff to its at-a-glance counts for the PR list.
@@ -351,7 +405,7 @@ func (s *store) get(number int) (api.DiffEnvelope, bool) {
 		Error:        j.errMsg,
 		RefreshError: j.refreshErr,
 		Hidden:       j.hidden,
-		Digest:       j.savedDigest,
+		Digest:       j.digest,
 	}, true
 }
 
@@ -444,7 +498,7 @@ func (s *store) markClosed(number int, when time.Time) {
 
 	// Re-record with the merge stamp so the shelf survives a restart — off the
 	// lock; the merge always changes the content, so this writes.
-	s.persistRecord(number, rec, prev)
+	s.persistRecord(j, rec, prev)
 }
 
 // remove drops a PR from the store entirely (used for abandoned PRs and by
