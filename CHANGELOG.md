@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/home-operations/konflate/compare/0.2.34...0.3.0) (2026-07-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* make the metrics listener metrics-only and fully optional ([#322](https://github.com/home-operations/konflate/issues/322))
+
+### Features
+
+* **deps:** update module github.com/google/cel-go (v0.28.1 → v0.29.1) ([#317](https://github.com/home-operations/konflate/issues/317)) ([89a1186](https://github.com/home-operations/konflate/commit/89a1186c57c53aa44ccd1586fab8e9a29b492e5b))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.44.0 → v2.45.0) ([#321](https://github.com/home-operations/konflate/issues/321)) ([e9e4629](https://github.com/home-operations/konflate/commit/e9e462939c6bf690d826fff45413892a7d5cf121))
+* make the metrics listener metrics-only and fully optional ([#322](https://github.com/home-operations/konflate/issues/322)) ([d3a043d](https://github.com/home-operations/konflate/commit/d3a043dddaa6fdfb98e652b330f4db3cfad67b3b))
+
 ## [0.2.34](https://github.com/home-operations/konflate/compare/0.2.33...0.2.34) (2026-07-02)
 
 
