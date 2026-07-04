@@ -12,9 +12,11 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: http
       protocol: TCP
+    {{- if .Values.service.metricsEnabled }}
     - name: metrics
       port: {{ .Values.service.metricsPort }}
       targetPort: metrics
       protocol: TCP
+    {{- end }}
   selector:
     {{- include "konflate.selectorLabels" . | nindent 4 }}
