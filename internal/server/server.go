@@ -573,11 +573,17 @@ func (s *Server) Run(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 		// No WriteTimeout: the websocket connection is long-lived.
 	}
-	metricsSrv := &http.Server{
-		Addr:              s.cfg.MetricsAddr,
-		Handler:           s.monitoringHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
+	// The metrics listener is metrics-only and fully optional: /healthz and
+	// /readyz ride the main server, so disabling metrics removes this port
+	// without touching the probes.
+	var metricsSrv *http.Server
+	if s.cfg.MetricsEnabled {
+		metricsSrv = &http.Server{
+			Addr:              fmt.Sprintf(":%d", s.cfg.MetricsPort),
+			Handler:           s.metricsHandler(),
+			ReadHeaderTimeout: 10 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
 	}
 
 	// Warm the PR list at startup so the UI has content immediately, then run the
@@ -589,13 +595,17 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.checkRefreshWorker(gctx)
 
 	g.Go(func() error { return serve(mainSrv, "main", s.log) })
-	g.Go(func() error { return serve(metricsSrv, "metrics", s.log) })
+	if metricsSrv != nil {
+		g.Go(func() error { return serve(metricsSrv, "metrics", s.log) })
+	}
 	g.Go(func() error {
 		<-gctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		_ = mainSrv.Shutdown(sctx)
-		_ = metricsSrv.Shutdown(sctx)
+		if metricsSrv != nil {
+			_ = metricsSrv.Shutdown(sctx)
+		}
 		s.queue.wait() // gctx is cancelled, so in-flight renders observe it and drain promptly
 		return nil
 	})
@@ -761,14 +771,12 @@ func (s *Server) refreshStale(now time.Time) {
 	}
 }
 
-// monitoringHandler builds the mux for the separate monitoring server
-// (MetricsAddr): /metrics plus the /healthz and /readyz probes. Consolidating
-// the operational surface here keeps it off the main, possibly public-facing
-// port; the probes also stay on the main mux for backward compatibility.
-func (s *Server) monitoringHandler() http.Handler {
+// metricsHandler builds the mux for the separate, optional metrics listener:
+// /metrics only, kept off the main (possibly public-facing) port. Health
+// probes are NOT served here — /healthz and /readyz live on the main mux, so
+// this whole listener can be disabled without breaking probes.
+func (s *Server) metricsHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handleHealth)
-	mux.HandleFunc("GET /readyz", handleHealth)
 	mux.Handle("GET /metrics", s.metrics.handler())
 	return mux
 }
@@ -776,7 +784,9 @@ func (s *Server) monitoringHandler() http.Handler {
 // mainHandler builds the main mux. Inbound trigger endpoints (webhook, push)
 // are served only when enabled; otherwise they explicitly return 501 so a
 // misconfiguration is visible rather than a silent 404. The /healthz and
-// /readyz probes are served here too (and on the monitoring port).
+// /readyz probes are served here (the pair standard: health rides the main
+// port so the optional metrics listener can be disabled without breaking
+// probes).
 func (s *Server) mainHandler() http.Handler {
 	mux := http.NewServeMux()
 
