@@ -150,6 +150,8 @@ Kubernetes: `>=1.25.0-0`
 | tests.image.pullPolicy | string | `"IfNotPresent"` | `helm test` image pull policy. |
 | tests.image.repository | string | `"mirror.gcr.io/curlimages/curl"` | `helm test` connection-pod image; a gcr-mirrored curl, so the test never pulls from Docker Hub. |
 | tests.image.tag | string | `"8.21.0@sha256:7c12af72ceb38b7432ab85e1a265cff6ae58e06f95539d539b654f2cfa64bb13"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
+| tls.extraCaCertsConfigMap | string | `""` | ConfigMap whose entries are extra PEM CA certificates to trust. |
+| tls.extraCaCertsSecret | string | `""` | Secret whose entries are extra PEM CA certificates to trust (e.g. a cert-manager CA secret). Combines with the ConfigMap when both are set. |
 | tolerations | list | `[]` | Tolerations for pod scheduling. |
 | volumeMounts | list | `[]` | Additional volume mounts on the container. |
 | volumes | list | `[]` | Additional volumes on the Deployment. |
