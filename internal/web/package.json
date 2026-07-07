@@ -22,7 +22,7 @@
     "@tailwindcss/vite": "^4.3.2",
     "simple-icons": "^16.25.0",
     "svelte": "^5.56.4",
-    "svelte-check": "^4.7.1",
+    "svelte-check": "^4.7.2",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.3"
