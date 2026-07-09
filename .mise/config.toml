@@ -10,7 +10,7 @@
 "aqua:dadav/helm-schema" = "0.23.4"
 go = "1.26.5"
 golangci-lint = "2.12.2"
-helm = "4.2.2"
+helm = "4.2.3"
 cosign = "3.1.1"
 helm-docs = "1.14.2"
 lefthook = "2.1.10"
