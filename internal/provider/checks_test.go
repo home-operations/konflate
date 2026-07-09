@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v89/github"
 
 	"github.com/home-operations/konflate/internal/api"
 )

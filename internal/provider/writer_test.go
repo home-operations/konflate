@@ -20,7 +20,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v89/github"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
