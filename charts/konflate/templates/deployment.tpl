@@ -74,6 +74,10 @@ spec:
             - name: KONFLATE_CLUSTER_PATH
               value: {{ tpl . $ | quote }}
             {{- end }}
+            {{- if not .Values.service.metricsEnabled }}
+            - name: KONFLATE_METRICS_ENABLED
+              value: "false"
+            {{- end }}
             - name: KONFLATE_LOG_LEVEL
               value: {{ tpl .Values.config.logLevel $ | quote }}
             - name: KONFLATE_LOG_FORMAT
@@ -218,9 +222,11 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            {{- if .Values.service.metricsEnabled }}
             - name: metrics
               containerPort: 8081
               protocol: TCP
+            {{- end }}
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- tpl (toYaml .) $ | nindent 12 }}

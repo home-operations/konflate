@@ -99,7 +99,7 @@ Kubernetes: `>=1.25.0-0`
 | ingress.enabled | bool | `false` | Expose the UI via an Ingress. |
 | ingress.hosts | list | `[{"host":"konflate.example.com","paths":[{"path":"/","pathType":"Prefix"}]}]` | Ingress hosts and their paths. |
 | ingress.tls | list | `[]` | Ingress TLS configuration. |
-| livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"metrics"},"initialDelaySeconds":10,"periodSeconds":20}` | Liveness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics. |
+| livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":10,"periodSeconds":20}` | Liveness probe. Targets /healthz on the main http port, so it works regardless of the metrics toggle. |
 | monitoring.serviceMonitor.annotations | object | `{}` | ServiceMonitor annotations. |
 | monitoring.serviceMonitor.enabled | bool | `false` | Create a Prometheus Operator ServiceMonitor (requires its CRDs). |
 | monitoring.serviceMonitor.interval | string | `"30s"` | Scrape interval. |
@@ -127,7 +127,7 @@ Kubernetes: `>=1.25.0-0`
 | podLabels | object | `{}` | Labels added to the pod. |
 | podSecurityContext | object | `{"fsGroup":65532,"fsGroupChangePolicy":"OnRootMismatch","runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level securityContext (runs as non-root uid/gid 65532 with the RuntimeDefault seccomp profile). |
 | priorityClassName | string | `""` | PriorityClass for the pod, so konflate is less likely to be preempted/evicted under node pressure. Empty uses the cluster default. |
-| readinessProbe | object | `{"httpGet":{"path":"/readyz","port":"metrics"},"initialDelaySeconds":5,"periodSeconds":10}` | Readiness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics. |
+| readinessProbe | object | `{"httpGet":{"path":"/readyz","port":"http"},"initialDelaySeconds":5,"periodSeconds":10}` | Readiness probe. Targets /readyz on the main http port. |
 | replicaCount | int | `1` | Replica count; konflate is single-instance, so 0 or 1 only (a value >1 is rejected at render time). |
 | resources | object | `{"limits":{"memory":"1Gi"},"requests":{"cpu":"50m","memory":"256Mi"}}` | Pod resource requests/limits. The memory limit is the hard ceiling: it drives GOMEMLIMIT (90%) so the GC reclaims before the kernel OOM-kills a runaway render. Default bounds memory out of the box; raise it for very large clusters. |
 | secret.appPrivateKey | string | `""` | GitHub App PEM private key (**GitHub only**); the preferred GitHub write credential, used with `config.appClientId`. |
@@ -137,8 +137,9 @@ Kubernetes: `>=1.25.0-0`
 | secret.webhookSecret | string | `""` | Webhook secret; enables POST /hooks (authenticated mode). |
 | secret.writeToken | string | `""` | Write credential for status write-back (commit statuses), separate from `token` so it carries only write scope. The universal option and the only one on GitLab/Forgejo. Needs `config.statusChecks: true` to take effect. |
 | securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container securityContext (no privilege escalation, read-only root filesystem, drops ALL capabilities). |
-| service.metricsPort | int | `8081` | Monitoring port serving /metrics and the health/readiness probes. |
-| service.port | int | `8080` | UI / API / websocket port. |
+| service.metricsEnabled | bool | `true` | Expose Prometheus metrics at /metrics on metricsPort (KONFLATE_METRICS_ENABLED). Disabling removes the metrics listener, container port, and Service port entirely; health probes are unaffected (they target the http port). |
+| service.metricsPort | int | `8081` | Metrics listen port (/metrics only), kept off the public port. |
+| service.port | int | `8080` | UI / API / websocket port; also serves the /healthz and /readyz probes. |
 | service.type | string | `"ClusterIP"` | Service type. |
 | serviceAccount.annotations | object | `{}` | Annotations for the ServiceAccount. |
 | serviceAccount.automount | bool | `false` | Automount the ServiceAccount API token (off by default: konflate talks to forges, not the cluster API). |

@@ -11,17 +11,17 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/google/cel-go v0.29.1
+	github.com/google/cel-go v0.29.2
 	github.com/google/go-containerregistry v0.21.7
-	github.com/google/go-github/v88 v88.0.0
+	github.com/google/go-github/v89 v89.0.0
 	github.com/home-operations/flate v0.4.10
 	github.com/klauspost/compress v1.19.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	gitlab.com/gitlab-org/api/client-go/v2 v2.44.0
-	golang.org/x/sync v0.21.0
+	gitlab.com/gitlab-org/api/client-go/v2 v2.46.0
+	golang.org/x/sync v0.22.0
 	k8s.io/apimachinery v0.36.2
 	sigs.k8s.io/yaml v1.6.0
 )

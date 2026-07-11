@@ -449,7 +449,7 @@
       "type": "object"
     },
     "livenessProbe": {
-      "description": "Liveness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.",
+      "description": "Liveness probe. Targets /healthz on the main http port, so it works regardless of the metrics toggle.",
       "properties": {
         "httpGet": {
           "properties": {
@@ -459,7 +459,7 @@
               "type": "string"
             },
             "port": {
-              "default": "metrics",
+              "default": "http",
               "title": "port",
               "type": "string"
             }
@@ -749,7 +749,7 @@
       "type": "string"
     },
     "readinessProbe": {
-      "description": "Readiness probe. Targets the `metrics` (monitoring) port, which serves the probes alongside /metrics.",
+      "description": "Readiness probe. Targets /readyz on the main http port.",
       "properties": {
         "httpGet": {
           "properties": {
@@ -759,7 +759,7 @@
               "type": "string"
             },
             "port": {
-              "default": "metrics",
+              "default": "http",
               "title": "port",
               "type": "string"
             }
@@ -909,15 +909,21 @@
     },
     "service": {
       "properties": {
+        "metricsEnabled": {
+          "default": true,
+          "description": "Expose Prometheus metrics at /metrics on metricsPort (KONFLATE_METRICS_ENABLED). Disabling removes the metrics listener, container port, and Service port entirely; health probes are unaffected (they target the http port).",
+          "title": "metricsEnabled",
+          "type": "boolean"
+        },
         "metricsPort": {
           "default": 8081,
-          "description": "Monitoring port serving /metrics and the health/readiness probes.",
+          "description": "Metrics listen port (/metrics only), kept off the public port.",
           "title": "metricsPort",
           "type": "integer"
         },
         "port": {
           "default": 8080,
-          "description": "UI / API / websocket port.",
+          "description": "UI / API / websocket port; also serves the /healthz and /readyz probes.",
           "title": "port",
           "type": "integer"
         },
