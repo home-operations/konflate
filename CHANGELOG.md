@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.0](https://github.com/home-operations/konflate/compare/0.3.0...0.4.0) (2026-07-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** Update module github.com/google/go-github/v88 (v88.0.0 → v89.0.0) ([#326](https://github.com/home-operations/konflate/issues/326))
+
+### Features
+
+* **chart:** trust extra CA certs for self-signed forges and registries ([#320](https://github.com/home-operations/konflate/issues/320)) ([075fe0e](https://github.com/home-operations/konflate/commit/075fe0ec366c4a10b258e48f5820e48f8bb8fd8d))
+* **deps:** update dependency @sveltejs/vite-plugin-svelte (7.1.2 → 7.2.0) ([#325](https://github.com/home-operations/konflate/issues/325)) ([c982abb](https://github.com/home-operations/konflate/commit/c982abbaaf72edfaf07c23f15b8390914e58ea5e))
+* **deps:** update dependency simple-icons (16.24.1 → 16.25.0) ([#323](https://github.com/home-operations/konflate/issues/323)) ([fbd4a7d](https://github.com/home-operations/konflate/commit/fbd4a7dea9206b38aec539bb4b8d1f1203624e8f))
+* **deps:** update dependency simple-icons (16.25.0 → 16.26.0) ([#340](https://github.com/home-operations/konflate/issues/340)) ([e39b6ef](https://github.com/home-operations/konflate/commit/e39b6ef24d85cc4a407ff286fe6c0745938b5cb8))
+* **deps:** Update module github.com/google/go-github/v88 (v88.0.0 → v89.0.0) ([#326](https://github.com/home-operations/konflate/issues/326)) ([f879c4a](https://github.com/home-operations/konflate/commit/f879c4ab8ea4c5e89e0e7db9b84cd73662134ac4))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.45.0 → v2.46.0) ([#328](https://github.com/home-operations/konflate/issues/328)) ([b445416](https://github.com/home-operations/konflate/commit/b445416350a42a33bafe3c663af2cb005a0c52b8))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.46.0 → v2.47.0) ([#341](https://github.com/home-operations/konflate/issues/341)) ([5916f45](https://github.com/home-operations/konflate/commit/5916f4504d3d269ffe1544e1313f3a716fa9f95f))
+* **deps:** update module golang.org/x/sync (v0.21.0 → v0.22.0) ([#333](https://github.com/home-operations/konflate/issues/333)) ([8445d2e](https://github.com/home-operations/konflate/commit/8445d2e7906b6364af3e34dfe1f1cdf1380b6b3c))
+* **server:** serialize sweeping renders to bound peak memory by blast radius ([#343](https://github.com/home-operations/konflate/issues/343)) ([5feafd1](https://github.com/home-operations/konflate/commit/5feafd1f2144f86dccb2a0536fc1c0f357fddebb))
+
+
+### Bug Fixes
+
+* **deps:** update dependency svelte-check (4.7.1 → 4.7.2) ([#329](https://github.com/home-operations/konflate/issues/329)) ([ff85732](https://github.com/home-operations/konflate/commit/ff85732bc8fe9af9acd553fb5b6b8feff254e7c4))
+* **deps:** update dependency vite (8.1.3 → 8.1.4) ([#336](https://github.com/home-operations/konflate/issues/336)) ([538d289](https://github.com/home-operations/konflate/commit/538d289caac24654939a7621570740bf2dbde824))
+* **deps:** update module github.com/google/cel-go (v0.29.1 → v0.29.2) ([#330](https://github.com/home-operations/konflate/issues/330)) ([1f7bcd2](https://github.com/home-operations/konflate/commit/1f7bcd2da438466b445a9bf9dd8ca3ca716854fe))
+* **provider:** match GitHub comments by user id so an App rename doesn't orphan them ([#342](https://github.com/home-operations/konflate/issues/342)) ([9945bd5](https://github.com/home-operations/konflate/commit/9945bd548ffd8c3f96735ab21447b05ea7d18174))
+
 ## [0.3.0](https://github.com/home-operations/konflate/compare/0.2.34...0.3.0) (2026-07-04)
 
 
