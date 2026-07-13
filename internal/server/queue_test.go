@@ -44,7 +44,7 @@ func TestQueue_CoalescesRerun(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil, nil)
 	pr := api.PR{Number: 1}
 	st.upsertPR(pr, false) // record it first, mirroring the real flow (upsert before enqueue)
 
@@ -88,7 +88,7 @@ func TestQueue_CoalesceUsesLatestMetadata(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 
 	q.enqueue(api.PR{Number: 1, HeadSHA: "old"})
 	<-started // "old" is rendering
@@ -119,7 +119,7 @@ func TestQueue_RecoversRenderPanic(t *testing.T) {
 	t.Parallel()
 	diff := func(context.Context, api.PR) (api.DiffResult, error) { panic("boom") }
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 
 	st.upsertPR(api.PR{Number: 1}, false)
 	q.enqueue(api.PR{Number: 1})
@@ -143,7 +143,7 @@ func TestQueue_HeadRefGoneReconcilesNotErrors(t *testing.T) {
 	st := newStore()
 	st.upsertPR(api.PR{Number: 1}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from when the PR was open
-	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1, nil)
+	q := newQueue(context.Background(), diff, st, nil, func(n int) { reconciled <- n }, newMetrics(), discardLog(), 1, nil, nil)
 
 	q.enqueue(api.PR{Number: 1})
 
@@ -175,7 +175,7 @@ func TestQueue_CanceledRenderDoesNotErrorOrClobber(t *testing.T) {
 	st := newStore()
 	st.upsertPR(api.PR{Number: 1}, false)
 	st.setResult(1, api.DiffResult{PRNumber: 1}) // a diff from before shutdown
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 
 	q.enqueue(api.PR{Number: 1})
 	q.wait() // the render goroutine takes the canceled branch and returns
@@ -204,7 +204,7 @@ func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
 		st := newStore()
 		st.upsertPR(api.PR{Number: 1}, false)
 		st.setResult(1, api.DiffResult{PRNumber: 1})
-		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 		q.enqueue(api.PR{Number: 1})
 		q.wait() // the single render goroutine finishes after taking the keep-last branch
 		env, _ := st.get(1)
@@ -223,7 +223,7 @@ func TestQueue_TimeoutFlowsThroughKeepLast(t *testing.T) {
 		t.Parallel()
 		st := newStore()
 		st.upsertPR(api.PR{Number: 2}, false)
-		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+		q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 		q.enqueue(api.PR{Number: 2})
 		waitTerminal(t, st, 2)
 		if env, _ := st.get(2); env.Status != api.JobError {
@@ -247,7 +247,7 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	}
 
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 2, nil, nil)
 
 	st.upsertPR(api.PR{Number: 1}, false) // record before enqueue, as the real flow does
 	st.upsertPR(api.PR{Number: 2}, false)
@@ -262,6 +262,86 @@ func TestQueue_RunsConcurrently(t *testing.T) {
 	waitTerminal(t, st, 2)
 }
 
+// TestQueue_SerializesSweepingRenders verifies the blast-radius budget: renders
+// the classifier marks sweeping run at most one at a time (their peak memory
+// scales with the whole repo, so stacking them into every worker slot OOMs the
+// pod), while routine renders keep the full concurrency alongside them.
+func TestQueue_SerializesSweepingRenders(t *testing.T) {
+	t.Parallel()
+	started := make(chan int, 10)
+	release := make(chan struct{})
+
+	diff := func(_ context.Context, pr api.PR) (api.DiffResult, error) {
+		started <- pr.Number
+		<-release
+		return api.DiffResult{PRNumber: pr.Number}, nil
+	}
+
+	st := newStore()
+	sweeping := func(pr api.PR) bool { return pr.Number != 3 } // 1 and 2 are repo-wide, 3 is routine
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 3, sweeping, nil)
+
+	for _, n := range []int{1, 2, 3} {
+		st.upsertPR(api.PR{Number: n}, false)
+		q.enqueue(api.PR{Number: n})
+	}
+
+	// Exactly two renders may start: the routine PR 3 and ONE of the sweeping
+	// pair — the other sweeping render must wait for the token even though a
+	// third worker slot is free.
+	running := map[int]bool{<-started: true, <-started: true}
+	if !running[3] {
+		t.Fatalf("the routine render must not be blocked by sweeping ones; running = %v", running)
+	}
+	if running[1] && running[2] {
+		t.Fatal("both sweeping renders started concurrently; want them serialized")
+	}
+	select {
+	case n := <-started:
+		t.Fatalf("render %d started while a sweeping render held the token", n)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release <- struct{}{} // finish the two in flight; the token frees up...
+	release <- struct{}{}
+	<-started // ...and the second sweeping render starts
+	release <- struct{}{}
+
+	for n := 1; n <= 3; n++ {
+		waitTerminal(t, st, n)
+	}
+}
+
+// TestQueue_SweepingWaiterUnblocksOnShutdown verifies a sweeping render parked
+// on the sweep token bails out when the run context is cancelled, so shutdown
+// isn't held hostage by a render that never got to start.
+func TestQueue_SweepingWaiterUnblocksOnShutdown(t *testing.T) {
+	t.Parallel()
+	started := make(chan int, 10)
+	release := make(chan struct{})
+
+	diff := func(_ context.Context, pr api.PR) (api.DiffResult, error) {
+		started <- pr.Number
+		<-release
+		return api.DiffResult{PRNumber: pr.Number}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	st := newStore()
+	sweeping := func(api.PR) bool { return true }
+	q := newQueue(ctx, diff, st, nil, nil, newMetrics(), discardLog(), 2, sweeping, nil)
+
+	st.upsertPR(api.PR{Number: 1}, false)
+	st.upsertPR(api.PR{Number: 2}, false)
+	q.enqueue(api.PR{Number: 1})
+	<-started                    // PR 1 holds the sweep token
+	q.enqueue(api.PR{Number: 2}) // PR 2 parks on the token
+
+	cancel()       // shutdown: the waiter must give up the token wait...
+	close(release) // ...and the in-flight render finishes
+	q.wait()       // must return; would hang if the waiter leaked
+}
+
 // TestQueue_ClosingRejectsNewWork verifies the shutdown gate: once wait() has
 // marked the queue closing, enqueue is a no-op — it starts no render and records
 // nothing. That gate (wg.Add only while holding mu and not closing) is what keeps
@@ -274,7 +354,7 @@ func TestQueue_ClosingRejectsNewWork(t *testing.T) {
 		return api.DiffResult{}, nil
 	}
 	st := newStore()
-	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil)
+	q := newQueue(context.Background(), diff, st, nil, nil, newMetrics(), discardLog(), 1, nil, nil)
 
 	q.wait() // no in-flight work: returns at once and marks the queue closing
 	q.enqueue(api.PR{Number: 1})

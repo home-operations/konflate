@@ -147,7 +147,7 @@ func newTestServer(t *testing.T, cfg *config.Config, prov *fakeProvider, eng Eng
 	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>konflate</title>")}}
 	s := New(cfg, prov, eng, ui, discardLog())
 	s.runCtx = t.Context()
-	s.queue = newQueue(s.runCtx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, nil)
+	s.queue = newQueue(s.runCtx, s.engine.Diff, s.store, s.hub.broadcast, s.reconcileHeadGone, s.metrics, s.log, cfg.MaxDiffConcurrency, s.store.sweeping, nil)
 	return s
 }
 

@@ -29,6 +29,51 @@ func TestStore_SetStatusDoesNotResurrectRemovedPR(t *testing.T) {
 	}
 }
 
+// TestStore_Sweeping covers the blast-radius classification the queue's sweep
+// token keys on: unknown-cost PRs (never rendered) read as routine, a render
+// that touched a couple of parents stays routine, and one that fanned out to
+// many parents — via rendered changes, render failures (a Flux bump failing
+// every app), or both combined — reads as sweeping.
+func TestStore_Sweeping(t *testing.T) {
+	t.Parallel()
+	st := newStore()
+	pr := api.PR{Number: 1}
+
+	if st.sweeping(pr) {
+		t.Fatal("an unknown PR must classify as routine")
+	}
+	st.upsertPR(pr, false)
+	if st.sweeping(pr) {
+		t.Fatal("a never-rendered PR must classify as routine (cost unknown)")
+	}
+
+	st.setResult(1, api.DiffResult{Impact: api.Impact{Parents: 2}})
+	if st.sweeping(pr) {
+		t.Fatal("a two-parent render must classify as routine")
+	}
+
+	st.setResult(1, api.DiffResult{Impact: api.Impact{Parents: sweepingBlastMin}})
+	if !st.sweeping(pr) {
+		t.Fatalf("a %d-parent render must classify as sweeping", sweepingBlastMin)
+	}
+
+	// A repo-wide bump that fails every app renders no changes at all — the
+	// failures alone must carry the classification.
+	st.setResult(1, api.DiffResult{Failures: make([]api.RenderFailure, sweepingBlastMin)})
+	if !st.sweeping(pr) {
+		t.Fatal("render failures must count toward the blast radius")
+	}
+
+	// Changed and failed parents are disjoint sets; their sum classifies.
+	st.setResult(1, api.DiffResult{
+		Impact:   api.Impact{Parents: sweepingBlastMin / 2},
+		Failures: make([]api.RenderFailure, sweepingBlastMin-sweepingBlastMin/2),
+	})
+	if !st.sweeping(pr) {
+		t.Fatal("changed + failed parents must classify together")
+	}
+}
+
 // #3 — a stale point "open" snapshot must not un-shelve a merged PR; only the
 // authoritative open-list path (markOpen) un-shelves a genuine reopen.
 func TestStore_MergedShelfSurvivesStaleOpenSnapshot(t *testing.T) {

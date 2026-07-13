@@ -488,6 +488,36 @@ func staleJitter(prNumber int, interval time.Duration) time.Duration {
 	return time.Duration(int64(h%uint64(spread)) - spread/2)
 }
 
+// sweepingBlastMin is the last-render blast radius — distinct parents
+// (HelmReleases/Kustomizations) that changed or failed to render — at or above
+// which a PR's next render is classified sweeping and serialized by the queue.
+// Routine PRs (an image bump, one app's values) touch a parent or two; a Flux
+// distribution/operator bump re-renders (or fails) every app in the repo, and
+// render memory scales with that fan-out. The threshold trades only latency,
+// never correctness: a big-but-not-repo-wide render classified sweeping merely
+// waits for the token, so it errs low rather than high.
+const sweepingBlastMin = 10
+
+// sweeping classifies pr's next render by the blast radius of its last stored
+// one: Impact.Parents counts the distinct parents with rendered changes, and
+// each render failure is one parent that produced nothing (its phantom changes
+// are dropped — see engine dropFailedParents), so the two sets are disjoint and
+// their sum is the parents the render actually fanned out to. A PR with no
+// stored result (never rendered, or never successfully) reads as routine: its
+// cost is unknown until rendered once. Results are persisted and restored at
+// startup, so the classification survives a restart — including one where the
+// previous batch of sweeping renders OOMed the process. Matches the queue's
+// sweepFunc.
+func (s *store) sweeping(pr api.PR) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	j := s.jobs[pr.Number]
+	if j == nil || j.result == nil {
+		return false
+	}
+	return j.result.Impact.Parents+len(j.result.Failures) >= sweepingBlastMin
+}
+
 // markClosed freezes a PR as merged: it keeps its last rendered diff but stamps
 // the close time so it moves to the "recently merged" shelf and stops being
 // re-enqueued. The first close time wins (idempotent under concurrent
