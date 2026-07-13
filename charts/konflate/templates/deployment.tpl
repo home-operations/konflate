@@ -82,6 +82,12 @@ spec:
               value: {{ tpl .Values.config.logLevel $ | quote }}
             - name: KONFLATE_LOG_FORMAT
               value: {{ tpl .Values.config.logFormat $ | quote }}
+            {{- if or .Values.tls.extraCaCertsConfigMap .Values.tls.extraCaCertsSecret }}
+            # Additive: the default bundle file stays trusted (SSL_CERT_DIR only
+            # overrides the default cert directories).
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/konflate
+            {{- end }}
             {{- if gt (int .Values.config.maxDiffConcurrency) 0 }}
             - name: KONFLATE_MAX_DIFF_CONC
               value: {{ .Values.config.maxDiffConcurrency | quote }}
@@ -243,6 +249,11 @@ spec:
               mountPath: /etc/konflate
               readOnly: true
             {{- end }}
+            {{- if or .Values.tls.extraCaCertsConfigMap .Values.tls.extraCaCertsSecret }}
+            - name: extra-ca-certs
+              mountPath: /etc/ssl/konflate
+              readOnly: true
+            {{- end }}
             {{- with .Values.volumeMounts }}
             {{- tpl (toYaml .) $ | nindent 12 }}
             {{- end }}
@@ -260,6 +271,19 @@ spec:
         - name: pr-comment-template
           configMap:
             name: {{ include "konflate.fullname" . }}-pr-comment-template
+        {{- end }}
+        {{- if or .Values.tls.extraCaCertsConfigMap .Values.tls.extraCaCertsSecret }}
+        - name: extra-ca-certs
+          projected:
+            sources:
+              {{- with .Values.tls.extraCaCertsConfigMap }}
+              - configMap:
+                  name: {{ tpl . $ | quote }}
+              {{- end }}
+              {{- with .Values.tls.extraCaCertsSecret }}
+              - secret:
+                  name: {{ tpl . $ | quote }}
+              {{- end }}
         {{- end }}
         {{- with .Values.volumes }}
         {{- tpl (toYaml .) $ | nindent 8 }}

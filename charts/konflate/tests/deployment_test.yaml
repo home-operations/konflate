@@ -454,6 +454,58 @@ tests:
       - failedTemplate:
           errorMessage: konflate is single-instance (in-memory PR/diff state); replicaCount must be 0 or 1, got 2
 
+  - it: omits the extra-CA trust wiring by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SSL_CERT_DIR
+            value: /etc/ssl/konflate
+      - notContains:
+          path: spec.template.spec.volumes
+          any: true
+          content:
+            name: extra-ca-certs
+
+  - it: wires extra CA certs from a ConfigMap (env + readOnly mount + projected volume)
+    set:
+      tls.extraCaCertsConfigMap: internal-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SSL_CERT_DIR
+            value: /etc/ssl/konflate
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-ca-certs
+            mountPath: /etc/ssl/konflate
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-ca-certs
+            projected:
+              sources:
+                - configMap:
+                    name: internal-ca
+
+  - it: combines ConfigMap and Secret CA sources in one projected volume
+    set:
+      tls.extraCaCertsConfigMap: internal-ca
+      tls.extraCaCertsSecret: forge-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-ca-certs
+            projected:
+              sources:
+                - configMap:
+                    name: internal-ca
+                - secret:
+                    name: forge-ca
   # Pins the port standard: probes target the http port, and disabling metrics
   # removes the metrics containerPort without touching them.
   - it: keeps probes working when metrics are disabled

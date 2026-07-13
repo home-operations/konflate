@@ -1027,6 +1027,26 @@
       "title": "tests",
       "type": "object"
     },
+    "tls": {
+      "description": "Trust extra CA certificates — a self-signed forge (GitLab/Forgejo/Gitea) or\nregistry. Entries are PEM certs, mounted at /etc/ssl/konflate and picked up\nthrough Go's SSL_CERT_DIR: additive, the image's public-CA bundle keeps\nworking (SSL_CERT_DIR overrides only the default cert *directories*, never\nthe bundle file). Every TLS path in konflate — forge API, git fetch, Helm\nrepos/OCI, image verification — goes through Go's trust store, so this one\nknob covers them all.",
+      "properties": {
+        "extraCaCertsConfigMap": {
+          "default": "",
+          "description": "ConfigMap whose entries are extra PEM CA certificates to trust.",
+          "title": "extraCaCertsConfigMap",
+          "type": "string"
+        },
+        "extraCaCertsSecret": {
+          "default": "",
+          "description": "Secret whose entries are extra PEM CA certificates to trust (e.g. a cert-manager CA secret). Combines with the ConfigMap when both are set.",
+          "title": "extraCaCertsSecret",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "tls",
+      "type": "object"
+    },
     "tolerations": {
       "description": "Tolerations for pod scheduling.",
       "items": {

@@ -289,6 +289,25 @@ webhook/push endpoints return `501` until you set their secret. PRs still stay
 current via the per-PR auto-refresh (see [Triggering
 re-renders](#triggering-re-renders)).
 
+### Self-signed forges and registries
+
+A self-hosted forge or registry with a private CA fails TLS verification
+(`x509: certificate signed by unknown authority`). konflate never shells out —
+the forge API, git fetch, Helm repos/OCI pulls, and image verification all use
+Go's TLS stack — so extending trust is one knob. With the Helm chart, point it
+at a ConfigMap (or Secret) whose entries are PEM CA certificates:
+
+```yaml
+tls:
+    extraCaCertsConfigMap: internal-ca
+```
+
+The chart mounts it at `/etc/ssl/konflate` and sets
+`SSL_CERT_DIR=/etc/ssl/konflate`. This is additive — the image's public-CA
+bundle keeps working — and needs no OpenSSL hash naming; Go reads every file in
+the directory. Outside the chart, set `SSL_CERT_DIR` (or `SSL_CERT_FILE` with a
+full bundle) on the container yourself.
+
 ## Write-back
 
 By default konflate writes nothing to your forge. Enable write-back and it
