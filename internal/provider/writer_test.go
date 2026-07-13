@@ -442,30 +442,40 @@ func commentCapture(listJSON string, sink *commentSink) http.HandlerFunc {
 
 const upsertMarker = "<!-- konflate:pr-7 -->"
 
-// selfLogin is the login the test writers resolve as konflate's own identity (via
-// konflateSelf); the marked comment in markerList is authored by it.
+// selfLogin is the username the Forgejo/GitLab test writers resolve as konflate's
+// own identity (via konflateSelf); the marked comment in markerList is authored by
+// it. selfID is the GitHub equivalent — the GitHub writer matches by the numeric
+// user id, which unlike the login survives an App/user rename.
 const selfLogin = "konflate[bot]"
 
-// konflateSelf is a resolvedString reporting konflate's own identity (selfLogin)
-// with no network call — the test stand-in for the per-forge "who am I" lookup.
-func konflateSelf() *resolvedString {
-	return &resolvedString{resolve: func(context.Context) (string, error) { return selfLogin, nil }}
+const selfID int64 = 8871
+
+// konflateSelf reports konflate's own username (selfLogin) with no network call —
+// the test stand-in for the Forgejo/GitLab "who am I" lookup.
+func konflateSelf() *resolved[string] {
+	return &resolved[string]{resolve: func(context.Context) (string, error) { return selfLogin, nil }}
+}
+
+// konflateSelfID is konflateSelf for the GitHub writer, which resolves the numeric
+// user id (selfID) instead of the login.
+func konflateSelfID() *resolved[int64] {
+	return &resolved[int64]{resolve: func(context.Context) (int64, error) { return selfID, nil }}
 }
 
 // markerList is a one-comment listing (id 99) whose body carries the marker and is
-// authored by konflate itself. It carries both a GitHub/Forgejo-style `user.login`
-// and a GitLab-style `author.username` so the one fixture serves all three forges
-// (each SDK reads its own field).
+// authored by konflate itself. It carries a GitHub-style `user.login`+`user.id`, a
+// Forgejo-style `user.login`, and a GitLab-style `author.username` so the one
+// fixture serves all three forges (each SDK reads its own fields).
 func markerList() string {
-	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":%q},"author":{"username":%q}}]`,
-		upsertMarker+"\nold", selfLogin, selfLogin)
+	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":%q,"id":%d},"author":{"username":%q}}]`,
+		upsertMarker+"\nold", selfLogin, selfID, selfLogin)
 }
 
 // foreignMarkerList is the marker planted by a DIFFERENT author — the comment-
 // hijack attempt. konflate must NOT edit it (it isn't konflate's) and must post
 // its own comment instead.
 func foreignMarkerList() string {
-	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":"attacker"},"author":{"username":"attacker"}}]`,
+	return fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":"attacker","id":666},"author":{"username":"attacker"}}]`,
 		upsertMarker+"\nplanted")
 }
 
@@ -503,7 +513,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
 		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
@@ -514,7 +524,23 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
+		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
+			t.Fatalf("UpsertComment: %v", err)
+		}
+		assertEdited(t, sink)
+	})
+	t.Run("still edits its own after an App rename", func(t *testing.T) {
+		t.Parallel()
+		// Renaming the App changes the bot login on every existing comment
+		// ("konflate[bot]" → "renamed[bot]") but not the user id — matching by id,
+		// konflate must keep editing its comment instead of stacking duplicates.
+		renamed := fmt.Sprintf(`[{"id":99,"body":%q,"user":{"login":"renamed[bot]","id":%d}}]`,
+			upsertMarker+"\nold", selfID)
+		var sink commentSink
+		srv := httptest.NewServer(commentCapture(renamed, &sink))
+		t.Cleanup(srv.Close)
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
 		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nnew"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
@@ -525,7 +551,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(foreignMarkerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
 		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nhi"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
 		}
@@ -536,7 +562,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(markerList(), &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
 		// Same body as the listed comment — konflate must skip the no-op edit.
 		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, upsertMarker+"\nold"); err != nil {
 			t.Fatalf("UpsertComment: %v", err)
@@ -548,7 +574,7 @@ func TestGitHubWriter_UpsertComment(t *testing.T) {
 		var sink commentSink
 		srv := httptest.NewServer(commentCapture(`[]`, &sink))
 		t.Cleanup(srv.Close)
-		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelf()}
+		wr := &githubWriter{client: newGitHubTestClient(t, srv.URL), owner: "acme", repo: "web", self: konflateSelfID()}
 		huge := upsertMarker + "\n" + strings.Repeat("x", githubBodyMax+5000)
 		if err := wr.UpsertComment(t.Context(), api.PR{Number: 7}, upsertMarker, huge); err != nil {
 			t.Fatalf("UpsertComment: %v", err)

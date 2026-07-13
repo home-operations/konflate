@@ -137,27 +137,29 @@ func strOrNil(s string) *string {
 	return &s
 }
 
-// resolvedString memoizes the first successful result of resolve. A failed
+// resolved memoizes the first successful result of resolve. A failed
 // attempt is not cached, so a transient error (e.g. a forge blip while learning
 // konflate's own identity) is retried on the next call rather than wedging the
 // feature — the same lazy, cache-on-success pattern as repoInstallTransport.
-type resolvedString struct {
+type resolved[T any] struct {
 	mu      sync.Mutex
-	val     string
-	resolve func(ctx context.Context) (string, error)
+	val     T
+	ok      bool
+	resolve func(ctx context.Context) (T, error)
 }
 
-func (r *resolvedString) get(ctx context.Context) (string, error) {
+func (r *resolved[T]) get(ctx context.Context) (T, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.val != "" {
+	if r.ok {
 		return r.val, nil
 	}
 	v, err := r.resolve(ctx)
 	if err != nil {
-		return "", err
+		var zero T
+		return zero, err
 	}
-	r.val = v
+	r.val, r.ok = v, true
 	return v, nil
 }
 
@@ -166,8 +168,8 @@ func (r *resolvedString) get(ctx context.Context) (string, error) {
 type githubWriter struct {
 	client      *github.Client
 	owner, repo string
-	app         bool            // App-authed ⇒ can post Check Runs (a PAT can't)
-	self        *resolvedString // login of konflate's own comment author; resolved once
+	app         bool             // App-authed ⇒ can post Check Runs (a PAT can't)
+	self        *resolved[int64] // user id of konflate's own comment author; resolved once
 }
 
 func newGitHubWriter(cfg *config.Config) (*githubWriter, error) {
@@ -176,7 +178,7 @@ func newGitHubWriter(cfg *config.Config) (*githubWriter, error) {
 		return nil, err
 	}
 	owner, repo := ownerRepo(cfg.Forge.RepoPath)
-	return &githubWriter{client: client, owner: owner, repo: repo, app: cfg.AppConfigured(), self: &resolvedString{resolve: self}}, nil
+	return &githubWriter{client: client, owner: owner, repo: repo, app: cfg.AppConfigured(), self: &resolved[int64]{resolve: self}}, nil
 }
 
 // newGitHubWriteClient builds the authenticated write client. A fully-configured
@@ -184,7 +186,7 @@ func newGitHubWriter(cfg *config.Config) (*githubWriter, error) {
 // short-lived installation tokens rather than carrying a standing PAT — and a
 // write PAT is the fallback (and the only option on Forgejo/GitLab). A partial
 // App config is an explicit error so it can't silently mask a typo'd key.
-func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Context) (string, error), error) {
+func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Context) (int64, error), error) {
 	switch {
 	case cfg.AppConfigured():
 		return newGitHubAppClient(cfg)
@@ -195,13 +197,14 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Cont
 		if err != nil {
 			return nil, nil, fmt.Errorf("github: new write client: %w", err)
 		}
-		// The write PAT's own user is konflate's comment-author identity.
-		self := func(ctx context.Context) (string, error) {
+		// The write PAT's own user is konflate's comment-author identity — kept as the
+		// numeric user id, which unlike the login survives an account rename.
+		self := func(ctx context.Context) (int64, error) {
 			u, _, err := client.Users.Get(ctx, "")
 			if err != nil {
-				return "", fmt.Errorf("github: resolve write-token user: %w", err)
+				return 0, fmt.Errorf("github: resolve write-token user: %w", err)
 			}
-			return u.GetLogin(), nil
+			return u.GetID(), nil
 		}
 		return client, self, nil
 	case cfg.AppClientID != "" || cfg.AppPrivateKey != "":
@@ -214,7 +217,7 @@ func newGitHubWriteClient(cfg *config.Config) (*github.Client, func(context.Cont
 // newGitHubAppClient authenticates write-back as a GitHub App installation: it
 // builds the installation-token client (see newGitHubAppInstallClient) and
 // resolves konflate's comment-author identity from the App itself.
-func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Context) (string, error), error) {
+func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Context) (int64, error), error) {
 	client, apps, err := newGitHubAppInstallClient(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -222,13 +225,20 @@ func newGitHubAppClient(cfg *config.Config) (*github.Client, func(context.Contex
 	// konflate's comments are authored by the App's bot user, "<app-slug>[bot]";
 	// resolve the slug from the App itself (App-JWT auth) so comment write-back only
 	// ever edits konflate's own comment, never one a PR author planted with the
-	// (public) marker.
-	self := func(ctx context.Context) (string, error) {
+	// (public) marker. The identity kept is the bot user's numeric id, not its
+	// login: renaming the App changes the slug (and with it the author login on
+	// every existing comment), which would orphan konflate's comment until a
+	// restart, while the id is stable across renames.
+	self := func(ctx context.Context) (int64, error) {
 		app, _, err := apps.Apps.Get(ctx, "")
 		if err != nil {
-			return "", fmt.Errorf("github: resolve App identity: %w", err)
+			return 0, fmt.Errorf("github: resolve App identity: %w", err)
 		}
-		return app.GetSlug() + "[bot]", nil
+		u, _, err := client.Users.Get(ctx, app.GetSlug()+"[bot]")
+		if err != nil {
+			return 0, fmt.Errorf("github: resolve App bot user: %w", err)
+		}
+		return u.GetID(), nil
 	}
 	return client, self, nil
 }
@@ -491,13 +501,14 @@ func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 	// Find konflate's own comment (the one it authored carrying the hidden marker)
 	// and edit it in place; otherwise post a new one. The marker alone isn't enough:
 	// it's public (the summary API emits it too), so a PR author could plant it to
-	// make konflate adopt their comment — match the author as well. ListCommentsIter
-	// paginates transparently.
+	// make konflate adopt their comment — match the author as well, by numeric user
+	// id (the login changes when the App or user is renamed; the id doesn't).
+	// ListCommentsIter paginates transparently.
 	for c, err := range w.client.Issues.ListCommentsIter(ctx, w.owner, w.repo, pr.Number, nil) {
 		if err != nil {
 			return fmt.Errorf("github: list comments #%d: %w", pr.Number, err)
 		}
-		if c.GetUser().GetLogin() == self && c.Body != nil && strings.Contains(*c.Body, marker) {
+		if c.GetUser().GetID() == self && c.Body != nil && strings.Contains(*c.Body, marker) {
 			if strings.TrimSpace(*c.Body) == strings.TrimSpace(body) {
 				return nil // unchanged — skip the no-op edit so a re-render doesn't mark it "edited"
 			}
@@ -583,7 +594,7 @@ func clamp(s string, max int, marker string) string {
 type forgejoWriter struct {
 	client      *forgejo.Client
 	owner, repo string
-	self        *resolvedString // username of konflate's own comment author; resolved once
+	self        *resolved[string] // username of konflate's own comment author; resolved once
 }
 
 func newForgejoWriter(cfg *config.Config) (*forgejoWriter, error) {
@@ -603,7 +614,7 @@ func newForgejoWriter(cfg *config.Config) (*forgejoWriter, error) {
 		}
 		return u.UserName, nil
 	}
-	return &forgejoWriter{client: client, owner: owner, repo: repo, self: &resolvedString{resolve: self}}, nil
+	return &forgejoWriter{client: client, owner: owner, repo: repo, self: &resolved[string]{resolve: self}}, nil
 }
 
 func (w *forgejoWriter) SetStatus(_ context.Context, pr api.PR, st Status) error {
@@ -674,7 +685,7 @@ func (w *forgejoWriter) Verify(_ context.Context) error {
 type gitlabWriter struct {
 	client  *gitlab.Client
 	project string
-	self    *resolvedString // username of konflate's own note author; resolved once
+	self    *resolved[string] // username of konflate's own note author; resolved once
 }
 
 func newGitLabWriter(cfg *config.Config) (*gitlabWriter, error) {
@@ -692,7 +703,7 @@ func newGitLabWriter(cfg *config.Config) (*gitlabWriter, error) {
 		}
 		return u.Username, nil
 	}
-	return &gitlabWriter{client: client, project: cfg.Forge.RepoPath, self: &resolvedString{resolve: self}}, nil
+	return &gitlabWriter{client: client, project: cfg.Forge.RepoPath, self: &resolved[string]{resolve: self}}, nil
 }
 
 func (w *gitlabWriter) SetStatus(ctx context.Context, pr api.PR, st Status) error {
