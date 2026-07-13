@@ -27,25 +27,36 @@ type diffFunc func(ctx context.Context, pr api.PR) (api.DiffResult, error)
 // server can write a commit status back to the forge. nil = write-back off.
 type reportFunc func(pr api.PR, st api.JobStatus, sig *api.Signals, errMsg string)
 
+// sweepFunc classifies a PR's next render as sweeping — one that fans out to a
+// large share of the cluster (a Flux distribution/operator bump re-rendering
+// every app) rather than the usual one-app change. The server wires
+// store.sweeping, which reads the PR's last stored render; nil disables the
+// classification and renders are bounded by count alone.
+type sweepFunc func(pr api.PR) bool
+
 // queue runs diff jobs with bounded concurrency and per-PR coalescing: while a
 // PR is in flight, a second enqueue does not start a duplicate render — it
 // records the PR as pending so exactly one more render happens after the
 // current one finishes (so a webhook burst collapses to at most one trailing
 // re-render). The pending entry holds the latest PR metadata, so the trailing
 // render reflects the newest head SHA / title / labels rather than the snapshot
-// that was in flight when the burst began.
+// that was in flight when the burst began. Renders classified as sweeping (see
+// sweepFunc) are additionally serialized through a single token, so a batch of
+// repo-wide PRs can't stack their peak memory into every worker slot at once.
 type queue struct {
 	diff      diffFunc
 	store     *store
 	notify    func(api.Event)
 	reconcile func(number int) // called when a render finds the PR's head branch gone
 	report    reportFunc       // terminal-outcome write-back hook; nil = off
+	sweeping  sweepFunc        // classifies a render as sweeping; nil = off
 	metrics   *metrics
 	log       *slog.Logger
 
-	ctx context.Context // cancelled on shutdown; threaded into every diff
-	sem chan struct{}
-	wg  sync.WaitGroup
+	ctx        context.Context // cancelled on shutdown; threaded into every diff
+	sem        chan struct{}
+	sweepToken chan struct{} // capacity 1: at most one sweeping render in flight
+	wg         sync.WaitGroup
 
 	mu       sync.Mutex
 	closing  bool // set by wait() during shutdown; a closing queue accepts no new work
@@ -56,17 +67,18 @@ type queue struct {
 func newQueue(
 	ctx context.Context, diff diffFunc, st *store, notify func(api.Event),
 	reconcile func(int), m *metrics, log *slog.Logger, concurrency int,
-	report reportFunc,
+	sweeping sweepFunc, report reportFunc,
 ) *queue {
 	if concurrency < 1 {
 		concurrency = 1
 	}
 	return &queue{
-		diff: diff, store: st, notify: notify, reconcile: reconcile, report: report, metrics: m, log: log,
-		ctx:      ctx,
-		sem:      make(chan struct{}, concurrency),
-		inflight: map[int]struct{}{},
-		pending:  map[int]api.PR{},
+		diff: diff, store: st, notify: notify, reconcile: reconcile, report: report, sweeping: sweeping, metrics: m, log: log,
+		ctx:        ctx,
+		sem:        make(chan struct{}, concurrency),
+		sweepToken: make(chan struct{}, 1),
+		inflight:   map[int]struct{}{},
+		pending:    map[int]api.PR{},
 	}
 }
 
@@ -116,6 +128,38 @@ func (q *queue) renderWithRecover(pr api.PR) (res api.DiffResult, err error) {
 
 func (q *queue) run(pr api.PR) {
 	defer q.wg.Done()
+
+	// A sweeping render — one whose last render fanned out to a large share of
+	// the cluster (see store.sweeping) — additionally holds the queue's single
+	// sweep token, so at most one is in flight at a time. Render memory scales
+	// with the blast radius, not the PR count: a batch of repo-wide Flux bumps
+	// stacked into every worker slot has a combined live heap no GOMEMLIMIT
+	// pressure can compress and OOMs the pod, while the same renders one at a
+	// time fit fine. Routine renders keep the full slot count throughout.
+	//
+	// The token is taken BEFORE a worker slot: a sweeping render waiting its turn
+	// queues outside the worker pool, leaving every slot to routine renders.
+	// Taken the other way round, queued sweeping renders would sit on worker
+	// slots while blocked on the token and starve the routine ones.
+	//
+	// Classification happens once per run: a coalesced trailing re-render (the
+	// loop below) keeps whatever tokens were taken here, and a PR that turns
+	// sweeping mid-run is reclassified on its next enqueue. A brand-new PR's
+	// first render passes as routine — its cost is unknown until rendered once.
+	if q.sweeping != nil && q.sweeping(pr) {
+		select {
+		case q.sweepToken <- struct{}{}:
+		default:
+			q.log.Info("sweeping render queued behind another sweeping render", "pr", pr.Number)
+			select {
+			case q.sweepToken <- struct{}{}:
+			case <-q.ctx.Done():
+				q.clear(pr.Number)
+				return
+			}
+		}
+		defer func() { <-q.sweepToken }()
+	}
 
 	// Acquire a worker slot, or bail if we're shutting down before we got one.
 	select {

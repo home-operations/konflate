@@ -564,7 +564,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.queue = newQueue(
 		gctx, s.renderFunc(), s.store, s.hub.broadcast, s.reconcileHeadGone,
-		s.metrics, s.log, s.cfg.MaxDiffConcurrency, report,
+		s.metrics, s.log, s.cfg.MaxDiffConcurrency, s.store.sweeping, report,
 	)
 
 	mainSrv := &http.Server{
