@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1](https://github.com/home-operations/konflate/compare/0.4.0...0.4.1) (2026-07-19)
+
+
+### Features
+
+* **deps:** update dependency simple-icons (16.26.0 → 16.27.0) ([#359](https://github.com/home-operations/konflate/issues/359)) ([b73cea0](https://github.com/home-operations/konflate/commit/b73cea0f7fdea9d61e6423253d3a3cec4057cd07))
+* **deps:** update fontsource monorepo (5.2.9 → 5.3.0) ([#360](https://github.com/home-operations/konflate/issues/360)) ([84d0351](https://github.com/home-operations/konflate/commit/84d035162aaf4b7105968247b9b073cd09cc4fef))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.47.0 → v2.48.1) ([#344](https://github.com/home-operations/konflate/issues/344)) ([595132c](https://github.com/home-operations/konflate/commit/595132c32d0a32f833c98d5552969401ba7cf9a8))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.48.1 → v2.49.0) ([#350](https://github.com/home-operations/konflate/issues/350)) ([dc899f0](https://github.com/home-operations/konflate/commit/dc899f0932d34b02114aafadb1eb6f1ae9b1c552))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.49.0 → v2.50.0) ([#353](https://github.com/home-operations/konflate/issues/353)) ([7d49d1a](https://github.com/home-operations/konflate/commit/7d49d1a547e60e1d90f733bf26c0845c0eb9eec5))
+* **deps:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.50.0 → v2.51.0) ([#358](https://github.com/home-operations/konflate/issues/358)) ([5fa1408](https://github.com/home-operations/konflate/commit/5fa1408a88a6bf541f3d5842a3fbfd85535a7f70))
+
+
+### Bug Fixes
+
+* **deps:** update dependency svelte (5.56.4 → 5.56.5) ([#348](https://github.com/home-operations/konflate/issues/348)) ([17b7211](https://github.com/home-operations/konflate/commit/17b7211fd394e6c6d70a0017b07e5d20066c357e))
+* **deps:** update dependency svelte (5.56.5 → 5.56.6) ([#355](https://github.com/home-operations/konflate/issues/355)) ([f28dad5](https://github.com/home-operations/konflate/commit/f28dad526a472c3b254af4aa4ac0903f92c2c117))
+* **deps:** update dependency svelte-check (4.7.2 → 4.7.3) ([#351](https://github.com/home-operations/konflate/issues/351)) ([05ca26a](https://github.com/home-operations/konflate/commit/05ca26a7d2ddb7c98caf59646432cc24c0caae58))
+* **deps:** update dependency vite (8.1.4 → 8.1.5) ([#352](https://github.com/home-operations/konflate/issues/352)) ([185d0f1](https://github.com/home-operations/konflate/commit/185d0f15303a7ef9b71dfd715e7f02a395eefdd7))
+* **deps:** update tailwindcss monorepo (4.3.2 → 4.3.3) ([#354](https://github.com/home-operations/konflate/issues/354)) ([5ab35d3](https://github.com/home-operations/konflate/commit/5ab35d3db3a0f0215546eb40ce7ee873cc239cf3))
+* **server:** stop escaping parens in mdInline ([#361](https://github.com/home-operations/konflate/issues/361)) ([58902c2](https://github.com/home-operations/konflate/commit/58902c27f2ba534bc195df2cce84191bb158e148))
+
 ## [0.4.0](https://github.com/home-operations/konflate/compare/0.3.0...0.4.0) (2026-07-13)
 
 
