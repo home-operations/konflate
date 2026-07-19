@@ -194,9 +194,14 @@ func TestMdInline_DefangsMarkdown(t *testing.T) {
 	// Backslash-escaped punctuation renders as the literal character in GFM, so a
 	// link/image/code/emphasis attempt is inert while the text reads unchanged.
 	got := mdInline("a [l](u) ![i](u) `c` *b* _e_ ~s~ | <x>")
-	want := "a \\[l\\]\\(u\\) \\!\\[i\\]\\(u\\) \\`c\\` \\*b\\* \\_e\\_ \\~s\\~ \\| &lt;x&gt;"
+	want := "a \\[l\\](u) \\!\\[i\\](u) \\`c\\` \\*b\\* \\_e\\_ \\~s\\~ \\| &lt;x&gt;"
 	if got != want {
 		t.Errorf("mdInline mismatch:\n got %q\nwant %q", got, want)
+	}
+	// Parens must pass through untouched: \(...\) is Forgejo's inline-math
+	// delimiter, so escaping them turns prose into KaTeX there (#349).
+	if got := mdInline("recreated (or Flux force is enabled)"); got != "recreated (or Flux force is enabled)" {
+		t.Errorf("parens must not be escaped, got %q", got)
 	}
 	// A lone backslash is escaped first, so it can't consume a following escape.
 	if got := mdInline(`\`); got != `\\` {
