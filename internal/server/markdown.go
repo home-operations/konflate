@@ -329,14 +329,17 @@ func mdInline(s string) string {
 
 // mdInlineReplacer runs a single non-overlapping pass (so its own output is never
 // re-escaped): HTML entities for <, >, &; a \| for the table pipe; and a
-// backslash before every Markdown inline metacharacter — the link/image brackets
-// and parens, the code-span backtick, the emphasis/strikethrough runs, the image
-// bang, and the backslash itself (escaped first so it can't consume a following
-// escape). Bare autolinked URLs are left alone: their destination is visible, so
-// they aren't a spoofing vector the way [text](hidden-url) is.
+// backslash before every Markdown inline metacharacter — the link/image brackets,
+// the code-span backtick, the emphasis/strikethrough runs, the image bang, and
+// the backslash itself (escaped first so it can't consume a following escape).
+// Parens are deliberately NOT escaped: with the brackets and bang neutralised a
+// bare (...) can't form a link or image, and Forgejo treats \(...\) as an inline
+// KaTeX math delimiter, so escaping them mangles plain prose there (#349). Bare
+// autolinked URLs are left alone: their destination is visible, so they aren't a
+// spoofing vector the way [text](hidden-url) is.
 var mdInlineReplacer = strings.NewReplacer(
 	"&", "&amp;", "<", "&lt;", ">", "&gt;", "|", `\|`,
-	`\`, `\\`, "`", "\\`", "[", `\[`, "]", `\]`, "(", `\(`, ")", `\)`,
+	`\`, `\\`, "`", "\\`", "[", `\[`, "]", `\]`,
 	"*", `\*`, "_", `\_`, "~", `\~`, "!", `\!`,
 )
 
