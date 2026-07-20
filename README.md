@@ -45,13 +45,13 @@ front.
    Kustomization really deletes the resource in-cluster, a non-pruning one
    orphans it, silently left running.
 
-    The **image changes** signal lists the `container` and `initContainer` image
-    references that changed across _every rendered workload_ — so it captures
-    whatever the charts and kustomizations actually deploy: app images, sidecars,
-    and controller images pulled in by OCI Helm charts alike, each keyed to the
-    workloads that reference it. (A chart's own OCI **artifact** version bump
-    shows up as a changed `HelmRelease`/`OCIRepository` resource in the diff; its
-    effect on the running images surfaces here.)
+   The **image changes** signal lists the `container` and `initContainer` image
+   references that changed across _every rendered workload_ — so it captures
+   whatever the charts and kustomizations actually deploy: app images, sidecars,
+   and controller images pulled in by OCI Helm charts alike, each keyed to the
+   workloads that reference it. (A chart's own OCI **artifact** version bump
+   shows up as a changed `HelmRelease`/`OCIRepository` resource in the diff; its
+   effect on the running images surfaces here.)
 
 5. The three-panel web UI renders it — PRs on the left, changed resources in the
    middle, the diff on the right — and updates live over a websocket as renders
@@ -299,7 +299,7 @@ at a ConfigMap (or Secret) whose entries are PEM CA certificates:
 
 ```yaml
 tls:
-    extraCaCertsConfigMap: internal-ca
+  extraCaCertsConfigMap: internal-ca
 ```
 
 The chart mounts it at `/etc/ssl/konflate` and sets
@@ -448,11 +448,11 @@ With the Helm chart, put the template **content** in `config.prCommentTemplate` 
 
 ```yaml
 config:
-    prComments: true
-    # Passed to konflate verbatim — write plain Go-template braces, no escaping.
-    prCommentTemplate: |
-        ## konflate · #{{ .PR.Number }} — {{ .PR.Title }}
-        {{ .Summary }}
+  prComments: true
+  # Passed to konflate verbatim — write plain Go-template braces, no escaping.
+  prCommentTemplate: |
+    ## konflate · #{{ .PR.Number }} — {{ .PR.Title }}
+    {{ .Summary }}
 ```
 
 ## HTTP endpoints
@@ -642,10 +642,10 @@ Tests come in four tiers:
 - **Integration** (`-tags integration`, env-gated) — renders a real PR with the
   real engine; skips unless `KONFLATE_REPO` + `KONFLATE_INTEGRATION_PR` are set:
 
-    ```bash
-    KONFLATE_REPO=github://owner/repo KONFLATE_INTEGRATION_PR=123 \
-      mise run test-integration
-    ```
+  ```bash
+  KONFLATE_REPO=github://owner/repo KONFLATE_INTEGRATION_PR=123 \
+    mise run test-integration
+  ```
 
 ## Security
 
