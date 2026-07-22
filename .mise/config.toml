@@ -15,7 +15,7 @@ cosign = "3.1.2"
 helm-docs = "1.14.2"
 lefthook = "2.1.10"
 node = "24.18.0"
-oxfmt = "0.59.0"
+oxfmt = "0.60.0"
 yq = "4.53.3"
 zizmor = "1.28.0"
 
