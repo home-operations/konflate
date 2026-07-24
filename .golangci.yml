@@ -1,6 +1,10 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  # Without this the build-tagged integration suite is invisible to CI (nothing
+  # else compiles it), and it silently rots against internal/ API changes.
+  build-tags:
+    - integration
 linters:
   default: none
   enable:

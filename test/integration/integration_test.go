@@ -49,7 +49,14 @@ func TestRenderRealPR(t *testing.T) {
 	}
 	t.Logf("PR #%d %q: %s -> %s", pr.Number, pr.Title, pr.HeadRef, pr.BaseRef)
 
-	res, err := engine.New(cfg).Diff(ctx, pr)
+	// Clone with the same forge identity as the API client above, so a private
+	// KONFLATE_REPO renders (mirrors cmd/konflate).
+	gitToken, err := provider.GitTokenSource(cfg)
+	if err != nil {
+		t.Fatalf("git credential: %v", err)
+	}
+
+	res, err := engine.New(cfg, gitToken).Diff(ctx, pr)
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}
