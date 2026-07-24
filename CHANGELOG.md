@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/home-operations/konflate/compare/0.4.2...0.4.3) (2026-07-24)
+
+
+### Features
+
+* **npm:** update dependency @playwright/test (1.61.1 → 1.62.0) ([#376](https://github.com/home-operations/konflate/issues/376)) ([db58a1e](https://github.com/home-operations/konflate/commit/db58a1e0ea48e0c343d06c20b8ad8d427f7d3b14))
+
 ## [0.4.2](https://github.com/home-operations/konflate/compare/0.4.1...0.4.2) (2026-07-24)
 
 
