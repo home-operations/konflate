@@ -4,11 +4,13 @@ templates:
 set:
   config.repo: github://owner/repo
 tests:
+  # The tag floats with the release-please-stamped appVersion; assert the
+  # repo:semver shape rather than a hardcoded version.
   - it: defaults the image to repository:appVersion when no digest or tag is set
     asserts:
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/home-operations/konflate:0.0.0
+          pattern: ^ghcr\.io/home-operations/konflate:\d+\.\d+\.\d+$
 
   - it: defaults to the Recreate update strategy (in-memory singleton + RWO cache)
     asserts:
