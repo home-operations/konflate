@@ -120,6 +120,13 @@ spec:
             - name: KONFLATE_MAX_DIFF_RESOURCES
               value: {{ tpl (toString .Values.config.maxDiffResources) $ | quote }}
             {{- end }}
+            {{- /* tpl resolves against the release, so
+                   "{{ .Capabilities.KubeVersion.Version }}" tracks the cluster
+                   this release installs into. */}}
+            {{- with .Values.config.kubeVersion }}
+            - name: KONFLATE_KUBE_VERSION
+              value: {{ tpl . $ | quote }}
+            {{- end }}
             {{- /* toString, not `with`: an explicit 0 (disable a cache) must
                    still emit — `with` would treat int 0 as empty and drop it,
                    silently reviving the default. Empty string = use the default.

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	flatediff "github.com/home-operations/flate/pkg/diff"
+	"github.com/home-operations/flate/pkg/helm"
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
 	"github.com/home-operations/flate/pkg/source"
@@ -70,6 +71,9 @@ type flateEngine struct {
 	sourceRetry            source.RetryConfig
 	diffTimeout            time.Duration
 	maxDiffResources       int
+	// kubeVersion overrides .Capabilities.KubeVersion for every chart rendered;
+	// empty leaves helm's bundled version (see config.KubeVersion).
+	kubeVersion string
 	// restrictEgress turns on flate's SSRF egress guard for source fetches (see
 	// config.EgressRestricted): on by default while rendering untrusted fork PRs.
 	restrictEgress bool
@@ -107,6 +111,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 		},
 		diffTimeout:      cfg.DiffTimeout,
 		maxDiffResources: cfg.MaxDiffResources,
+		kubeVersion:      cfg.KubeVersion,
 		restrictEgress:   cfg.EgressRestricted(),
 	}
 }
@@ -231,6 +236,11 @@ func renderUsable(base, head orchestrator.Rendered, err error) bool {
 //     would clone its full history (disk/CPU exhaustion). Matches flate's own
 //     CLI default; commit-pinned refs still full-clone as flate requires.
 //
+// HelmOptions carries only the kube version (see config.KubeVersion); the
+// skip-* knobs stay off, since a reviewer needs every rendered resource. flate
+// keys both Helm template caches on the kube version, so changing it can't
+// serve a render templated at the old one.
+//
 // e.cache is the long-lived source cache reused across every PR; CacheDir
 // roots flate's persistent on-disk Helm caches on the same (operator-mounted)
 // volume so they survive restarts. (flate 0.3.4 renders kustomize stages in
@@ -243,6 +253,7 @@ func (e *flateEngine) renderCfg() orchestrator.Config {
 		WipeSecrets:            true,
 		AllowMissingSecrets:    true,
 		GitDepth:               1,
+		HelmOptions:            helm.Options{KubeVersion: e.kubeVersion},
 		HelmTemplateCacheBytes: e.helmTemplateCacheBytes,
 		HelmRenderCacheBytes:   e.helmRenderCacheBytes,
 		Concurrency:            e.concurrency,

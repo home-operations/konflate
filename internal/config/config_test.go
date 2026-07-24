@@ -337,6 +337,38 @@ func TestLoad_HelmTemplateCacheMB(t *testing.T) {
 	}
 }
 
+func TestLoad_KubeVersion(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	// Unset: empty, so flate leaves helm's bundled capabilities alone.
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KubeVersion != "" {
+		t.Errorf("unset KubeVersion = %q, want empty", cfg.KubeVersion)
+	}
+
+	// Anything helm parses is accepted verbatim, including the "v" prefix and
+	// distro suffix a chart's .Capabilities.KubeVersion.Version carries.
+	for _, v := range []string{"1.33", "1.33.4", "v1.33.4", "v1.33.4-gke.1245000"} {
+		t.Setenv("KONFLATE_KUBE_VERSION", v)
+		cfg, err = Load()
+		if err != nil {
+			t.Fatalf("Load with KONFLATE_KUBE_VERSION=%q: %v", v, err)
+		}
+		if cfg.KubeVersion != v {
+			t.Errorf("KubeVersion = %q, want %q", cfg.KubeVersion, v)
+		}
+	}
+
+	// An unparseable version fails at startup rather than per render.
+	t.Setenv("KONFLATE_KUBE_VERSION", "not-a-version")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load with a malformed KONFLATE_KUBE_VERSION should error")
+	}
+}
+
 func TestLoad_UnsetsSecrets(t *testing.T) {
 	// Secrets load into the Config, then are removed from the process
 	// environment (the `,unset` tag) so a later in-process env dump can't leak

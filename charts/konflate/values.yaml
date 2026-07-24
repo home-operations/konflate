@@ -113,6 +113,8 @@ config:
   imageVerifyTimeout: ""
   # -- Cap on resources fully rendered per diff (each carries highlighted rows — the main payload cost); a larger PR is truncated and flagged in the UI, while the impact banner still shows the true total. Empty = default (500); "0" disables.
   maxDiffResources: ""
+  # -- Kubernetes version charts see as `.Capabilities.KubeVersion`. Empty = the version bundled with the helm SDK konflate was built against, which may be newer than your cluster — a chart gated on the cluster version then renders differently here than in-cluster. Set `"{{ .Capabilities.KubeVersion.Version }}"` to track the cluster this release installs into, or pin a literal (e.g. `"1.33.4"`).
+  kubeVersion: ""
   # --- flate render tuning (advanced) ---------------------------------------
   # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
   # flate's own CLI and suit most setups — leave these empty to use them. The
