@@ -95,7 +95,8 @@ description = "Install the chart into the current cluster (e.g. a kind context) 
 # The e2e workflow builds the PR's image, kind-loads it, and sets
 # KONFLATE_TEST_IMAGE_TAG=e2e + pull policy Never so the test runs the code under
 # review; locally these default to the published `latest` for a quick chart check
-# (the chart appVersion is a release-time placeholder, so a tag is always needed).
+# (the stamped appVersion would also resolve, but `latest` needs no bump to stay
+# current).
 # config.repo is a placeholder; startup doesn't block on it.
 run = """
 set -e
