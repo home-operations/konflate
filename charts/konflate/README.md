@@ -56,6 +56,7 @@ Kubernetes: `>=1.25.0-0`
 | config.helmRenderCacheMb | string | `""` | Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables. |
 | config.helmTemplateCacheMb | string | `""` | Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables. |
 | config.imageVerifyTimeout | string | `""` | Timeout for a single registry existence check (see `verifyImages`). Empty = default (5s). |
+| config.kubeVersion | string | `""` | Kubernetes version charts see as `.Capabilities.KubeVersion`. Empty = the version bundled with the helm SDK konflate was built against, which may be newer than your cluster — a chart gated on the cluster version then renders differently here than in-cluster. Set `"{{ .Capabilities.KubeVersion.Version }}"` to track the cluster this release installs into, or pin a literal (e.g. `"1.33.4"`). |
 | config.logFormat | string | `"json"` | Log format: json or text. |
 | config.logLevel | string | `"info"` | Log level: debug, info, warn, or error. |
 | config.maxDiffConcurrency | int | `0` | Max concurrent diff renders; 0 = auto (from the CPU limit, capped at 4). |

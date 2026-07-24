@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"helm.sh/helm/v4/pkg/chart/common"
 
 	"github.com/home-operations/konflate/internal/prfilter"
 )
@@ -265,6 +266,16 @@ type Config struct {
 	// These map onto flate's orchestrator config; the defaults mirror flate's
 	// own CLI so an embedder gets the same caching the `flate` binary does.
 
+	// KubeVersion overrides .Capabilities.KubeVersion for every Helm chart a
+	// render templates. Empty (the default) uses the version helm bundles — the
+	// Kubernetes release the vendored helm SDK was built against — which is not
+	// necessarily the version of the cluster the repo actually deploys to, so a
+	// chart gated on the cluster's version renders differently here than it does
+	// in-cluster. Set it to the target cluster's version to match. Accepts
+	// anything helm does, so the chart can pass .Capabilities.KubeVersion.Version
+	// ("v1.33.4", suffixes and all) straight through; validated at startup.
+	KubeVersion string `env:"KONFLATE_KUBE_VERSION"`
+
 	// HelmTemplateCacheMB caps flate's in-memory Helm template-output cache —
 	// repeat HelmReleases with identical inputs skip re-templating, the single
 	// largest CPU/allocation cost of a render. In MiB. 0 disables it; a negative
@@ -475,6 +486,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: KONFLATE_REPO: %w", err)
 	}
 	cfg.Forge = forge
+
+	// Parse the kube version here so a typo fails at startup. flate parses it
+	// per chart, where the error would instead surface as a render failure on
+	// every PR — the same misconfiguration, found much later.
+	if cfg.KubeVersion != "" {
+		if _, err := common.ParseKubeVersion(cfg.KubeVersion); err != nil {
+			return nil, fmt.Errorf("config: KONFLATE_KUBE_VERSION: %w", err)
+		}
+	}
 
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = filepath.Join(xdgCacheHome(), "konflate")

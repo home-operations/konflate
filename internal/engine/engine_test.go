@@ -12,6 +12,7 @@ import (
 	"github.com/home-operations/flate/pkg/store"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/config"
 	"github.com/home-operations/konflate/internal/diff"
 )
 
@@ -26,6 +27,23 @@ func res(kind, ns, name string, extra map[string]any) map[string]any {
 		m[k] = v
 	}
 	return m
+}
+
+// The kube version is the one HelmOption konflate sets, and it reaches flate
+// only through renderCfg — an empty config must leave it unset so helm's own
+// bundled capabilities apply.
+func TestRenderCfg_KubeVersion(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Repo: "github://owner/repo"}
+	if got := New(cfg, nil).(*flateEngine).renderCfg().HelmOptions.KubeVersion; got != "" {
+		t.Errorf("unset KubeVersion = %q, want empty", got)
+	}
+
+	cfg.KubeVersion = "v1.33.4"
+	if got := New(cfg, nil).(*flateEngine).renderCfg().HelmOptions.KubeVersion; got != "v1.33.4" {
+		t.Errorf("KubeVersion = %q, want v1.33.4", got)
+	}
 }
 
 func TestRenderUsable(t *testing.T) {

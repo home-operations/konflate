@@ -22,6 +22,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.51.0
 	golang.org/x/sync v0.22.0
+	helm.sh/helm/v4 v4.2.3
 	k8s.io/apimachinery v0.36.3
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -202,7 +203,6 @@ require (
 	gopkg.in/ini.v1 v1.67.2 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
-	helm.sh/helm/v4 v4.2.3 // indirect
 	k8s.io/api v0.36.2 // indirect
 	k8s.io/apiextensions-apiserver v0.36.2 // indirect
 	k8s.io/apiserver v0.36.2 // indirect

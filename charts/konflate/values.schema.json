@@ -78,6 +78,12 @@
           "title": "imageVerifyTimeout",
           "type": "string"
         },
+        "kubeVersion": {
+          "default": "",
+          "description": "Kubernetes version charts see as `.Capabilities.KubeVersion`. Empty = the version bundled with the helm SDK konflate was built against, which may be newer than your cluster — a chart gated on the cluster version then renders differently here than in-cluster. Set `\"{{ .Capabilities.KubeVersion.Version }}\"` to track the cluster this release installs into, or pin a literal (e.g. `\"1.33.4\"`).",
+          "title": "kubeVersion",
+          "type": "string"
+        },
         "logFormat": {
           "default": "json",
           "description": "Log format: json or text.",

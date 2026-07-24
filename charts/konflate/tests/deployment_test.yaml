@@ -246,6 +246,37 @@ tests:
             name: KONFLATE_MAX_DIFF_RESOURCES
             value: "0"
 
+  - it: omits KONFLATE_KUBE_VERSION when kubeVersion is empty (helm's bundled version)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_KUBE_VERSION
+
+  - it: emits a literal KONFLATE_KUBE_VERSION when kubeVersion is set
+    set:
+      config.kubeVersion: "1.33.4"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_KUBE_VERSION
+            value: "1.33.4"
+
+  - it: resolves a templated kubeVersion against the release's capabilities
+    capabilities:
+      majorVersion: 1
+      minorVersion: 33
+    set:
+      config.kubeVersion: "{{ .Capabilities.KubeVersion.Version }}"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_KUBE_VERSION
+            value: "v1.33.0"
+
   - it: emits KONFLATE_CACHE_TTL when cacheTtl is set
     set:
       config.cacheTtl: 24h
