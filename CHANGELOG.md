@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.2](https://github.com/home-operations/konflate/compare/0.4.1...0.4.2) (2026-07-24)
+
+
+### Features
+
+* **config:** expose kube version for chart capabilities ([#375](https://github.com/home-operations/konflate/issues/375)) ([99341e9](https://github.com/home-operations/konflate/commit/99341e95b332a691fde991c118f90c9e43d4cbf0))
+* **deps:** update module github.com/prometheus/client_golang (v1.23.2 → v1.24.0) ([#364](https://github.com/home-operations/konflate/issues/364)) ([d1f5bd4](https://github.com/home-operations/konflate/commit/d1f5bd4adce2bb5141b962cae43abf30c6cd7dc1))
+
+
+### Bug Fixes
+
+* **deps:** update dependency svelte (5.56.6 → 5.56.7) ([#367](https://github.com/home-operations/konflate/issues/367)) ([3c88c22](https://github.com/home-operations/konflate/commit/3c88c22efd85a58bf7e7c8dd763785738ffdca9d))
+* **deps:** update module github.com/home-operations/flate (v0.4.10 → v0.4.12) ([#362](https://github.com/home-operations/konflate/issues/362)) ([748b44b](https://github.com/home-operations/konflate/commit/748b44ba1887011132077628d59192d14e400cef))
+* **deps:** update module github.com/klauspost/compress (v1.19.0 → v1.19.1) ([#363](https://github.com/home-operations/konflate/issues/363)) ([f05ffc1](https://github.com/home-operations/konflate/commit/f05ffc1a944ff1353d2274b041e8bb07e54f5051))
+* **deps:** update module github.com/prometheus/client_golang (v1.24.0 → v1.24.1) ([#372](https://github.com/home-operations/konflate/issues/372)) ([91d784a](https://github.com/home-operations/konflate/commit/91d784a7b68065fbdc0867b6012f3748aca028bb))
+* **deps:** update module k8s.io/apimachinery (v0.36.2 → v0.36.3) ([#371](https://github.com/home-operations/konflate/issues/371)) ([b42ba02](https://github.com/home-operations/konflate/commit/b42ba026f810850760d51e81657217f16644b5ed))
+
 ## [0.4.1](https://github.com/home-operations/konflate/compare/0.4.0...0.4.1) (2026-07-19)
 
 
