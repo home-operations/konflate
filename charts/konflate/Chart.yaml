@@ -9,8 +9,8 @@ kubeVersion: ">=1.25.0-0"
 # Stamped by release-please on every release so a git-sourced install deploys a
 # real image tag (the release workflow re-stamps both at package time anyway;
 # these keep the repo copy from going stale).
-version: 0.4.2 # x-release-please-version
-appVersion: "0.4.2" # x-release-please-version
+version: 0.4.3 # x-release-please-version
+appVersion: "0.4.3" # x-release-please-version
 home: https://github.com/home-operations/konflate
 icon: https://raw.githubusercontent.com/home-operations/konflate/main/internal/web/public/favicon.svg
 sources:

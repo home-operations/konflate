@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.3](https://github.com/home-operations/konflate/compare/0.4.2...0.4.3) (2026-07-24)
+
+
+### Features
+
+* **npm:** update dependency @playwright/test (1.61.1 → 1.62.0) ([#376](https://github.com/home-operations/konflate/issues/376)) ([db58a1e](https://github.com/home-operations/konflate/commit/db58a1e0ea48e0c343d06c20b8ad8d427f7d3b14))
+
+
+### Bug Fixes
+
+* **helm:** stamp Chart.yaml version on release ([#380](https://github.com/home-operations/konflate/issues/380)) ([22189fd](https://github.com/home-operations/konflate/commit/22189fd5f3760c21874ca2678e41d89fa756257a))
+* **npm:** update dependency svelte (5.56.7 → 5.56.8) ([#379](https://github.com/home-operations/konflate/issues/379)) ([632eec3](https://github.com/home-operations/konflate/commit/632eec343d4a97dd27ee63dc000bee3f711c43b2))
+* **test:** repair the integration suite build and gate it in CI ([#377](https://github.com/home-operations/konflate/issues/377)) ([3b73a92](https://github.com/home-operations/konflate/commit/3b73a923f9199a0aebdacae457b7f1a00a661460))
+
 ## [0.4.2](https://github.com/home-operations/konflate/compare/0.4.1...0.4.2) (2026-07-24)
 
 
