@@ -4,8 +4,7 @@
 
 **Review your GitOps pull requests as _rendered_ Flux diffs — not raw file diffs.**
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/home-operations/konflate/tests.yaml?branch=main&label=tests)](https://github.com/home-operations/konflate/actions/workflows/tests.yaml)
-[![Lint](https://img.shields.io/github/actions/workflow/status/home-operations/konflate/lint.yaml?branch=main&label=lint)](https://github.com/home-operations/konflate/actions/workflows/lint.yaml)
+[![CI](https://img.shields.io/github/actions/workflow/status/home-operations/konflate/ci.yaml?branch=main&label=ci)](https://github.com/home-operations/konflate/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/actions/workflow/status/home-operations/konflate/release.yaml?branch=main&label=release)](https://github.com/home-operations/konflate/actions/workflows/release.yaml)
 [![License](https://img.shields.io/github/license/home-operations/konflate)](https://github.com/home-operations/konflate/blob/main/LICENSE)
 
