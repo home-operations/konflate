@@ -10,6 +10,7 @@
 actionlint = "1.7.12"
 "aqua:dadav/helm-schema" = "0.23.4"
 go = "1.26.5"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 golangci-lint = "2.12.2"
 helm = "4.2.3"
 cosign = "3.1.2"
@@ -27,6 +28,10 @@ run = "go build ./..."
 [tasks.vet]
 description = "Run go vet"
 run = "go vet ./..."
+
+[tasks.vulncheck]
+description = "Scan for known vulnerabilities with govulncheck"
+run = "govulncheck ./..."
 
 [tasks.test]
 description = "Run the unit test suite with coverage"
