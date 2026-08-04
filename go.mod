@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.30.0
 	github.com/google/go-containerregistry v0.21.8
-	github.com/google/go-github/v89 v89.0.0
+	github.com/google/go-github/v90 v90.0.0
 	github.com/home-operations/flate v0.4.12
 	github.com/klauspost/compress v1.19.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
