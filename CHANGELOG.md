@@ -1,5 +1,87 @@
 # Changelog
 
+## [0.5.0](https://github.com/home-operations/konflate/compare/0.4.3...0.5.0) (2026-08-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **go:** Update module github.com/google/cel-go (v0.30.0 → v0.31.0) ([#430](https://github.com/home-operations/konflate/issues/430))
+* **go:** Update module github.com/google/go-github/v89 (v89.0.0 → v90.0.0) ([#421](https://github.com/home-operations/konflate/issues/421))
+
+### Features
+
+* **go:** update module github.com/google/cel-go (v0.29.2 → v0.30.0) ([#386](https://github.com/home-operations/konflate/issues/386)) ([f2bdfca](https://github.com/home-operations/konflate/commit/f2bdfca757c86a1fb07064de50493222dcc0efc8))
+* **go:** Update module github.com/google/cel-go (v0.30.0 → v0.31.0) ([#430](https://github.com/home-operations/konflate/issues/430)) ([69730e9](https://github.com/home-operations/konflate/commit/69730e9de6343057cc6a775adad6886970dcddb2))
+* **go:** Update module github.com/google/go-github/v89 (v89.0.0 → v90.0.0) ([#421](https://github.com/home-operations/konflate/issues/421)) ([a7b2e5c](https://github.com/home-operations/konflate/commit/a7b2e5c11e862fe0e61649fd56dddd3dc6092663))
+* **go:** update module github.com/modelcontextprotocol/go-sdk (v1.6.1 → v1.7.0) ([#396](https://github.com/home-operations/konflate/issues/396)) ([abb7832](https://github.com/home-operations/konflate/commit/abb7832cbbd0af28e1614b2e99ffea8275130087))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.51.0 → v2.52.0) ([#394](https://github.com/home-operations/konflate/issues/394)) ([3f55a21](https://github.com/home-operations/konflate/commit/3f55a2188379038a30f0b967a610c18ff5d2e786))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.52.0 → v2.53.0) ([#397](https://github.com/home-operations/konflate/issues/397)) ([87ec1b8](https://github.com/home-operations/konflate/commit/87ec1b80f7b41caf0f9ec0345f456409201d7841))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.53.0 → v2.55.0) ([#404](https://github.com/home-operations/konflate/issues/404)) ([0fc03f9](https://github.com/home-operations/konflate/commit/0fc03f9926b8d670dec17e44280f250c674c8e13))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.55.1 → v2.56.0) ([#422](https://github.com/home-operations/konflate/issues/422)) ([b979cf6](https://github.com/home-operations/konflate/commit/b979cf687c88449fb03956046f11b903203dd514))
+* **npm:** update dependency @sveltejs/vite-plugin-svelte (7.2.0 → 7.3.0) ([#431](https://github.com/home-operations/konflate/issues/431)) ([39a6890](https://github.com/home-operations/konflate/commit/39a68903276579688af494e695f69a6e8150e91e))
+* **npm:** update dependency simple-icons (16.27.1 → 16.28.0) ([#414](https://github.com/home-operations/konflate/issues/414)) ([ba5e26e](https://github.com/home-operations/konflate/commit/ba5e26e415e6c06a099fb1e7e5ba05d5d61a066a))
+* **npm:** update dependency vite (8.1.5 → 8.2.0) ([#401](https://github.com/home-operations/konflate/issues/401)) ([01a6b5e](https://github.com/home-operations/konflate/commit/01a6b5e1c040914f8eb5ab86e101ac8c40cf1bcd))
+
+
+### Bug Fixes
+
+* **ci:** fail the merge gate on cancelled jobs, and key the lint cache on the toolchain ([#402](https://github.com/home-operations/konflate/issues/402)) ([144f7a1](https://github.com/home-operations/konflate/commit/144f7a1ba38e2d86a7493b2ccd4833801ede9ab4))
+* **go:** update module github.com/go-git/go-git/v5 (v5.19.1 → v5.19.2) ([#398](https://github.com/home-operations/konflate/issues/398)) ([ea7924d](https://github.com/home-operations/konflate/commit/ea7924d31dd4585fbb5217e8cc70e43931c0706a))
+* **go:** update module github.com/google/go-containerregistry (v0.21.7 → v0.21.8) ([#407](https://github.com/home-operations/konflate/issues/407)) ([5a13abd](https://github.com/home-operations/konflate/commit/5a13abdf6609d9f6100da84cd018341ff1232136))
+* **go:** update module github.com/google/go-containerregistry (v0.21.8 → v0.21.9) ([#423](https://github.com/home-operations/konflate/issues/423)) ([3982013](https://github.com/home-operations/konflate/commit/3982013e6857df8787a10548dc46ae1b4a988899))
+* **go:** update module github.com/home-operations/flate (v0.4.12 → v0.4.14) ([#429](https://github.com/home-operations/konflate/issues/429)) ([7715e8c](https://github.com/home-operations/konflate/commit/7715e8c7ff578303a72a4cbff87a49c2328c6ed4))
+* **go:** update module github.com/klauspost/compress (v1.19.1 → v1.19.2) ([#425](https://github.com/home-operations/konflate/issues/425)) ([cdbbbfb](https://github.com/home-operations/konflate/commit/cdbbbfb55e22d7dc585eb450a536f879c649f6b6))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.55.0 → v2.55.1) ([#406](https://github.com/home-operations/konflate/issues/406)) ([69ead8d](https://github.com/home-operations/konflate/commit/69ead8dd57b3724312a85a77ba33e8c5d26d2f15))
+* **go:** update module go (1.26.4 → 1.26.5) ([#419](https://github.com/home-operations/konflate/issues/419)) ([38f22bd](https://github.com/home-operations/konflate/commit/38f22bd916e6ad363ffd2a08087fbcef0e467bc7))
+* **npm:** update dependency @playwright/test (1.62.0 → 1.62.1) ([#403](https://github.com/home-operations/konflate/issues/403)) ([d991907](https://github.com/home-operations/konflate/commit/d991907a2203e65aa76313e34d648e1e8048e98e))
+* **npm:** update dependency simple-icons (16.27.0 → 16.27.1) ([#385](https://github.com/home-operations/konflate/issues/385)) ([cabef89](https://github.com/home-operations/konflate/commit/cabef8900f79d311f0d986acfb6920574f08692c))
+* **npm:** update dependency svelte-check (4.7.3 → 4.7.4) ([#391](https://github.com/home-operations/konflate/issues/391)) ([4d817ed](https://github.com/home-operations/konflate/commit/4d817eda51e6b6286fd45fd601f3633391d6152f))
+* **npm:** update dependency svelte-check (4.7.4 → 4.7.5) ([#428](https://github.com/home-operations/konflate/issues/428)) ([c9357cd](https://github.com/home-operations/konflate/commit/c9357cdbec620882ee295c092f8217cdc9145c8e))
+* **npm:** update dependency vite (8.2.0 → 8.2.1) ([#427](https://github.com/home-operations/konflate/issues/427)) ([1d80800](https://github.com/home-operations/konflate/commit/1d808007af41faafeeb7585e04ca8840abbde7ea))
+
+
+### Documentation
+
+* add AGENTS.md with Go conventions ([#411](https://github.com/home-operations/konflate/issues/411)) ([8e93c1c](https://github.com/home-operations/konflate/commit/8e93c1c3bd4e7816c04e53e2d00fa8c721695ecd))
+* point the CI badge at ci.yaml ([#383](https://github.com/home-operations/konflate/issues/383)) ([9462e3f](https://github.com/home-operations/konflate/commit/9462e3f68a03e06a921456b08de25fc66bfe3bf0))
+
+
+### Build System
+
+* **mise:** add actionlint and refresh the lockfile ([#387](https://github.com/home-operations/konflate/issues/387)) ([16c498a](https://github.com/home-operations/konflate/commit/16c498afefa74dcc70f6f8f2be5176a5198cbd37))
+
+
+### Continuous Integration
+
+* gate pull requests on a single Build Success check ([#382](https://github.com/home-operations/konflate/issues/382)) ([509a70a](https://github.com/home-operations/konflate/commit/509a70a9e8d5b11fb26a2f5ad1911d468379e814))
+* **github-action:** Update action actions/stale (v10.4.0 → v11.0.0) ([#405](https://github.com/home-operations/konflate/issues/405)) ([319dbfb](https://github.com/home-operations/konflate/commit/319dbfba2494ef85dc07d6812ebc7e668baa1310))
+* **github-action:** Update action docker/github-builder (v1.15.0 → v1.16.0) ([#432](https://github.com/home-operations/konflate/issues/432)) ([d587c5a](https://github.com/home-operations/konflate/commit/d587c5ad2ec274a54811dd36af1f694e9d0fd54d))
+* **github-action:** Update action docker/login-action (v4.5.0 → v4.5.1) ([#390](https://github.com/home-operations/konflate/issues/390)) ([ed6f576](https://github.com/home-operations/konflate/commit/ed6f57695aa1935bfe8dba265b09c3193c74837e))
+* **github-action:** Update action docker/login-action (v4.5.2 → v4.6.0) ([#412](https://github.com/home-operations/konflate/issues/412)) ([50067b6](https://github.com/home-operations/konflate/commit/50067b6a7ccd3d5f3e9c9176a28e109b7b893fb6))
+* **github-action:** Update action home-operations/.github/actions/workflow-lint (v1.0.2 → v1.0.3) ([#418](https://github.com/home-operations/konflate/issues/418)) ([0bfd788](https://github.com/home-operations/konflate/commit/0bfd78869bd920269ef138a0a06156d00bfe337a))
+* **github-action:** Update action jdx/mise-action (v4.2.1 → v4.2.2) ([#389](https://github.com/home-operations/konflate/issues/389)) ([8e83bbe](https://github.com/home-operations/konflate/commit/8e83bbe3e868305eff6b6e5c5f66e1272ef4a12b))
+* **github-action:** Update action jdx/mise-action (v4.2.2 → v4.2.3) ([#393](https://github.com/home-operations/konflate/issues/393)) ([9516941](https://github.com/home-operations/konflate/commit/9516941bcff144b29900c945226169be34f55562))
+* **github-action:** Update action jdx/mise-action (v4.2.3 → v4.2.4) ([#420](https://github.com/home-operations/konflate/issues/420)) ([dbad13c](https://github.com/home-operations/konflate/commit/dbad13c6301e27f0f1e98985e7903e951478f1f5))
+* **github-action:** Update github-actions ([#400](https://github.com/home-operations/konflate/issues/400)) ([fcb0d58](https://github.com/home-operations/konflate/commit/fcb0d5835b2ed7e32bfec5a8d20ea11469d00ecc))
+* **github-action:** update workflow-lint action (1.0.0 → v1.0.2) ([#415](https://github.com/home-operations/konflate/issues/415)) ([14c2be6](https://github.com/home-operations/konflate/commit/14c2be60dc93f8b1788249b8b200c06d5b46a73a))
+* lint workflows with the shared composite action ([#388](https://github.com/home-operations/konflate/issues/388)) ([ae92794](https://github.com/home-operations/konflate/commit/ae92794bfb2e4dcf7f2721b9052c1e8b13dee1c7))
+* skip release-please version-bump PRs in checks ([#381](https://github.com/home-operations/konflate/issues/381)) ([5b9bb26](https://github.com/home-operations/konflate/commit/5b9bb26d992a41736a84f144a3cca0bc59959d36))
+* wire govulncheck into mise and CI ([#417](https://github.com/home-operations/konflate/issues/417)) ([2f01466](https://github.com/home-operations/konflate/commit/2f01466785c671af980fd02f18ad98cd203b6db4))
+
+
+### Miscellaneous Chores
+
+* **mise:** Lock file maintenance tool (mise) ([#408](https://github.com/home-operations/konflate/issues/408)) ([5d15a49](https://github.com/home-operations/konflate/commit/5d15a49de39145fc2943c2fe4a7c2cd050ff0cd2))
+* **mise:** prune lockfile to used platforms ([#416](https://github.com/home-operations/konflate/issues/416)) ([0b4c5a4](https://github.com/home-operations/konflate/commit/0b4c5a4d07d5f6461f73be1f1d16f4ffdcc3ae74))
+* **mise:** Update tool node (24.18.0 → v24.18.1) ([#399](https://github.com/home-operations/konflate/issues/399)) ([7372e8f](https://github.com/home-operations/konflate/commit/7372e8f4629c442fd263fe66d7ea53ff48bf36b7))
+* **mise:** Update tool node (24.18.1 → v24.19.0) ([#424](https://github.com/home-operations/konflate/issues/424)) ([1a504d7](https://github.com/home-operations/konflate/commit/1a504d7b33c831493e3ed327ad368096093eb3be))
+* **mise:** Update tool oxfmt (0.60.0 → 0.61.0) ([#392](https://github.com/home-operations/konflate/issues/392)) ([4345ecd](https://github.com/home-operations/konflate/commit/4345ecd1e55fc2008d4588bf16b9913df225ddf4))
+* **mise:** Update tool oxfmt (0.61.0 → 0.62.0) ([#426](https://github.com/home-operations/konflate/issues/426)) ([ae5dfd3](https://github.com/home-operations/konflate/commit/ae5dfd3913deec03e338990950589b1d717ec353))
+* **mise:** Update tool zizmor (1.28.0 → 1.29.0) ([#413](https://github.com/home-operations/konflate/issues/413)) ([cc0e88c](https://github.com/home-operations/konflate/commit/cc0e88c10ea9a4bcef9d66c9c26644769308b079))
+* **npm:** lock file maintenance dependency (npm) ([#409](https://github.com/home-operations/konflate/issues/409)) ([10def60](https://github.com/home-operations/konflate/commit/10def60f515cf34559f314e549c4d1148616fd03))
+* **release-please:** standardize the release pull request title pattern ([#410](https://github.com/home-operations/konflate/issues/410)) ([2a8f541](https://github.com/home-operations/konflate/commit/2a8f5410e333b4355d52a0b5e35e5303d4026ebe))
+* standardize release-please changelog sections ([#395](https://github.com/home-operations/konflate/issues/395)) ([b32ce06](https://github.com/home-operations/konflate/commit/b32ce06d04735cbdf85cb429df20693927c8dbf2))
+
 ## [0.4.3](https://github.com/home-operations/konflate/compare/0.4.2...0.4.3) (2026-07-24)
 
 
