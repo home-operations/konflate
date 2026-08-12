@@ -78,7 +78,16 @@ func init() {
 func (s *Server) uiHandler() http.Handler {
 	fileServer := http.FileServerFS(s.ui)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/assets/") {
+		path := r.URL.Path
+		// Serve the base-path-aware index.html directly; the file server would
+		// otherwise return the placeholder literal.
+		if s.indexHTML != nil && (path == "/" || path == "/index.html") {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(s.indexHTML)
+			return
+		}
+		if strings.HasPrefix(path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -196,7 +205,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
 	env.MergeCommand = s.mergeCommand(env.PR)
-	env.ReviewURL = reviewURLFromRequest(r, number)
+	env.ReviewURL = s.reviewURLFromRequest(r, number)
 	if env.Diff != nil {
 		// Shallow-copy then trim, so the cached diff keeps its rendered resources —
 		// only this response is lightened.
@@ -332,7 +341,7 @@ func (s *Server) avatarProxyPath(raw string) string {
 	}
 	mac := hmac.New(sha256.New, s.avatarKey)
 	mac.Write([]byte(raw))
-	return "/api/avatar?u=" + url.QueryEscape(raw) + "&s=" + hex.EncodeToString(mac.Sum(nil))
+	return s.cfg.BasePath + "/api/avatar?u=" + url.QueryEscape(raw) + "&s=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 // handleAvatar proxies an author avatar so the browser loads it same-origin (the

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { basePath } from './lib/base';
   import { router, initRouter } from './lib/router.svelte';
   import { store, loadPRs, loadMeta, connectWS, ensureDiff } from './lib/store.svelte';
   import { theme, cycleTheme, initTheme } from './lib/theme.svelte';
@@ -76,7 +77,7 @@
 <div class="app">
   <header class="topbar">
     <a class="brand" href="#/">
-      <img src="/favicon.svg" width="22" height="22" alt="" />
+      <img src="{basePath}/favicon.svg" width="22" height="22" alt="" />
       <span class="wordmark">konflate</span>
       <span class="conn" class:on={store.connected} title={store.connected ? 'live' : 'reconnecting…'}></span>
     </a>

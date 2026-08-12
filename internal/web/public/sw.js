@@ -8,7 +8,14 @@
 // including index.html, is network-first so an online user is always current
 // and a redeploy is picked up immediately, with the cache only as an offline
 // fallback.
+//
+// The worker is served from the same base path as the app (e.g.
+// /platform/konflate/sw.js), so it derives its scope from its own URL rather
+// than assuming the root.
 const CACHE = 'konflate-shell-v1';
+
+// Base path konflate is served under (empty string for root).
+const BASE = self.location.pathname.slice(0, -'/sw.js'.length);
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -30,10 +37,10 @@ self.addEventListener('fetch', (event) => {
   // Only our own origin and GETs; never the live-data endpoints (the websocket
   // never reaches here, but guard the API so a render is never served stale).
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) return;
+  if (url.pathname.startsWith(BASE + '/api/') || url.pathname.startsWith(BASE + '/ws')) return;
 
   // Immutable, content-hashed build assets → cache-first.
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith(BASE + '/assets/')) {
     event.respondWith(
       caches.open(CACHE).then(async (cache) => {
         const hit = await cache.match(request);
@@ -59,7 +66,7 @@ self.addEventListener('fetch', (event) => {
         const hit = await cache.match(request);
         if (hit) return hit;
         if (request.mode === 'navigate') {
-          const shell = await cache.match('/');
+          const shell = await cache.match(BASE + '/');
           if (shell) return shell;
         }
         throw err;

@@ -113,3 +113,16 @@ Name of the PVC backing the source cache (existingClaim wins).
 {{- define "konflate.cacheClaimName" -}}
 {{- default (printf "%s-cache" (include "konflate.fullname" .)) (tpl (.Values.persistence.existingClaim | default "") $) -}}
 {{- end }}
+
+{{/*
+Prepend config.basePath to a probe/API path when konflate is served under a
+subpath (preserve-prefix deployment). Empty basePath returns the path unchanged.
+*/}}
+{{- define "konflate.prefixedPath" -}}
+{{- $base := .Values.config.basePath | default "" -}}
+{{- if $base -}}
+{{- printf "%s%s" $base .path -}}
+{{- else -}}
+{{- .path -}}
+{{- end -}}
+{{- end }}

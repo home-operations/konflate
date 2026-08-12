@@ -7,8 +7,11 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -96,9 +99,11 @@ type Server struct {
 	checkMu      sync.Mutex
 	checkPending map[string]struct{}
 
-	avatarKey   []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
-	mergeTmpl   *template.Template // renders the "copy to merge" command; nil disables it
-	commentTmpl *template.Template // renders a custom PR-comment body; nil uses the default summary
+	avatarKey     []byte             // HMAC key for signing the same-origin /api/avatar proxy URLs
+	mergeTmpl     *template.Template // renders the "copy to merge" command; nil disables it
+	commentTmpl   *template.Template // renders a custom PR-comment body; nil uses the default summary
+	indexHTML     []byte             // index.html with KONFLATE_BASE_PATH replaced at startup
+	cspScriptHash string             // sha-256 hash of the injected base-path script, for the CSP
 }
 
 // New assembles a Server. ui is the embedded UI filesystem (rooted at the
@@ -124,16 +129,21 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 		imageCheck = registry.New()
 	}
 
+	script := basePathScript(cfg.BasePath)
+	sum := sha256.Sum256([]byte(script))
+
 	s := &Server{
 		cfg: cfg, prov: prov, writer: writer, engine: eng, ui: ui, log: log,
 		imageCheck: imageCheck,
 		store:      newStore(), hub: newHub(log), metrics: newMetrics(), sync: newSyncTracker(),
-		avatarKey:    avatarKey,
-		mergeTmpl:    newMergeTemplate(cfg, log),
-		commentTmpl:  newCommentTemplate(cfg, log),
-		relist:       make(chan struct{}, 1),
-		checkWake:    make(chan struct{}, 1),
-		checkPending: make(map[string]struct{}),
+		avatarKey:     avatarKey,
+		mergeTmpl:     newMergeTemplate(cfg, log),
+		commentTmpl:   newCommentTemplate(cfg, log),
+		relist:        make(chan struct{}, 1),
+		checkWake:     make(chan struct{}, 1),
+		checkPending:  make(map[string]struct{}),
+		indexHTML:     renderIndexHTML(ui, script, log),
+		cspScriptHash: base64.StdEncoding.EncodeToString(sum[:]),
 	}
 
 	// Durability: persist rendered diffs under the (operator-persisted) cache
@@ -414,11 +424,16 @@ func (s *Server) postComment(pr api.PR, st api.JobStatus) {
 }
 
 // reviewURL is konflate's review link for a PR, built from KONFLATE_PUBLIC_URL;
-// "" when that's unset (the status is then posted without a link).
+// "" when that's unset (the status is then posted without a link). When
+// BasePath is set and PublicURL does not already end with it, BasePath is
+// appended so the two settings cannot drift silently.
 func (s *Server) reviewURL(number int) string {
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
 	if base == "" {
 		return ""
+	}
+	if p := s.cfg.BasePath; p != "" && !strings.HasSuffix(base, p) {
+		base += p
 	}
 	return fmt.Sprintf("%s/#/pr/%d", base, number)
 }
@@ -771,6 +786,34 @@ func (s *Server) refreshStale(now time.Time) {
 	}
 }
 
+// indexHTMLPlaceholder is replaced at startup with a small script that exposes
+// the configured base path to the SPA. It must match the literal in
+// internal/web/index.html.
+const indexHTMLPlaceholder = "%KONFLATE_BASE_PATH%"
+
+// basePathScript returns the inline script content injected into index.html.
+func basePathScript(basePath string) string {
+	return fmt.Sprintf("window.KONFLATE_BASE_PATH=%q", basePath)
+}
+
+// renderIndexHTML reads index.html from the embedded UI filesystem and replaces
+// the base-path placeholder with script. If index.html is absent (a clean
+// checkout before the UI is built), it returns nil and the UI simply won't be
+// served — the same behaviour as before base-path support. It logs a warning
+// when the placeholder is missing, so a silent no-op in a built UI is visible.
+func renderIndexHTML(ui fs.FS, script string, log *slog.Logger) []byte {
+	b, err := fs.ReadFile(ui, "index.html")
+	if err != nil {
+		return nil
+	}
+	if !bytes.Contains(b, []byte(indexHTMLPlaceholder)) {
+		log.Warn("index.html missing base-path placeholder; SPA base path will not be set",
+			"placeholder", indexHTMLPlaceholder)
+		return b
+	}
+	return []byte(strings.ReplaceAll(string(b), indexHTMLPlaceholder, script))
+}
+
 // metricsHandler builds the mux for the separate, optional metrics listener:
 // /metrics only, kept off the main (possibly public-facing) port. Health
 // probes are NOT served here — /healthz and /readyz live on the main mux, so
@@ -786,33 +829,37 @@ func (s *Server) metricsHandler() http.Handler {
 // misconfiguration is visible rather than a silent 404. The /healthz and
 // /readyz probes are served here (the pair standard: health rides the main
 // port so the optional metrics listener can be disabled without breaking
-// probes).
+// probes). When Config.BasePath is set, every route on the main listener is
+// registered under that prefix; the proxy is expected to forward requests with
+// the prefix preserved. /metrics on the separate metrics listener is not
+// prefixed.
 func (s *Server) mainHandler() http.Handler {
 	mux := http.NewServeMux()
+	p := s.cfg.BasePath
 
-	mux.HandleFunc("GET /healthz", handleHealth)
-	mux.HandleFunc("GET /readyz", handleHealth)
+	mux.HandleFunc("GET "+routePath(p, "/healthz"), handleHealth)
+	mux.HandleFunc("GET "+routePath(p, "/readyz"), handleHealth)
 
-	mux.HandleFunc("GET /api/meta", s.handleMeta)
-	mux.HandleFunc("GET /api/prs", s.handleListPRs)
-	mux.HandleFunc("GET /api/prs/{number}/diff", s.handleDiff)
-	mux.HandleFunc("GET /api/prs/{number}/summary", s.handleSummary)
-	mux.HandleFunc("GET /api/avatar", s.handleAvatar)
-	mux.HandleFunc("GET /ws", s.hub.serveWS)
+	mux.HandleFunc("GET "+routePath(p, "/api/meta"), s.handleMeta)
+	mux.HandleFunc("GET "+routePath(p, "/api/prs"), s.handleListPRs)
+	mux.HandleFunc("GET "+routePath(p, "/api/prs/{number}/diff"), s.handleDiff)
+	mux.HandleFunc("GET "+routePath(p, "/api/prs/{number}/summary"), s.handleSummary)
+	mux.HandleFunc("GET "+routePath(p, "/api/avatar"), s.handleAvatar)
+	mux.HandleFunc("GET "+routePath(p, "/ws"), s.hub.serveWS)
 
 	// No manual-refresh endpoint: konflate auto-refreshes (per-PR staleness +
 	// re-list) so a public instance exposes no unauthenticated trigger. The
 	// inbound webhook/push endpoints are served only when their own secret is
 	// configured; otherwise they return 501 so a misconfiguration is visible.
 	if s.cfg.PushEnabled() {
-		mux.HandleFunc("POST /api/prs/{number}/refresh", s.handlePush)
+		mux.HandleFunc("POST "+routePath(p, "/api/prs/{number}/refresh"), s.handlePush)
 	} else {
-		mux.HandleFunc("POST /api/prs/{number}/refresh", handleDisabled)
+		mux.HandleFunc("POST "+routePath(p, "/api/prs/{number}/refresh"), handleDisabled)
 	}
 	if s.cfg.WebhookEnabled() {
-		mux.HandleFunc("POST /hooks", s.handleWebhook)
+		mux.HandleFunc("POST "+routePath(p, "/hooks"), s.handleWebhook)
 	} else {
-		mux.HandleFunc("POST /hooks", handleDisabled)
+		mux.HandleFunc("POST "+routePath(p, "/hooks"), handleDisabled)
 	}
 
 	// Read-only MCP endpoint (opt-in): exposes the same rendered-diff analysis as
@@ -822,22 +869,46 @@ func (s *Server) mainHandler() http.Handler {
 	// against it and panic at registration).
 	if s.cfg.MCPEnabled() {
 		h := s.mcpHandler()
-		mux.Handle("POST /mcp", h)
-		mux.Handle("GET /mcp", h)
-		mux.Handle("DELETE /mcp", h)
+		mux.Handle("POST "+routePath(p, "/mcp"), h)
+		mux.Handle("GET "+routePath(p, "/mcp"), h)
+		mux.Handle("DELETE "+routePath(p, "/mcp"), h)
 	}
 
-	mux.Handle("GET /", s.uiHandler())
+	if p != "" {
+		// Redirect the bare prefix to the trailing-slash form so relative asset
+		// URLs generated by Vite resolve against the base path, not its parent.
+		mux.HandleFunc("GET "+p, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, p+"/", http.StatusMovedPermanently)
+		})
+	}
+
+	ui := s.uiHandler()
+	if p != "" {
+		// The file server expects paths relative to the embedded FS root;
+		// strip the configured prefix before serving static assets.
+		ui = http.StripPrefix(p, ui)
+	}
+	mux.Handle("GET "+routePath(p, "/"), ui)
 
 	return s.recoverer(s.accessLog(s.securityHeaders(mux)))
 }
 
+// routePath joins a base path prefix with a route pattern. An empty prefix
+// returns the route unchanged.
+func routePath(prefix, route string) string {
+	if prefix == "" {
+		return route
+	}
+	return prefix + route
+}
+
 // securityHeaders applies a strict CSP and related headers to every response.
-// script-src 'self' blocks injected inline scripts — the core XSS mitigation,
-// since diff bodies carry server-rendered (chroma-escaped) HTML.
+// script-src 'self' plus the hash of the injected base-path script blocks other
+// injected inline scripts — the core XSS mitigation, since diff bodies carry
+// server-rendered (chroma-escaped) HTML.
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
-	const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-		"script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+	csp := "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+		"script-src 'self' 'sha256-" + s.cspScriptHash + "'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Content-Security-Policy", csp)

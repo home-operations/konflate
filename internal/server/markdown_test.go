@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/home-operations/konflate/internal/api"
+	"github.com/home-operations/konflate/internal/config"
 )
 
 func sampleSummaryEnv() api.DiffEnvelope {
@@ -275,11 +276,13 @@ func TestShortVer(t *testing.T) {
 // and a forged scheme clamped to https.
 func TestReviewURLFromRequest_RejectsInjection(t *testing.T) {
 	t.Parallel()
+	s := &Server{cfg: &config.Config{BasePath: ""}}
+
 	// A well-formed forwarded host + proto → the normal review URL.
 	r := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
 	r.Header.Set("X-Forwarded-Host", "konflate.example")
 	r.Header.Set("X-Forwarded-Proto", "https")
-	if got := reviewURLFromRequest(r, 7); got != "https://konflate.example/#/pr/7" {
+	if got := s.reviewURLFromRequest(r, 7); got != "https://konflate.example/#/pr/7" {
 		t.Errorf("valid host/proto: got %q", got)
 	}
 	// An X-Forwarded-Host carrying Markdown link-breakout characters is ignored in
@@ -288,20 +291,57 @@ func TestReviewURLFromRequest_RejectsInjection(t *testing.T) {
 	r2.Host = "konflate.example"
 	r2.Header.Set("X-Forwarded-Proto", "https")
 	r2.Header.Set("X-Forwarded-Host", "evil.example) [inject](https://attacker.example")
-	if got := reviewURLFromRequest(r2, 7); got != "https://konflate.example/#/pr/7" {
+	if got := s.reviewURLFromRequest(r2, 7); got != "https://konflate.example/#/pr/7" {
 		t.Errorf("injected X-Forwarded-Host must fall back to the request Host, got %q", got)
 	}
 	// A forged X-Forwarded-Proto is clamped to https.
 	r3 := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
 	r3.Host = "konflate.example"
 	r3.Header.Set("X-Forwarded-Proto", "javascript:alert(1)//")
-	if got := reviewURLFromRequest(r3, 7); got != "https://konflate.example/#/pr/7" {
+	if got := s.reviewURLFromRequest(r3, 7); got != "https://konflate.example/#/pr/7" {
 		t.Errorf("forged scheme must clamp to https, got %q", got)
 	}
 	// No usable host at all → no link (rather than a malformed one).
 	r4 := httptest.NewRequest(http.MethodGet, "/api/prs/7/summary", nil)
 	r4.Host = "bad host) with (spaces"
-	if got := reviewURLFromRequest(r4, 7); got != "" {
+	if got := s.reviewURLFromRequest(r4, 7); got != "" {
 		t.Errorf("an unusable host must yield no link, got %q", got)
+	}
+}
+
+func TestReviewURLFromRequest_BasePath(t *testing.T) {
+	t.Parallel()
+	s := &Server{cfg: &config.Config{BasePath: "/platform/konflate"}}
+	r := httptest.NewRequest(http.MethodGet, "/platform/konflate/api/prs/7/summary", nil)
+	r.Host = "my-domain.tld"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	want := "https://my-domain.tld/platform/konflate/#/pr/7"
+	if got := s.reviewURLFromRequest(r, 7); got != want {
+		t.Errorf("base path: got %q, want %q", got, want)
+	}
+}
+
+func TestReviewURL_AppendsBasePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		public   string
+		basePath string
+		want     string
+	}{
+		{"empty public URL returns empty", "", "/platform/konflate", ""},
+		{"root base path unchanged", "https://konflate.example", "", "https://konflate.example/#/pr/7"},
+		{"appends basePath", "https://konflate.example", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
+		{"does not double-append", "https://konflate.example/platform/konflate", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
+		{"trailing slash normalized", "https://konflate.example/", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Server{cfg: &config.Config{PublicURL: tt.public, BasePath: tt.basePath}}
+			if got := s.reviewURL(7); got != tt.want {
+				t.Errorf("reviewURL() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

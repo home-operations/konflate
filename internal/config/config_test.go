@@ -528,6 +528,50 @@ func TestLoad_PartialAppCredential(t *testing.T) {
 	})
 }
 
+func TestLoad_BasePath(t *testing.T) {
+	setRepo := func() { t.Setenv("KONFLATE_REPO", "github://owner/repo") }
+
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr string
+	}{
+		{"empty is root", "", "", ""},
+		{"slash is root", "/", "", ""},
+		{"simple path", "/platform/konflate", "/platform/konflate", ""},
+		{"trailing slash trimmed", "/platform/konflate/", "/platform/konflate", ""},
+		{"leading space trimmed", "  /platform/konflate  ", "/platform/konflate", ""},
+		{"leading slashes normalized", "//a", "/a", ""},
+		{"trailing slashes normalized", "/a//", "/a", ""},
+		{"missing leading slash errors", "platform/konflate", "", "must start with /"},
+		{"empty segment errors", "/platform//konflate", "", "empty"},
+		{"dot segment errors", "/./konflate", "", "."},
+		{"dotdot segment errors", "/platform/../konflate", "", ".."},
+		{"query errors", "/konflate?x=1", "", "query or fragment"},
+		{"fragment errors", "/konflate#x", "", "query or fragment"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRepo()
+			t.Setenv("KONFLATE_BASE_PATH", tt.value)
+			cfg, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Load(%q) error = %v, want containing %q", tt.value, err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(%q): %v", tt.value, err)
+			}
+			if cfg.BasePath != tt.want {
+				t.Errorf("BasePath = %q, want %q", cfg.BasePath, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoad_StatusCheckName(t *testing.T) {
 	t.Run("defaults to Konflate when unset", func(t *testing.T) {
 		t.Setenv("KONFLATE_REPO", "github://owner/repo")

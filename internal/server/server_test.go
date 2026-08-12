@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -1452,9 +1454,107 @@ func TestServer_HealthAndSecurityHeaders(t *testing.T) {
 	}
 }
 
+// TestServer_CSPIncludesBasePathHash asserts the CSP allows exactly the inline
+// script injected into index.html, so the SPA can read window.KONFLATE_BASE_PATH
+// under a strict script-src policy.
+func TestServer_CSPIncludesBasePathHash(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	cfg.BasePath = "/platform/konflate"
+	ui := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<script>%KONFLATE_BASE_PATH%</script>")},
+	}
+	s := New(cfg, &fakeProvider{}, okEngine(), ui, discardLog())
+	h := s.mainHandler()
+
+	rec := do(h, "GET", "/platform/konflate/", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("index: %d, want 200", rec.Code)
+	}
+
+	wantScript := `window.KONFLATE_BASE_PATH="/platform/konflate"`
+	if !strings.Contains(rec.Body.String(), wantScript) {
+		t.Fatalf("index.html missing injected script: %q", rec.Body.String())
+	}
+
+	sum := sha256.Sum256([]byte(wantScript))
+	wantHash := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+	csp := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src 'self' "+wantHash) {
+		t.Errorf("CSP does not include expected hash %s: %q", wantHash, csp)
+	}
+}
+
+// TestServer_RenderIndexHTML_LogsMissingPlaceholder asserts a missing placeholder
+// is logged at startup, so a future build change that strips it is visible.
+func TestServer_RenderIndexHTML_LogsMissingPlaceholder(t *testing.T) {
+	t.Parallel()
+	var buf strings.Builder
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	ui := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<title>konflate</title>")}}
+
+	b := renderIndexHTML(ui, basePathScript("/platform/konflate"), log)
+	if !bytes.Equal(b, []byte("<title>konflate</title>")) {
+		t.Errorf("renderIndexHTML returned %q, want unchanged bytes", b)
+	}
+	if !strings.Contains(buf.String(), "missing base-path placeholder") {
+		t.Errorf("missing placeholder not logged; got %q", buf.String())
+	}
+}
+
 // TestServer_MetricsHandler asserts the optional metrics listener is
 // metrics-only: the /healthz and /readyz probes live on the main mux (the pair
 // standard), so disabling metrics can never break the probes.
+func TestServer_BasePathRouting(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	cfg.BasePath = "/platform/konflate"
+	ui := fstest.MapFS{
+		"index.html":           &fstest.MapFile{Data: []byte("<!doctype html><title>konflate</title><script>%KONFLATE_BASE_PATH%</script>")},
+		"assets/app-9f8e7d.js": &fstest.MapFile{Data: []byte("console.log(1)")},
+	}
+	s := New(cfg, &fakeProvider{}, okEngine(), ui, discardLog())
+	h := s.mainHandler()
+
+	// Routes live under the configured prefix.
+	rec := do(h, "GET", "/platform/konflate/healthz", nil, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ok") {
+		t.Errorf("base-path healthz: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "GET", "/healthz", nil, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("root healthz without prefix: %d, want 404", rec.Code)
+	}
+
+	// Bare prefix redirects to the trailing-slash form so relative asset URLs
+	// resolve against the base path.
+	rec = do(h, "GET", "/platform/konflate", nil, nil)
+	if rec.Code != http.StatusMovedPermanently {
+		t.Errorf("bare prefix redirect status = %d, want 301", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/platform/konflate/" {
+		t.Errorf("bare prefix redirect Location = %q, want /platform/konflate/", got)
+	}
+
+	// index.html is served with the base-path placeholder replaced.
+	rec = do(h, "GET", "/platform/konflate/", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Errorf("base-path index: %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `window.KONFLATE_BASE_PATH="/platform/konflate"`) {
+		t.Errorf("index.html missing base-path injection: %q", body)
+	}
+
+	// Static assets are reachable under the prefix and keep their cache headers.
+	rec = do(h, "GET", "/platform/konflate/assets/app-9f8e7d.js", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Errorf("base-path asset: %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Errorf("asset Cache-Control = %q, want immutable", got)
+	}
+}
+
 func TestServer_MetricsHandler(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, okEngine())

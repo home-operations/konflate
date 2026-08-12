@@ -11,6 +11,7 @@ import tailwindcss from '@tailwindcss/vite';
 // a clean checkout.
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
+  base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,

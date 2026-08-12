@@ -15,6 +15,7 @@ import type {
   Warning,
   WSEvent,
 } from './types';
+import { basePath } from './base';
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = unfiltered;
@@ -321,7 +322,7 @@ async function getJSON<T>(path: string): Promise<T> {
 
 export async function loadMeta(): Promise<void> {
   try {
-    store.meta = await getJSON<Meta>('/api/meta');
+    store.meta = await getJSON<Meta>(`${basePath}/api/meta`);
     store.sync = store.meta.sync ?? null; // seed the banner from the initial poll health
   } catch (err) {
     console.error('loadMeta', err);
@@ -330,7 +331,7 @@ export async function loadMeta(): Promise<void> {
 
 export async function loadPRs(): Promise<void> {
   try {
-    store.prs = await getJSON<PRStatus[]>('/api/prs');
+    store.prs = await getJSON<PRStatus[]>(`${basePath}/api/prs`);
   } catch (err) {
     console.error('loadPRs', err);
   } finally {
@@ -361,7 +362,7 @@ export function ensureDiff(n: number): void {
 
 async function loadDiff(n: number): Promise<void> {
   try {
-    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/diff`);
+    const env = await getJSON<DiffEnvelope>(`${basePath}/api/prs/${n}/diff`);
     if (store.diffFor !== n) return; // route moved on
     applyEnvelope(env);
   } catch (err) {
@@ -390,7 +391,7 @@ async function loadPreview(n: number, headSha: string): Promise<void> {
   try {
     // The lean summary endpoint: the headline facts without the per-resource
     // render, so a row preview doesn't pull the whole diff payload.
-    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/summary`);
+    const env = await getJSON<DiffEnvelope>(`${basePath}/api/prs/${n}/summary`);
     if (store.previews[n]?.headSha !== headSha) return; // a newer expand superseded this
     if (env.status === 'ready' && env.diff) {
       const d = env.diff;
@@ -455,7 +456,7 @@ let wsAttempt = 0;
 
 export function connectWS(): void {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  const ws = new WebSocket(`${proto}://${location.host}${basePath}/ws`);
   ws.addEventListener('open', () => {
     store.connected = true;
     // A reconnect (not the first connect) means we were disconnected: any events

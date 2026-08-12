@@ -196,6 +196,10 @@ spec:
             - name: KONFLATE_PUBLIC_URL
               value: {{ tpl . $ | quote }}
             {{- end }}
+            {{- with .Values.config.basePath }}
+            - name: KONFLATE_BASE_PATH
+              value: {{ tpl . $ | quote }}
+            {{- end }}
             {{- with .Values.config.appClientId }}
             - name: KONFLATE_APP_CLIENT_ID
               value: {{ tpl . $ | quote }}
@@ -236,12 +240,30 @@ spec:
             {{- end }}
           {{- with .Values.startupProbe }}
           startupProbe:
-            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- $probe := merge (dict) . -}}
+            {{- if $probe.httpGet -}}
+            {{- $httpGet := merge (dict) $probe.httpGet -}}
+            {{- $_ := set $httpGet "path" (include "konflate.prefixedPath" (dict "path" $probe.httpGet.path "Values" $.Values)) -}}
+            {{- $_ := set $probe "httpGet" $httpGet -}}
+            {{- end -}}
+            {{- tpl (toYaml $probe) $ | nindent 12 }}
           {{- end }}
           livenessProbe:
-            {{- tpl (toYaml .Values.livenessProbe) $ | nindent 12 }}
+            {{- $probe := merge (dict) .Values.livenessProbe -}}
+            {{- if $probe.httpGet -}}
+            {{- $httpGet := merge (dict) $probe.httpGet -}}
+            {{- $_ := set $httpGet "path" (include "konflate.prefixedPath" (dict "path" $probe.httpGet.path "Values" $.Values)) -}}
+            {{- $_ := set $probe "httpGet" $httpGet -}}
+            {{- end -}}
+            {{- tpl (toYaml $probe) $ | nindent 12 }}
           readinessProbe:
-            {{- tpl (toYaml .Values.readinessProbe) $ | nindent 12 }}
+            {{- $probe := merge (dict) .Values.readinessProbe -}}
+            {{- if $probe.httpGet -}}
+            {{- $httpGet := merge (dict) $probe.httpGet -}}
+            {{- $_ := set $httpGet "path" (include "konflate.prefixedPath" (dict "path" $probe.httpGet.path "Values" $.Values)) -}}
+            {{- $_ := set $probe "httpGet" $httpGet -}}
+            {{- end -}}
+            {{- tpl (toYaml $probe) $ | nindent 12 }}
           {{- with .Values.resources }}
           resources:
             {{- tpl (toYaml .) $ | nindent 12 }}

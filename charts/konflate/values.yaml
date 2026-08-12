@@ -181,8 +181,10 @@ config:
   prComments: false
   # -- Optional Go text/template for the PR-comment body, replacing the built-in summary. When set, the chart mounts it (a ConfigMap) and points `KONFLATE_PR_COMMENT_TEMPLATE_FILE` at it. The konflate marker is injected automatically. Context: `.PR`, `.Diff`, `.ReviewURL`, `.Summary` (the default body). Passed verbatim (NOT tpl'd) — it's konflate's own template. See the README.
   prCommentTemplate: ""
-  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.
+  # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link. `basePath` is appended automatically when it is set and not already present.
   publicUrl: ""
+  # -- URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. The app registers every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved.
+  basePath: ""
   # -- GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey`, konflate mints short-lived installation tokens instead of carrying a standing PAT; the installation is auto-detected from the repo.
   appClientId: ""
   # Extra raw env vars merged into the container (advanced). konflate already

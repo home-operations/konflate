@@ -16,6 +16,12 @@
           "title": "appClientId",
           "type": "string"
         },
+        "basePath": {
+          "default": "",
+          "description": "URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. The app registers every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved.",
+          "title": "basePath",
+          "type": "string"
+        },
         "cacheTtl": {
           "default": "",
           "description": "Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); \"0\" disables the sweep.",
@@ -140,7 +146,7 @@
         },
         "publicUrl": {
           "default": "",
-          "description": "konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link.",
+          "description": "konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link. `basePath` is appended automatically when it is set and not already present.",
           "title": "publicUrl",
           "type": "string"
         },

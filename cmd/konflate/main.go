@@ -60,6 +60,7 @@ func run() error {
 		"webhook", cfg.WebhookEnabled(),
 		"push", cfg.PushEnabled(),
 		"mcp", cfg.MCPEnabled(),
+		"base_path", cfg.BasePath,
 	)
 
 	prov, err := provider.New(cfg)
