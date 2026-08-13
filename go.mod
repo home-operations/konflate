@@ -1,6 +1,6 @@
 module github.com/home-operations/konflate
 
-go 1.26.5
+go 1.26.6
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
