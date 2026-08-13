@@ -22,7 +22,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	gitlab.com/gitlab-org/api/client-go/v2 v2.58.0
 	golang.org/x/sync v0.22.0
-	helm.sh/helm/v4 v4.2.3
+	helm.sh/helm/v4 v4.2.4
 	k8s.io/apimachinery v0.36.3
 	sigs.k8s.io/yaml v1.6.0
 )
