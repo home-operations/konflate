@@ -23,7 +23,7 @@ require (
 	gitlab.com/gitlab-org/api/client-go/v2 v2.58.1
 	golang.org/x/sync v0.22.0
 	helm.sh/helm/v4 v4.2.4
-	k8s.io/apimachinery v0.36.3
+	k8s.io/apimachinery v0.36.4
 	sigs.k8s.io/yaml v1.6.0
 )
 
