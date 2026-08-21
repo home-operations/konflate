@@ -560,6 +560,9 @@ func normalizeBasePath(cfg *Config) error {
 	if strings.ContainsAny(p, "?#") {
 		return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain query or fragment")
 	}
+	if strings.ContainsAny(p, "{}*%:$") || strings.Contains(p, "...") {
+		return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain ServeMux pattern syntax")
+	}
 	// net/url parsing would accept "/foo/../bar" as a path; split and check each
 	// segment to reject traversal.
 	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {

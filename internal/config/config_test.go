@@ -550,6 +550,13 @@ func TestLoad_BasePath(t *testing.T) {
 		{"dotdot segment errors", "/platform/../konflate", "", ".."},
 		{"query errors", "/konflate?x=1", "", "query or fragment"},
 		{"fragment errors", "/konflate#x", "", "query or fragment"},
+		{"wildcard segment errors", "/apps/{tenant}", "", "ServeMux pattern syntax"},
+		{"embedded wildcard errors", "/foo{x}bar", "", "ServeMux pattern syntax"},
+		{"star in segment errors", "/foo*bar", "", "ServeMux pattern syntax"},
+		{"ellipsis in segment errors", "/foo...bar", "", "ServeMux pattern syntax"},
+		{"colon in segment errors", "/foo:bar", "", "ServeMux pattern syntax"},
+		{"dollar in segment errors", "/foo$bar", "", "ServeMux pattern syntax"},
+		{"percent in segment errors", "/foo%bar", "", "ServeMux pattern syntax"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
