@@ -119,7 +119,7 @@ Prepend config.basePath to a probe/API path when konflate is served under a
 subpath (preserve-prefix deployment). Empty basePath returns the path unchanged.
 */}}
 {{- define "konflate.prefixedPath" -}}
-{{- $base := .Values.config.basePath | default "" -}}
+{{- $base := .Values.config.basePath | default "" | trim | trimSuffix "/" -}}
 {{- if $base -}}
 {{- printf "%s%s" $base .path -}}
 {{- else -}}

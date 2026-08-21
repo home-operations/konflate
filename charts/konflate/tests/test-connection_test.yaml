@@ -23,3 +23,11 @@ tests:
       - contains:
           path: spec.containers[0].args
           content: http://RELEASE-NAME-konflate:8080/readyz
+
+  - it: normalizes a trailing slash in basePath for the test curl URL
+    set:
+      config.basePath: /platform/konflate/
+    asserts:
+      - contains:
+          path: spec.containers[0].args
+          content: http://RELEASE-NAME-konflate:8080/platform/konflate/readyz
