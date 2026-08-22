@@ -18,7 +18,7 @@ helm-docs = "1.14.2"
 lefthook = "2.1.10"
 node = "24.19.0"
 oxfmt = "0.63.0"
-yq = "4.53.3"
+yq = "4.53.4"
 zizmor = "1.29.0"
 
 [tasks.build]
