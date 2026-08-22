@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/home-operations/konflate/compare/0.6.0...0.6.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **go:** update module github.com/home-operations/flate (v0.5.1 → v0.6.0) ([#463](https://github.com/home-operations/konflate/issues/463)) ([6a98e92](https://github.com/home-operations/konflate/commit/6a98e92e3b7f29b06fdc0b16fd721edfcb9256f1))
+
 ## [0.6.0](https://github.com/home-operations/konflate/compare/0.5.0...0.6.0) (2026-08-22)
 
 
