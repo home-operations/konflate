@@ -196,6 +196,10 @@ spec:
             - name: KONFLATE_PUBLIC_URL
               value: {{ tpl . $ | quote }}
             {{- end }}
+            {{- with .Values.config.basePath }}
+            - name: KONFLATE_BASE_PATH
+              value: {{ include "konflate.basePath" $ | quote }}
+            {{- end }}
             {{- with .Values.config.appClientId }}
             - name: KONFLATE_APP_CLIENT_ID
               value: {{ tpl . $ | quote }}
@@ -236,12 +240,12 @@ spec:
             {{- end }}
           {{- with .Values.startupProbe }}
           startupProbe:
-            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- include "konflate.probeSpec" (dict "probe" . "root" $) | nindent 12 }}
           {{- end }}
           livenessProbe:
-            {{- tpl (toYaml .Values.livenessProbe) $ | nindent 12 }}
+            {{- include "konflate.probeSpec" (dict "probe" .Values.livenessProbe "root" $) | nindent 12 }}
           readinessProbe:
-            {{- tpl (toYaml .Values.readinessProbe) $ | nindent 12 }}
+            {{- include "konflate.probeSpec" (dict "probe" .Values.readinessProbe "root" $) | nindent 12 }}
           {{- with .Values.resources }}
           resources:
             {{- tpl (toYaml .) $ | nindent 12 }}

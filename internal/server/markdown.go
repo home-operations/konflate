@@ -381,8 +381,8 @@ func isHex(s string) bool {
 
 // reviewURLFromRequest reconstructs konflate's own public URL for a PR's review
 // from the inbound request, honouring the usual reverse-proxy headers (konflate
-// typically sits behind an ingress).
-func reviewURLFromRequest(r *http.Request, number int) string {
+// typically sits behind an ingress) and the configured base path.
+func (s *Server) reviewURLFromRequest(r *http.Request, number int) string {
 	scheme := schemeHTTPS
 	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
 		first, _, _ := strings.Cut(p, ",")
@@ -407,7 +407,7 @@ func reviewURLFromRequest(r *http.Request, number int) string {
 	if !validHost(host) {
 		return ""
 	}
-	return fmt.Sprintf("%s://%s/#/pr/%d", scheme, host, number)
+	return fmt.Sprintf("%s://%s%s/#/pr/%d", scheme, host, s.cfg.BasePath, number)
 }
 
 // validHost reports whether h is a plain host[:port] (or a bracketed IPv6 literal)

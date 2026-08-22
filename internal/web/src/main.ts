@@ -13,7 +13,9 @@ if (!target) throw new Error('#app mount point missing');
 // is silent and the app works fine without it.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // Relative scope so the worker governs the base path konflate is served
+    // under, whether that is the root or a subpath like /platform/konflate.
+    void navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
   });
 }
 

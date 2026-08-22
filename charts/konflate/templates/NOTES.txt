@@ -3,12 +3,12 @@ konflate is reviewing {{ tpl .Values.config.repo $ }}.
 Open the UI:
 
   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "konflate.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
-  # then browse http://localhost:{{ .Values.service.port }}
+  # then browse http://localhost:{{ .Values.service.port }}{{ include "konflate.basePath" . }}/
 
 {{ if .Values.ingress.enabled -}}
 Or via ingress:
 {{- range .Values.ingress.hosts }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ tpl .host $ }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ tpl .host $ }}{{ include "konflate.basePath" $ }}
 {{- end }}
 {{ end -}}
 

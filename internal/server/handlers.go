@@ -196,7 +196,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	env.PR.AuthorAvatar = s.avatarProxyPath(env.PR.AuthorAvatar)
 	env.MergeCommand = s.mergeCommand(env.PR)
-	env.ReviewURL = reviewURLFromRequest(r, number)
+	env.ReviewURL = s.reviewURLFromRequest(r, number)
 	if env.Diff != nil {
 		// Shallow-copy then trim, so the cached diff keeps its rendered resources —
 		// only this response is lightened.
@@ -332,7 +332,7 @@ func (s *Server) avatarProxyPath(raw string) string {
 	}
 	mac := hmac.New(sha256.New, s.avatarKey)
 	mac.Write([]byte(raw))
-	return "/api/avatar?u=" + url.QueryEscape(raw) + "&s=" + hex.EncodeToString(mac.Sum(nil))
+	return s.cfg.BasePath + "/api/avatar?u=" + url.QueryEscape(raw) + "&s=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 // handleAvatar proxies an author avatar so the browser loads it same-origin (the

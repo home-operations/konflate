@@ -15,6 +15,7 @@ import type {
   Warning,
   WSEvent,
 } from './types';
+import { basePath } from './base';
 import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = unfiltered;
@@ -313,8 +314,10 @@ export function adjacentResource(delta: number): void {
 
 // ---- API ------------------------------------------------------------------
 
+// Prefixes basePath here, once, so call sites stay root-relative and a future
+// endpoint can't forget it (a miss would 404 only in subpath deployments).
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { Accept: 'application/json' } });
+  const res = await fetch(basePath + path, { headers: { Accept: 'application/json' } });
   if (!res.ok && res.status !== 202) throw new Error(`${path}: HTTP ${res.status}`);
   return (await res.json()) as T;
 }
@@ -455,7 +458,7 @@ let wsAttempt = 0;
 
 export function connectWS(): void {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  const ws = new WebSocket(`${proto}://${location.host}${basePath}/ws`);
   ws.addEventListener('open', () => {
     store.connected = true;
     // A reconnect (not the first connect) means we were disconnected: any events

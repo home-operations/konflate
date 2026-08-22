@@ -15,12 +15,13 @@ test('installable PWA: manifest, icons, apple meta, and service worker', async (
   await stub(page);
   await page.goto('/');
 
-  // Manifest is linked and parses with the install-critical fields.
-  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
+  // Manifest is linked (relative, so it follows the deployment base path) and
+  // parses with the install-critical fields.
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', './manifest.webmanifest');
   const manifest = await page.evaluate(() => fetch('/manifest.webmanifest').then((r) => r.json()));
   expect(manifest.name).toBe('konflate');
   expect(manifest.display).toBe('standalone');
-  expect(manifest.start_url).toBe('/');
+  expect(manifest.start_url).toBe('./');
   const sizes = (manifest.icons as { sizes: string }[]).map((i) => i.sizes);
   expect(sizes).toEqual(expect.arrayContaining(['192x192', '512x512']));
   expect((manifest.icons as { purpose?: string }[]).some((i) => i.purpose === 'maskable')).toBe(true);

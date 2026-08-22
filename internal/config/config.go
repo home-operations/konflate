@@ -120,6 +120,14 @@ type Config struct {
 	// The SPA derives its own URLs from the request and never needs this.
 	PublicURL string `env:"KONFLATE_PUBLIC_URL"`
 
+	// BasePath is the URL path prefix konflate is served under (e.g.
+	// /platform/konflate). Empty means the root path. The server registers every
+	// route on the main listener under this prefix, prefixes internally-generated
+	// URLs with it, and injects it into the SPA at serve time. The separate metrics
+	// listener's /metrics is not prefixed. It must start with / and must not end
+	// with /; it is normalized in Load.
+	BasePath string `env:"KONFLATE_BASE_PATH"`
+
 	// PRFilterExpr is a CEL expression deciding which PRs konflate tracks (lists,
 	// renders, comments on) — the single PR filter, with no separate label
 	// allowlist or fork toggle. It evaluates against one variable, pr:
@@ -530,8 +538,40 @@ func Load() (*Config, error) {
 	if cfg.StatusCheckName == "" {
 		cfg.StatusCheckName = DefaultStatusCheckName
 	}
+	if err := normalizeBasePath(cfg); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
+}
+
+// normalizeBasePath validates and canonicalizes cfg.BasePath. It must be empty
+// (root) or an absolute path without a trailing slash, "..", query, or
+// fragment. A lone "/" normalizes to the empty string.
+func normalizeBasePath(cfg *Config) error {
+	p := strings.TrimSpace(cfg.BasePath)
+	if p == "" || p == "/" {
+		cfg.BasePath = ""
+		return nil
+	}
+	if !strings.HasPrefix(p, "/") {
+		return fmt.Errorf("config: KONFLATE_BASE_PATH must start with /")
+	}
+	if strings.ContainsAny(p, "?#") {
+		return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain query or fragment")
+	}
+	if strings.ContainsAny(p, "{}*%:$") || strings.Contains(p, "...") {
+		return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain ServeMux pattern syntax")
+	}
+	// net/url parsing would accept "/foo/../bar" as a path; split and check each
+	// segment to reject traversal.
+	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain empty, ., or .. segments")
+		}
+	}
+	cfg.BasePath = "/" + strings.Trim(p, "/")
+	return nil
 }
 
 // minRefreshInterval is the smallest positive [Config.RefreshInterval] honored;
