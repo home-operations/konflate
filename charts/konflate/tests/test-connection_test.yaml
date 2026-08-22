@@ -24,9 +24,17 @@ tests:
           path: spec.containers[0].args
           content: http://RELEASE-NAME-konflate:8080/readyz
 
-  - it: normalizes a trailing slash in basePath for the test curl URL
+  - it: prefixes the test curl URL with basePath
     set:
-      config.basePath: /platform/konflate/
+      config.basePath: /platform/konflate
+    asserts:
+      - contains:
+          path: spec.containers[0].args
+          content: http://RELEASE-NAME-konflate:8080/platform/konflate/readyz
+
+  - it: renders a templated basePath in the test curl URL
+    set:
+      config.basePath: '{{ printf "/platform/%s" "konflate" }}'
     asserts:
       - contains:
           path: spec.containers[0].args

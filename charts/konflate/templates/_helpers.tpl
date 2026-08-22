@@ -115,14 +115,47 @@ Name of the PVC backing the source cache (existingClaim wins).
 {{- end }}
 
 {{/*
-Prepend config.basePath to a probe/API path when konflate is served under a
-subpath (preserve-prefix deployment). Empty basePath returns the path unchanged.
+config.basePath, tpl'd (like every other config value) and normalized the way
+the binary normalizes KONFLATE_BASE_PATH: surrounding whitespace and extra
+slashes trimmed, "" or "/" meaning root (empty output). Values the binary would
+reject at boot fail here instead, at template time. Takes the root context.
+*/}}
+{{- define "konflate.basePath" -}}
+{{- $p := tpl (.Values.config.basePath | default "") . | trim -}}
+{{- if and $p (ne $p "/") -}}
+{{- if not (hasPrefix "/" $p) -}}
+{{- fail (printf "config.basePath must start with / (got %q)" $p) -}}
+{{- end -}}
+{{- if or (regexMatch "[{}*%:$?#]" $p) (contains "..." $p) -}}
+{{- fail (printf "config.basePath must not contain URL or ServeMux metacharacters (got %q)" $p) -}}
+{{- end -}}
+{{- range splitList "/" (trimAll "/" $p) -}}
+{{- if or (eq . "") (eq . ".") (eq . "..") -}}
+{{- fail (printf "config.basePath must not contain empty, ., or .. segments (got %q)" $p) -}}
+{{- end -}}
+{{- end -}}
+{{- printf "/%s" (trimAll "/" $p) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Prepend the normalized config.basePath to a probe/API path when konflate is
+served under a subpath (preserve-prefix deployment). Empty basePath returns the
+path unchanged. Takes (dict "path" <path> "root" $).
 */}}
 {{- define "konflate.prefixedPath" -}}
-{{- $base := .Values.config.basePath | default "" | trim | trimSuffix "/" -}}
-{{- if $base -}}
-{{- printf "%s%s" $base .path -}}
-{{- else -}}
-{{- .path -}}
+{{- printf "%s%s" (include "konflate.basePath" .root) .path -}}
+{{- end }}
+
+{{/*
+A probe spec with its httpGet path prefixed by config.basePath. An httpGet
+override that omits path keeps kubelet's default of "/" (prefixed). Takes
+(dict "probe" <probe> "root" $).
+*/}}
+{{- define "konflate.probeSpec" -}}
+{{- $probe := deepCopy .probe -}}
+{{- if $probe.httpGet -}}
+{{- $_ := set $probe.httpGet "path" (include "konflate.prefixedPath" (dict "path" ($probe.httpGet.path | default "/") "root" .root)) -}}
 {{- end -}}
+{{- tpl (toYaml $probe) .root -}}
 {{- end }}

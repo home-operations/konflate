@@ -18,7 +18,7 @@
         },
         "basePath": {
           "default": "",
-          "description": "URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. Trailing slashes and surrounding whitespace are normalized to match the binary's behavior. The app registers every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved.",
+          "description": "URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. Trailing slashes and surrounding whitespace are normalized to match the binary's behavior, and values the binary would reject at boot (missing leading /, traversal segments) fail at template time. The app serves every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved.",
           "title": "basePath",
           "type": "string"
         },

@@ -581,33 +581,16 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /platform/konflate/readyz
 
-  - it: normalizes a trailing slash in basePath for probes
+  - it: normalizes whitespace and trailing slashes in basePath for the env and probes
     template: deployment.tpl
     set:
-      config.basePath: /platform/konflate/
+      config.basePath: " /platform/konflate// "
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: KONFLATE_BASE_PATH
-            value: /platform/konflate/
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /platform/konflate/healthz
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /platform/konflate/readyz
-
-  - it: normalizes whitespace in basePath for probes
-    template: deployment.tpl
-    set:
-      config.basePath: " /platform/konflate/ "
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: KONFLATE_BASE_PATH
-            value: " /platform/konflate/ "
+            value: /platform/konflate
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /platform/konflate/healthz
@@ -624,13 +607,48 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: KONFLATE_BASE_PATH
-            value: /
+            value: ""
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /healthz
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /readyz
+
+  - it: renders basePath through tpl like every other config value
+    template: deployment.tpl
+    set:
+      config.basePath: '{{ printf "/platform/%s" "konflate" }}'
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_BASE_PATH
+            value: /platform/konflate
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /platform/konflate/readyz
+
+  - it: rejects a basePath the binary would refuse at boot
+    template: deployment.tpl
+    set:
+      config.basePath: platform/konflate
+    asserts:
+      - failedTemplate:
+          errorPattern: config.basePath must start with /
+
+  - it: defaults a probe httpGet without path to the prefixed root
+    template: deployment.tpl
+    set:
+      config.basePath: /platform/konflate
+      readinessProbe:
+        httpGet:
+          path: null
+          port: http
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /platform/konflate/
 
   - it: allows liveness/readiness probe overrides without httpGet
     template: deployment.tpl
@@ -655,19 +673,6 @@ tests:
     template: deployment.tpl
     set:
       config.basePath: /platform/konflate
-      startupProbe:
-        httpGet:
-          path: /readyz
-          port: http
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].startupProbe.httpGet.path
-          value: /platform/konflate/readyz
-
-  - it: normalizes a trailing slash in basePath for startupProbe
-    template: deployment.tpl
-    set:
-      config.basePath: /platform/konflate/
       startupProbe:
         httpGet:
           path: /readyz

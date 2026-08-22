@@ -335,6 +335,7 @@ func TestReviewURL_AppendsBasePath(t *testing.T) {
 		{"appends basePath", "https://konflate.example", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
 		{"does not double-append", "https://konflate.example/platform/konflate", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
 		{"trailing slash normalized", "https://konflate.example/", "/platform/konflate", "https://konflate.example/platform/konflate/#/pr/7"},
+		{"host suffix is not a path match", "https://konflate", "/konflate", "https://konflate/konflate/#/pr/7"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

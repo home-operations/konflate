@@ -314,15 +314,17 @@ export function adjacentResource(delta: number): void {
 
 // ---- API ------------------------------------------------------------------
 
+// Prefixes basePath here, once, so call sites stay root-relative and a future
+// endpoint can't forget it (a miss would 404 only in subpath deployments).
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { Accept: 'application/json' } });
+  const res = await fetch(basePath + path, { headers: { Accept: 'application/json' } });
   if (!res.ok && res.status !== 202) throw new Error(`${path}: HTTP ${res.status}`);
   return (await res.json()) as T;
 }
 
 export async function loadMeta(): Promise<void> {
   try {
-    store.meta = await getJSON<Meta>(`${basePath}/api/meta`);
+    store.meta = await getJSON<Meta>('/api/meta');
     store.sync = store.meta.sync ?? null; // seed the banner from the initial poll health
   } catch (err) {
     console.error('loadMeta', err);
@@ -331,7 +333,7 @@ export async function loadMeta(): Promise<void> {
 
 export async function loadPRs(): Promise<void> {
   try {
-    store.prs = await getJSON<PRStatus[]>(`${basePath}/api/prs`);
+    store.prs = await getJSON<PRStatus[]>('/api/prs');
   } catch (err) {
     console.error('loadPRs', err);
   } finally {
@@ -362,7 +364,7 @@ export function ensureDiff(n: number): void {
 
 async function loadDiff(n: number): Promise<void> {
   try {
-    const env = await getJSON<DiffEnvelope>(`${basePath}/api/prs/${n}/diff`);
+    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/diff`);
     if (store.diffFor !== n) return; // route moved on
     applyEnvelope(env);
   } catch (err) {
@@ -391,7 +393,7 @@ async function loadPreview(n: number, headSha: string): Promise<void> {
   try {
     // The lean summary endpoint: the headline facts without the per-resource
     // render, so a row preview doesn't pull the whole diff payload.
-    const env = await getJSON<DiffEnvelope>(`${basePath}/api/prs/${n}/summary`);
+    const env = await getJSON<DiffEnvelope>(`/api/prs/${n}/summary`);
     if (store.previews[n]?.headSha !== headSha) return; // a newer expand superseded this
     if (env.status === 'ready' && env.diff) {
       const d = env.diff;

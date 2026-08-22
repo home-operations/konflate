@@ -39,4 +39,4 @@ spec:
         - curl
       args:
         - -fsS
-        - http://{{ include "konflate.fullname" . }}:{{ .Values.service.port }}{{ include "konflate.prefixedPath" (dict "path" "/readyz" "Values" .Values) }}
+        - http://{{ include "konflate.fullname" . }}:{{ .Values.service.port }}{{ include "konflate.prefixedPath" (dict "path" "/readyz" "root" $) }}

@@ -78,16 +78,7 @@ func init() {
 func (s *Server) uiHandler() http.Handler {
 	fileServer := http.FileServerFS(s.ui)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		// Serve the base-path-aware index.html directly; the file server would
-		// otherwise return the placeholder literal.
-		if s.indexHTML != nil && (path == "/" || path == "/index.html") {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(s.indexHTML)
-			return
-		}
-		if strings.HasPrefix(path, "/assets/") {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache")

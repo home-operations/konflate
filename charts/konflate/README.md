@@ -48,7 +48,7 @@ Kubernetes: `>=1.25.0-0`
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules for pod scheduling. |
 | config.appClientId | string | `""` | GitHub App client id (**GitHub only**) — the preferred write identity. With `secret.appPrivateKey`, konflate mints short-lived installation tokens instead of carrying a standing PAT; the installation is auto-detected from the repo. |
-| config.basePath | string | `""` | URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. Trailing slashes and surrounding whitespace are normalized to match the binary's behavior. The app registers every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved. |
+| config.basePath | string | `""` | URL path prefix konflate is served under (e.g. /platform/konflate). Empty = root. Trailing slashes and surrounding whitespace are normalized to match the binary's behavior, and values the binary would reject at boot (missing leading /, traversal segments) fail at template time. The app serves every route on the main listener under this prefix; configure your ingress to forward requests with the prefix preserved. |
 | config.cacheTtl | string | `""` | Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); "0" disables the sweep. |
 | config.closedPrMax | int | `25` | Cap on retained merged PRs (most-recent win); bounds disk + memory. 0 disables the cap (with `closedPrTtl: "0"`, merged diffs are kept forever). |
 | config.closedPrTtl | string | `"336h"` | How long a merged PR is kept (Go duration); 0 disables the age cap. |

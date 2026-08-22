@@ -2,7 +2,6 @@
   "name": "konflate",
   "short_name": "konflate",
   "description": "Review pull requests as rendered Flux / Kubernetes diffs.",
-  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
