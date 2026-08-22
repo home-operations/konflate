@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -158,6 +159,66 @@ func TestMCP_HTTPEndpoint(t *testing.T) {
 		if err == nil {
 			_ = cs.Close()
 			t.Fatal("connected to /mcp with KONFLATE_MCP off; the endpoint must not be served")
+		}
+	})
+}
+
+// TestMCP_RequestProtections pins /mcp's two request-level defenses over a real
+// listener: the cross-origin middleware (a browser-shaped POST — Sec-Fetch-Site
+// or a mismatched Origin — is rejected, a same-origin one is let through) and
+// the SDK's DNS-rebinding guard (a non-localhost Host on a loopback listener is
+// rejected). Native-client acceptance through the same stack is covered by
+// TestMCP_HTTPEndpoint.
+func TestMCP_RequestProtections(t *testing.T) {
+	t.Parallel()
+	cfg := ghCfg("tok")
+	cfg.MCP = true
+	s := newTestServer(t, cfg, &fakeProvider{}, okEngine())
+	httpSrv := httptest.NewServer(s.mainHandler())
+	t.Cleanup(httpSrv.Close)
+
+	post := func(t *testing.T, shape func(*http.Request)) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, httpSrv.URL+"/mcp", strings.NewReader("{}"))
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		shape(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST /mcp: %v", err)
+		}
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+
+	t.Run("cross-site fetch is rejected", func(t *testing.T) {
+		resp := post(t, func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") })
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("cross-site POST /mcp: %d, want 403", resp.StatusCode)
+		}
+	})
+
+	t.Run("mismatched Origin is rejected", func(t *testing.T) {
+		resp := post(t, func(r *http.Request) { r.Header.Set("Origin", "https://evil.example") })
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("cross-origin POST /mcp: %d, want 403", resp.StatusCode)
+		}
+	})
+
+	t.Run("same-origin browser request passes the CSRF layer", func(t *testing.T) {
+		resp := post(t, func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "same-origin") })
+		// The SDK may still reject the bare body, but never with the CSRF 403.
+		if resp.StatusCode == http.StatusForbidden {
+			t.Errorf("same-origin POST /mcp: 403; the CSRF layer must not block same-origin requests")
+		}
+	})
+
+	t.Run("non-localhost Host on a loopback listener is rejected", func(t *testing.T) {
+		resp := post(t, func(r *http.Request) { r.Host = "rebind.example" })
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("rebound-Host POST /mcp: %d, want 403", resp.StatusCode)
 		}
 	})
 }
