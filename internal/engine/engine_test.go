@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 
 	"github.com/home-operations/flate/pkg/manifest"
@@ -23,9 +24,7 @@ func res(kind, ns, name string, extra map[string]any) map[string]any {
 		meta["namespace"] = ns
 	}
 	m := map[string]any{"kind": kind, "metadata": meta}
-	for k, v := range extra {
-		m[k] = v
-	}
+	maps.Copy(m, extra)
 	return m
 }
 

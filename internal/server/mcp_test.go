@@ -372,7 +372,7 @@ func TestWritePRLine_DefangsTitle(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
 	writePRLine(&b, api.PRStatus{
-		PR:     api.PR{Number: 7, Title: "line one\nline two [x](https://evil.example)", Open: true},
+		Number: 7, Title: "line one\nline two [x](https://evil.example)", Open: true,
 		Status: api.JobReady,
 	})
 	out := b.String()
@@ -392,7 +392,7 @@ func TestWritePRLine_DefangsTitle(t *testing.T) {
 	// Angle brackets (autolink / raw HTML) and backticks (code span) are defanged too.
 	var b2 strings.Builder
 	writePRLine(&b2, api.PRStatus{
-		PR:     api.PR{Number: 8, Title: "<https://evil.example> and `code` <script>x</script>", Open: true},
+		Number: 8, Title: "<https://evil.example> and `code` <script>x</script>", Open: true,
 		Status: api.JobReady,
 	})
 	inj := b2.String()
@@ -410,7 +410,7 @@ func TestWritePRLine_DefangsTitle(t *testing.T) {
 
 	// A normal conventional-commit title is left untouched (parens not escaped).
 	var b3 strings.Builder
-	writePRLine(&b3, api.PRStatus{PR: api.PR{Number: 9, Title: "feat(scope): add the_thing", Open: true}, Status: api.JobReady})
+	writePRLine(&b3, api.PRStatus{Number: 9, Title: "feat(scope): add the_thing", Open: true, Status: api.JobReady})
 	if !strings.Contains(b3.String(), "feat(scope): add the_thing") {
 		t.Errorf("a normal title must not be mangled: %q", b3.String())
 	}
@@ -421,8 +421,8 @@ func TestWritePRLine_DefangsTitle(t *testing.T) {
 func TestRenderDiffText_TruncatesLargeDiff(t *testing.T) {
 	t.Parallel()
 	big := strings.Repeat("x", 4096) // plain text: stripHTML is a no-op
-	var resources []api.DiffResource
-	for i := 0; i < 64; i++ { // ~256 KiB, well over the 96 KiB budget
+	resources := make([]api.DiffResource, 0, 64)
+	for i := range 64 { // ~256 KiB, well over the 96 KiB budget
 		resources = append(resources, api.DiffResource{
 			Status:  "changed",
 			Title:   fmt.Sprintf("Deployment ns/app-%d", i),

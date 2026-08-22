@@ -565,7 +565,7 @@ func normalizeBasePath(cfg *Config) error {
 	}
 	// net/url parsing would accept "/foo/../bar" as a path; split and check each
 	// segment to reject traversal.
-	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
+	for seg := range strings.SplitSeq(strings.Trim(p, "/"), "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return fmt.Errorf("config: KONFLATE_BASE_PATH must not contain empty, ., or .. segments")
 		}
