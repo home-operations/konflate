@@ -82,10 +82,10 @@ func githubEnterpriseOpts(host string) []github.ClientOptionsFunc {
 
 func (p *githubProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	opts := &github.PullRequestListOptions{
-		State:       stateOpen,
-		Sort:        "updated",
-		Direction:   "desc",
-		ListOptions: github.ListOptions{PerPage: 100},
+		State:     stateOpen,
+		Sort:      "updated",
+		Direction: "desc",
+		PerPage:   100,
 	}
 	var out []api.PR
 	for {
@@ -141,7 +141,7 @@ func (p *githubProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup
 	}
 
 	runs, _, err := p.client.Checks.ListCheckRunsForRef(ctx, p.owner, p.repo, pr.HeadSHA,
-		&github.ListCheckRunsOptions{ListOptions: github.ListOptions{PerPage: 100}})
+		&github.ListCheckRunsOptions{PerPage: 100})
 	if err != nil {
 		return api.CheckRollup{}, fmt.Errorf("github: check runs #%d: %w", pr.Number, err)
 	}

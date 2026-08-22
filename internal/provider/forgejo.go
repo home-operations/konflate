@@ -50,9 +50,9 @@ func (p *forgejoProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	// interface and is intentionally unused.
 	_ = ctx
 	opts := forgejo.ListPullRequestsOptions{
-		State:       forgejo.StateOpen,
-		Sort:        "recentupdate",
-		ListOptions: forgejo.ListOptions{PageSize: 50}, // Gitea/Forgejo caps the page size server-side
+		State:    forgejo.StateOpen,
+		Sort:     "recentupdate",
+		PageSize: 50, // Gitea/Forgejo caps the page size server-side
 	}
 	var out []api.PR
 	for {
@@ -99,7 +99,7 @@ func (p *forgejoProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollu
 	// does server-side — using the same all-pages loop ListPRs uses. Status IDs are
 	// monotonic (a DB auto-increment), so the highest ID for a context is its latest.
 	latest := map[string]*forgejo.Status{}
-	opts := forgejo.ListStatusesOption{ListOptions: forgejo.ListOptions{PageSize: 50}}
+	opts := forgejo.ListStatusesOption{PageSize: 50}
 	for {
 		statuses, resp, err := p.client.ListStatuses(p.owner, p.repo, pr.HeadSHA, opts)
 		if err != nil {

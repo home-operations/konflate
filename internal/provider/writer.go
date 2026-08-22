@@ -433,15 +433,13 @@ func (w *githubWriter) CheckRun(ctx context.Context, pr api.PR, res CheckResult)
 			github.UpdateCheckRunOptions
 			StartedAt *github.Timestamp `json:"started_at,omitempty"`
 		}{
-			UpdateCheckRunOptions: github.UpdateCheckRunOptions{
-				Name:        res.Name,
-				Status:      &completed,
-				Conclusion:  &res.Conclusion,
-				CompletedAt: &now,
-				DetailsURL:  strOrNil(res.DetailsURL),
-				Output:      output,
-			},
-			StartedAt: &now,
+			Name:        res.Name,
+			Status:      &completed,
+			Conclusion:  &res.Conclusion,
+			CompletedAt: &now,
+			DetailsURL:  strOrNil(res.DetailsURL),
+			Output:      output,
+			StartedAt:   &now,
 		}
 		req, err := w.client.NewRequest(ctx, http.MethodPatch,
 			fmt.Sprintf("repos/%s/%s/check-runs/%d", w.owner, w.repo, id), body)
@@ -480,8 +478,8 @@ func (w *githubWriter) findCheckRun(ctx context.Context, sha, name string) (int6
 		return 0, nil
 	}
 	runs, resp, err := w.client.Checks.ListCheckRunsForRef(ctx, w.owner, w.repo, sha, &github.ListCheckRunsOptions{
-		CheckName:   &name,
-		ListOptions: github.ListOptions{PerPage: 1},
+		CheckName: &name,
+		PerPage:   1,
 	})
 	if err != nil {
 		return 0, githubReject(resp, fmt.Errorf("github: list check runs: %w", err))
@@ -638,7 +636,7 @@ func (w *forgejoWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bo
 	}
 	// The Forgejo SDK can't take a context (see provider ListPRs).
 	idx := int64(pr.Number)
-	opts := forgejo.ListIssueCommentOptions{ListOptions: forgejo.ListOptions{PageSize: 50}}
+	opts := forgejo.ListIssueCommentOptions{PageSize: 50}
 	for {
 		comments, resp, err := w.client.ListIssueComments(w.owner, w.repo, idx, opts)
 		if err != nil {
@@ -725,7 +723,7 @@ func (w *gitlabWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 		return fmt.Errorf("gitlab: %w", err)
 	}
 	mr := int64(pr.Number)
-	opts := &gitlab.ListMergeRequestNotesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}
+	opts := &gitlab.ListMergeRequestNotesOptions{PerPage: 100}
 	for {
 		notes, resp, err := w.client.Notes.ListMergeRequestNotes(w.project, mr, opts, gitlab.WithContext(ctx))
 		if err != nil {

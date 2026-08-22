@@ -38,9 +38,9 @@ func (p *gitlabProvider) ListPRs(ctx context.Context) ([]api.PR, error) {
 	state := "opened"
 	order := "updated_at"
 	opts := &gitlab.ListProjectMergeRequestsOptions{
-		State:       &state,
-		OrderBy:     &order,
-		ListOptions: gitlab.ListOptions{PerPage: 100},
+		State:   &state,
+		OrderBy: &order,
+		PerPage: 100,
 	}
 	var out []api.PR
 	for {
@@ -78,7 +78,7 @@ func (p *gitlabProvider) Checks(ctx context.Context, pr api.PR) (api.CheckRollup
 		return api.CheckRollup{}, nil
 	}
 	statuses, _, err := p.client.Commits.GetCommitStatuses(p.project, pr.HeadSHA,
-		&gitlab.GetCommitStatusesOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}, gitlab.WithContext(ctx))
+		&gitlab.GetCommitStatusesOptions{PerPage: 100}, gitlab.WithContext(ctx))
 	if err != nil {
 		return api.CheckRollup{}, fmt.Errorf("gitlab: commit statuses !%d: %w", pr.Number, err)
 	}

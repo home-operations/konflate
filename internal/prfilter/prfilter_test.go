@@ -1,6 +1,7 @@
 package prfilter
 
 import (
+	"maps"
 	"testing"
 	"time"
 )
@@ -54,9 +55,7 @@ func sampleVars(over map[string]any) map[string]any {
 			map[string]any{"name": "cluster/production", "color": "d93f0b"},
 		},
 	}
-	for k, v := range over {
-		pr[k] = v
-	}
+	maps.Copy(pr, over)
 	return pr
 }
 
