@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	cel.dev/cel-go v0.32.0
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
-	github.com/KimMachineGun/automemlimit v0.7.5
+	github.com/KimMachineGun/automemlimit v1.0.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/caarlos0/env/v11 v11.4.1
