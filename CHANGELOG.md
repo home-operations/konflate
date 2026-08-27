@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.2](https://github.com/home-operations/konflate/compare/0.6.1...0.6.2) (2026-08-27)
+
+
+### Features
+
+* **go:** update module github.com/google/go-containerregistry (v0.21.9 → v0.22.0) ([#469](https://github.com/home-operations/konflate/issues/469)) ([1ff4df7](https://github.com/home-operations/konflate/commit/1ff4df73aaf5841280825e69e75303474ae27c05))
+* **go:** update module github.com/kimmachinegun/automemlimit (v0.7.5 → v1.0.0) ([#467](https://github.com/home-operations/konflate/issues/467)) ([d73bca2](https://github.com/home-operations/konflate/commit/d73bca286ebb4c69b713fb4d742b1021196f01da))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.58.2 → v2.60.0) ([#468](https://github.com/home-operations/konflate/issues/468)) ([258c78f](https://github.com/home-operations/konflate/commit/258c78f4c9b29753aba6e5d664582b6cf0567eb5))
+
+
+### Bug Fixes
+
+* drop UPX compression, packed binaries segfault (upx/upx[#18902](https://github.com/home-operations/konflate/issues/18902)) ([#472](https://github.com/home-operations/konflate/issues/472)) ([80c0292](https://github.com/home-operations/konflate/commit/80c02923471b3a02f341fe0e258e967f21aa870a))
+
+
+### Miscellaneous Chores
+
+* **github-action:** update action docker/github-builder (v1.16.0 → v1.17.0) ([#466](https://github.com/home-operations/konflate/issues/466)) ([686d2b9](https://github.com/home-operations/konflate/commit/686d2b9744c7a198c064e728adabc077c0e7c3fd))
+* **mise:** update mise tools ([#465](https://github.com/home-operations/konflate/issues/465)) ([bfc21bf](https://github.com/home-operations/konflate/commit/bfc21bf75918a634250907307ad8fbc93de86249))
+
 ## [0.6.1](https://github.com/home-operations/konflate/compare/0.6.0...0.6.1) (2026-08-22)
 
 
