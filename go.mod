@@ -19,7 +19,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/client_model v0.6.3
 	gitlab.com/gitlab-org/api/client-go/v2 v2.60.0
 	golang.org/x/sync v0.22.0
 	helm.sh/helm/v4 v4.2.4
