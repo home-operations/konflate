@@ -15,7 +15,7 @@ require (
 	github.com/google/go-containerregistry v0.22.0
 	github.com/google/go-github/v90 v90.0.0
 	github.com/home-operations/flate v0.6.2
-	github.com/klauspost/compress v1.19.2
+	github.com/klauspost/compress v1.20.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.24.1
