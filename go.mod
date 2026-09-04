@@ -14,7 +14,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-containerregistry v0.22.1
 	github.com/google/go-github/v90 v90.0.0
-	github.com/home-operations/flate v0.6.2
+	github.com/home-operations/flate v0.6.5
 	github.com/klauspost/compress v1.20.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -47,7 +47,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
-	github.com/controlplaneio-fluxcd/flux-operator v0.58.1 // indirect
+	github.com/controlplaneio-fluxcd/flux-operator v0.59.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
@@ -64,15 +64,15 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fluxcd/cli-utils v1.2.2 // indirect
-	github.com/fluxcd/helm-controller/api v1.6.3 // indirect
-	github.com/fluxcd/kustomize-controller/api v1.9.4 // indirect
+	github.com/fluxcd/helm-controller/api v1.6.4 // indirect
+	github.com/fluxcd/kustomize-controller/api v1.9.5 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.20.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.31.0 // indirect
-	github.com/fluxcd/pkg/envsubst v1.7.0 // indirect
-	github.com/fluxcd/pkg/kustomize v1.39.0 // indirect
+	github.com/fluxcd/pkg/envsubst v1.8.0 // indirect
+	github.com/fluxcd/pkg/kustomize v1.40.0 // indirect
 	github.com/fluxcd/pkg/sourceignore v0.18.0 // indirect
-	github.com/fluxcd/source-controller/api v1.9.4 // indirect
+	github.com/fluxcd/source-controller/api v1.9.5 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
