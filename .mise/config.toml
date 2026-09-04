@@ -19,7 +19,7 @@ lefthook = "2.1.12"
 node = "24.20.0"
 oxfmt = "0.65.0"
 yq = "4.53.6"
-zizmor = "1.29.0"
+zizmor = "1.30.0"
 
 [tasks.build]
 description = "Compile the binary (and the whole module)"
