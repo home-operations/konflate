@@ -510,14 +510,14 @@ func (w *githubWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bod
 			if strings.TrimSpace(*c.Body) == strings.TrimSpace(body) {
 				return nil // unchanged — skip the no-op edit so a re-render doesn't mark it "edited"
 			}
-			_, _, err = w.client.Issues.EditComment(ctx, w.owner, w.repo, c.GetID(), &github.IssueComment{Body: &body})
+			_, _, err = w.client.Issues.UpdateComment(ctx, w.owner, w.repo, c.GetID(), github.IssueCommentRequest{Body: body})
 			if err != nil {
 				return fmt.Errorf("github: edit comment #%d: %w", pr.Number, err)
 			}
 			return nil
 		}
 	}
-	if _, _, err := w.client.Issues.CreateComment(ctx, w.owner, w.repo, pr.Number, &github.IssueComment{Body: &body}); err != nil {
+	if _, _, err := w.client.Issues.CreateComment(ctx, w.owner, w.repo, pr.Number, github.IssueCommentRequest{Body: body}); err != nil {
 		return fmt.Errorf("github: create comment #%d: %w", pr.Number, err)
 	}
 	return nil
