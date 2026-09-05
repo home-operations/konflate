@@ -9,7 +9,7 @@
 [tools]
 actionlint = "1.7.12"
 "aqua:dadav/helm-schema" = "0.23.5"
-go = "1.27.0"
+go = "1.27.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "v1.7.0"
 golangci-lint = "2.13.2"
 helm = "4.2.4"
