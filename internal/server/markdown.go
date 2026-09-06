@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -273,7 +274,7 @@ func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, item
 		fmt.Fprintf(&b, "**%s**\n", plainHeader)
 	}
 	for _, it := range items {
-		fmt.Fprintf(&b, "%s`%s`: %s\n", prefix, mdCode(it.code), mdInline(it.detail))
+		fmt.Fprintf(&b, "%s`%s`: %s\n", prefix, mdCode(it.code), mdDetail(it.detail))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -459,6 +460,30 @@ var mdInlineReplacer = strings.NewReplacer(
 	`\`, `\\`, "`", "\\`", "[", `\[`, "]", `\]`,
 	"*", `\*`, "_", `\_`, "~", `\~`, "!", `\!`,
 )
+
+// fieldPathRe finds a Kubernetes field path in prose — ".image.tag" in a Helm
+// schema error, "spec.suspend" or "spec.dependsOn" in a lint detail — as a token
+// that starts with a dot or a top-level manifest key and runs over dotted /
+// bracketed segments, ending on a word character or "]" so a sentence's full
+// stop stays outside. The leading char is captured so it can be re-emitted.
+var fieldPathRe = regexp.MustCompile(`(^|[\s(,])((?:\.|spec\.|metadata\.|status\.|data\.)[A-Za-z0-9_][A-Za-z0-9_.\-\[\]]*[A-Za-z0-9_\]])`)
+
+// mdDetail renders a finding's detail as escaped Markdown (mdInline) with each
+// field path set in a code span, so ".image.tag is required" reads with the
+// path as code. Field paths are forge-controlled like the rest, so they go
+// through mdCode; nothing in the text is trusted.
+func mdDetail(detail string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range fieldPathRe.FindAllStringSubmatchIndex(detail, -1) {
+		// m[2:4] is the leading char (kept as prose), m[4:6] the path.
+		b.WriteString(mdInline(detail[last:m[4]]))
+		b.WriteString("`" + mdCode(detail[m[4]:m[5]]) + "`")
+		last = m[5]
+	}
+	b.WriteString(mdInline(detail[last:]))
+	return b.String()
+}
 
 // mdCode escapes a value rendered inside a `code span` (resource ids, image
 // refs — already constrained charsets, but defended anyway): newlines flattened,

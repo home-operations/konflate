@@ -134,6 +134,28 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	}
 }
 
+func TestMdDetail_FieldPathsAsCode(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ in, want string }{
+		{"values don't meet the schema: .image.tag is required", "values don't meet the schema: `.image.tag` is required"},
+		{"spec.suspend set; reconciliation freezes on merge", "`spec.suspend` set; reconciliation freezes on merge"},
+		{"still declared in spec.dependsOn by Kustomization a/b; those will wedge", "still declared in `spec.dependsOn` by Kustomization a/b; those will wedge"},
+		// Several paths, comma-separated, and a sentence-ending full stop stays outside.
+		{"spec.selector, spec.template changed; immutable on Deployment.", "`spec.selector`, `spec.template` changed; immutable on Deployment."},
+		{"(spec.template.spec.containers[0].image)", "(`spec.template.spec.containers[0].image`)"},
+		// Not field paths: versions, image refs, hostnames.
+		{"major version bump 88.6.1 → 89.0.0 of the OCI source", "major version bump 88.6.1 → 89.0.0 of the OCI source"},
+		{"image ghcr.io/x:1.2 not found in upstream registry", "image ghcr.io/x:1.2 not found in upstream registry"},
+		// Forge text stays defanged on both sides of a path.
+		{"[x](u) .spec.a `b`", "\\[x\\](u) `.spec.a` \\`b\\`"},
+	}
+	for _, c := range cases {
+		if got := mdDetail(c.in); got != c.want {
+			t.Errorf("mdDetail(%q)\n got %q\nwant %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestSummaryMarkdown_FooterVersion(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
