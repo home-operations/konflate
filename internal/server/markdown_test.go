@@ -63,6 +63,19 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	if strings.Contains(md, "Blocker") || strings.Contains(md, "⚠") {
 		t.Errorf("github flavour must not repeat the box's title inside it:\n%s", md)
 	}
+	// A render failure joins the blocker in the same red box (both fail the
+	// check) — blockers first — rather than opening a second [!CAUTION].
+	env.Diff.Failures = []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}}
+	merged := summaryMarkdown(env, "", true)
+	if n := strings.Count(merged, "[!CAUTION]"); n != 1 {
+		t.Errorf("blocker + render failure should share one [!CAUTION] box, got %d:\n%s", n, merged)
+	}
+	if bi, fi := strings.Index(merged, "not found upstream"), strings.Index(merged, "values don't meet"); bi < 0 || fi < 0 || bi > fi {
+		t.Errorf("blocker should precede the render failure in the shared box:\n%s", merged)
+	}
+	if strings.Contains(merged, "render failure") {
+		t.Errorf("no headline in the shared box:\n%s", merged)
+	}
 	// Blocking (higher severity) renders before the caution block.
 	if bi, ci := strings.Index(md, "[!CAUTION]"), strings.Index(md, "[!WARNING]"); bi < 0 || ci < 0 || bi > ci {
 		t.Errorf("blocking block should render before caution (blocking=%d caution=%d)\n%s", bi, ci, md)
@@ -90,8 +103,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"**+2 added · 3 changed · −1 removed** — 6 resources across 2 apps · 1 CRD",
 		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
 		"> [!WARNING]\n> - `Deployment web/api` — replicas set to 0",
-		"> [!CAUTION]\n> **1 render failure**",
-		"> - `HelmRelease media/plex` — values don't meet the schema",
+		"> [!CAUTION]\n> - `HelmRelease media/plex` — values don't meet the schema",
 		"**Blast radius**",
 		// Sample capped at 3 direct names; count + sample reconcile to the headline.
 		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",

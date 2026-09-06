@@ -104,9 +104,18 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	appendSection(sec.Routine)
 	writeRefreshNote()
 	appendSection(sec.BlastRadius)
-	appendSection(sec.Blocking)
-	appendSection(sec.Cautions)
-	appendSection(sec.Failures)
+	if admonitions {
+		// One red box for everything that fails the check — blockers, then render
+		// failures — and one amber box for the cautions. Splitting same-severity
+		// findings into separate boxes only added headlines to tell them apart;
+		// each item already says what it is.
+		appendSection(sectionFailing(d))
+		appendSection(sec.Cautions)
+	} else {
+		appendSection(sec.Blocking)
+		appendSection(sec.Cautions)
+		appendSection(sec.Failures)
+	}
 	appendSection(sec.Images)
 	writeFooter(d.HeadSHA)
 	return b.String()
@@ -286,6 +295,19 @@ func sectionCautions(d *api.DiffResult, admonitions bool) string {
 	// labelling, so only the plain form spells "Caution(s)" out.
 	h := fmt.Sprintf("⚠ %s", plural(len(ws), "Caution", "Cautions"))
 	return mdBlock(admonitions, "WARNING", "", h, warningItems(ws))
+}
+
+// sectionFailing is the GitHub flavour's single red [!CAUTION] box: the
+// blocking-tier warnings followed by the render failures — everything that turns
+// the check red — with no headline, since the box's title and each item's text
+// carry it. Empty when neither exists. The per-block Blocking / Failures
+// sections stay available to custom templates.
+func sectionFailing(d *api.DiffResult) string {
+	items := warningItems(api.WarningsByLevel(d.Warnings, api.LevelBlocking))
+	for _, f := range d.Failures {
+		items = append(items, mdItem{code: f.Parent, detail: f.Message})
+	}
+	return mdBlock(true, "CAUTION", "", "", items)
 }
 
 func sectionFailures(d *api.DiffResult, admonitions bool) string {
