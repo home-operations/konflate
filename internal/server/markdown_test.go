@@ -124,9 +124,14 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	}
 	// Severity order: the red box, the amber box, then the neutral headline note,
 	// and only then the informational blast radius and images.
-	idx := func(s string) int { return strings.Index(md, s) }
-	if !(idx("[!CAUTION]") < idx("[!WARNING]") && idx("[!WARNING]") < idx("[!NOTE]") && idx("[!NOTE]") < idx("**Blast radius**") && idx("**Blast radius**") < idx("**Image changes**")) {
-		t.Errorf("blocks out of severity order (CAUTION → WARNING → NOTE → blast radius → images):\n%s", md)
+	order := []string{"[!CAUTION]", "[!WARNING]", "[!NOTE]", "**Blast radius**", "**Image changes**"}
+	last := -1
+	for _, marker := range order {
+		at := strings.Index(md, marker)
+		if at < last {
+			t.Errorf("%s is out of order; want %v top to bottom:\n%s", marker, order, md)
+		}
+		last = at
 	}
 }
 
