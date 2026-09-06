@@ -89,21 +89,18 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	}
 	// The content blocks, each rendered once so a custom comment template can place
 	// them individually (commentTemplateData.Sections); the default body composes
-	// the same blocks in order. The refresh note and footer are konflate's own
-	// chrome and stay here. A routine PR's tip already carries the headline counts,
-	// so the impact line is dropped there rather than said twice.
+	// the same blocks in severity order — red, amber, then the neutral note — so
+	// what fails the check is the first thing read: the failing box, the cautions,
+	// the stale-render warning, then the headline counts (or the routine tip, which
+	// already carries them, so the impact line is dropped there rather than said
+	// twice), blast radius and images. The refresh note and footer are konflate's
+	// own chrome and stay here.
 	sec := summarySectionsFor(d, admonitions)
 	appendSection := func(s string) {
 		if s != "" {
 			b.WriteString("\n" + s + "\n")
 		}
 	}
-	if !d.Routine {
-		appendSection(sec.Impact)
-	}
-	appendSection(sec.Routine)
-	writeRefreshNote()
-	appendSection(sec.BlastRadius)
 	if admonitions {
 		// One red box for everything that fails the check — blockers, then render
 		// failures — and one amber box for the cautions. Splitting same-severity
@@ -113,9 +110,15 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 		appendSection(sec.Cautions)
 	} else {
 		appendSection(sec.Blocking)
-		appendSection(sec.Cautions)
 		appendSection(sec.Failures)
+		appendSection(sec.Cautions)
 	}
+	writeRefreshNote()
+	if !d.Routine {
+		appendSection(sec.Impact)
+	}
+	appendSection(sec.Routine)
+	appendSection(sec.BlastRadius)
 	appendSection(sec.Images)
 	writeFooter(d.HeadSHA)
 	return b.String()

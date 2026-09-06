@@ -122,6 +122,12 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	if strings.Contains(md, "advisory, not a gate") || strings.Contains(md, "View the full rendered diff") {
 		t.Errorf("old chrome should be gone:\n%s", md)
 	}
+	// Severity order: the red box, the amber box, then the neutral headline note,
+	// and only then the informational blast radius and images.
+	idx := func(s string) int { return strings.Index(md, s) }
+	if !(idx("[!CAUTION]") < idx("[!WARNING]") && idx("[!WARNING]") < idx("[!NOTE]") && idx("[!NOTE]") < idx("**Blast radius**") && idx("**Blast radius**") < idx("**Image changes**")) {
+		t.Errorf("blocks out of severity order (CAUTION → WARNING → NOTE → blast radius → images):\n%s", md)
+	}
 }
 
 func TestImpactPhrase(t *testing.T) {
