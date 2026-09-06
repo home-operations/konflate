@@ -378,7 +378,7 @@ func (s *Server) checkResult(pr api.PR, st api.JobStatus, sig *api.Signals, errM
 	// The stored envelope drives the markdown body (it handles ready/error/pending);
 	// fall back to the title alone if it's somehow gone.
 	if env, ok := s.store.get(pr.Number); ok {
-		res.Summary = summaryMarkdownBody(env, res.DetailsURL, true)
+		res.Summary = summaryMarkdownBody(env, res.DetailsURL, true, s.Version)
 	} else {
 		res.Summary = res.Title
 	}

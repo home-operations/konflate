@@ -19,25 +19,26 @@ func konflateMarker(number int) string {
 // summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block for
 // posting back onto the pull request, prefixed with the konflate marker (a hidden
 // HTML comment) so a poster can find and edit its own comment in place.
-func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
-	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions)
+func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool, version string) string {
+	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions, version)
 }
 
 // summaryMarkdownBody is the marker-less summary body. It carries no heading —
-// the footer names konflate — and with admonitions=true the sections use GitHub-flavoured
+// the footer names konflate and its version — and with admonitions=true the sections use GitHub-flavoured
 // alert blocks (> [!TIP] / > [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
 // lists that render anywhere. Every forge-controlled
 // value is escaped (see mdInline/mdCode) so a crafted resource name or a render
 // error can't break the table or inject HTML. Exposed to a custom comment
 // template as {{ .Summary }}.
-func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
+func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions bool, version string) string {
 	var b strings.Builder
 
-	// writeFooter closes the comment with one small line: provenance (the commit
-	// this summary reflects — the comment is edited in place across pushes, so the
-	// rendered SHA is the only cue to which one it shows) and the review link.
+	// writeFooter closes the comment with one small line: konflate's build version
+	// (when stamped), provenance (the commit this summary reflects — the comment is
+	// edited in place across pushes, so the rendered SHA is the only cue to which
+	// one it shows) and the review link.
 	writeFooter := func(headSHA string) {
-		parts := []string{"konflate"}
+		parts := []string{strings.TrimSpace("konflate " + version)}
 		if sha := shortSHA(headSHA); sha != "" {
 			parts = append(parts, fmt.Sprintf("rendered `%s`", sha))
 		}

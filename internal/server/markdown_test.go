@@ -51,7 +51,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	// Blocking → red [!CAUTION]; caution → amber [!WARNING], its own block. The
 	// alert box supplies the titled icon, so the items follow the marker directly
 	// with no repeated "Blocker"/"Caution" headline.
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{
 		"> [!CAUTION]\n> - `Deployment web/api`: image ghcr.io/x:9.9.9 not found upstream",
 		"> [!WARNING]\n> - `Deployment web/api`: replicas set to 0",
@@ -66,7 +66,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	// A render failure joins the blocker in the same red box (both fail the
 	// check) — blockers first — rather than opening a second [!CAUTION].
 	env.Diff.Failures = []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}}
-	merged := summaryMarkdown(env, "", true)
+	merged := summaryMarkdown(env, "", true, "")
 	if n := strings.Count(merged, "[!CAUTION]"); n != 1 {
 		t.Errorf("blocker + render failure should share one [!CAUTION] box, got %d:\n%s", n, merged)
 	}
@@ -82,7 +82,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	}
 	// The plain flavour has no box, so it keeps the glyph + title — singular with
 	// one finding each (the blocker must not be double-counted into the cautions).
-	plain := summaryMarkdown(env, "", false)
+	plain := summaryMarkdown(env, "", false, "")
 	for _, want := range []string{"**⛔ Blocker**", "**⚠ Caution**"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("plain markdown missing %q\n---\n%s", want, plain)
@@ -95,7 +95,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 
 func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true)
+	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true, "")
 	for _, want := range []string{
 		"<!-- konflate:pr-142 -->",
 		"> [!NOTE]",
@@ -131,6 +131,18 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 			t.Errorf("%s is out of order; want %v top to bottom:\n%s", marker, order, md)
 		}
 		last = at
+	}
+}
+
+func TestSummaryMarkdown_FooterVersion(t *testing.T) {
+	t.Parallel()
+	env := sampleSummaryEnv()
+	if md := summaryMarkdown(env, "", true, "v9.9.9"); !strings.Contains(md, "<sub>konflate v9.9.9 · rendered `1a2b3c4`</sub>") {
+		t.Errorf("footer should carry the build version:\n%s", md)
+	}
+	// Unset (a local build before main stamps it) → just "konflate", no dangling space.
+	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "<sub>konflate · rendered `1a2b3c4`</sub>") {
+		t.Errorf("footer without a version:\n%s", md)
 	}
 }
 
@@ -171,7 +183,7 @@ func TestImpactPhrase(t *testing.T) {
 
 func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "", false)
+	md := summaryMarkdown(sampleSummaryEnv(), "", false, "")
 	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("plain markdown must not use GitHub admonitions:\n%s", md)
 	}
@@ -202,7 +214,7 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	// GitHub flavour: a green [!TIP] naming itself and carrying the headline
 	// counts — so the separate [!NOTE] impact line is dropped — and, being
 	// routine, no caution/failure blocks.
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{"> [!TIP]", "**Routine**: only container-image and chart-version changes; 2 resources across 1 app"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
@@ -212,7 +224,7 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 		t.Errorf("a routine PR carries only the tip — no impact note, caution, or failure blocks:\n%s", md)
 	}
 	// Plain flavour: the bold line, no admonition syntax.
-	plain := summaryMarkdown(env, "", false)
+	plain := summaryMarkdown(env, "", false, "")
 	if strings.Contains(plain, "[!TIP]") {
 		t.Errorf("plain markdown must not use admonitions:\n%s", plain)
 	}
@@ -233,7 +245,7 @@ func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 		// and a code span into konflate's own comment/check-run.
 		Message: "boom | <script>alert(1)</script>\nsecond line [click](https://evil.example) ![x](https://evil.example/p.png) `code`",
 	}}
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	if strings.Contains(md, "<script>") {
 		t.Errorf("raw HTML must be escaped:\n%s", md)
 	}
@@ -282,7 +294,7 @@ func TestMdInline_DefangsMarkdown(t *testing.T) {
 
 func TestSummaryMarkdown_NotReady(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true)
+	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true, "")
 	if !strings.Contains(md, "Still rendering") {
 		t.Errorf("a running PR should say it's still rendering:\n%s", md)
 	}
@@ -299,7 +311,7 @@ func TestSummaryMarkdown_NoChanges(t *testing.T) {
 		Diff:   &api.DiffResult{HeadSHA: "deadbeefcafef00d"},
 	}
 	for _, admonitions := range []bool{true, false} {
-		md := summaryMarkdown(env, "", admonitions)
+		md := summaryMarkdown(env, "", admonitions, "")
 		if !strings.Contains(md, "No rendered changes") {
 			t.Errorf("admonitions=%v: expected a no-changes message:\n%s", admonitions, md)
 		}
@@ -316,7 +328,7 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
 	env.RefreshError = "forge timeout"
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	if !strings.Contains(md, "showing the last good render") {
 		t.Errorf("a refresh failure should be flagged:\n%s", md)
 	}
@@ -452,7 +464,7 @@ func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 			},
 		},
 	}
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{
 		"| image | from | to | upstream |",
 		"| `ghcr.io/ok` | `1.0` | `1.1` | found |",

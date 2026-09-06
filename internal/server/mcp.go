@@ -264,7 +264,7 @@ func (s *Server) mcpPRSummary(_ context.Context, _ *mcp.CallToolRequest, in mcpS
 	}
 	// The same Markdown summary konflate posts as a PR comment — GitHub-flavoured
 	// admonitions render in a Markdown-aware agent and degrade to plain text.
-	content := []mcp.Content{&mcp.TextContent{Text: summaryMarkdownBody(env, s.reviewURL(in.Number), true)}}
+	content := []mcp.Content{&mcp.TextContent{Text: summaryMarkdownBody(env, s.reviewURL(in.Number), true, s.Version)}}
 	// Hand back a link to the full diff as a resource — but only once it exists, so
 	// the link never dangles — letting the agent fetch the diff on demand instead of
 	// the summary inlining it.
