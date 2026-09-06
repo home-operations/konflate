@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/distribution/reference"
 	"github.com/home-operations/flate/pkg/image"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -215,13 +216,12 @@ func setDiff(a, b []string) []string {
 // The detection is flate's image.Extract — value-based, so it finds references
 // anywhere in the tree (not just under containers[]/initContainers[]: CNPG
 // spec.imageName, a CRD default, a sidecar under an arbitrary field) — and
-// image.Split separates each into (repository, version) robustly (a digest beats
-// a tag; a registry port is not mistaken for the version). nil manifest yields
-// an empty map.
+// splitRef separates each into (repository, version) robustly (a registry port
+// is not mistaken for the version). nil manifest yields an empty map.
 func collectImages(m map[string]any) map[string][]string {
 	seen := map[string]map[string]struct{}{}
 	for _, ref := range image.Extract(m) {
-		repo, ver := image.Split(ref)
+		repo, ver := splitRef(ref)
 		if seen[repo] == nil {
 			seen[repo] = map[string]struct{}{}
 		}
@@ -237,4 +237,33 @@ func collectImages(m map[string]any) map[string][]string {
 		out[repo] = list
 	}
 	return out
+}
+
+// splitRef separates an image reference into its repository name and version,
+// keeping BOTH the tag and the digest when a reference carries both
+// ("4.0.19.3011@sha256:…"). flate's image.Split keeps only the digest there — the
+// more specific half for pulling — but a digest-pinned bump (Renovate's default)
+// would then read as two opaque digests, and the semver major-bump check would
+// have nothing to parse. Otherwise mirrors Split: the name is verbatim (not
+// normalized), and a value that doesn't parse yields (ref, "").
+func splitRef(ref string) (name, version string) {
+	parsed, err := reference.Parse(ref)
+	if err != nil {
+		return ref, ""
+	}
+	named, ok := parsed.(reference.Named)
+	if !ok {
+		return ref, ""
+	}
+	name = named.Name()
+	if t, ok := parsed.(reference.Tagged); ok {
+		version = t.Tag()
+	}
+	if d, ok := parsed.(reference.Digested); ok {
+		if version != "" {
+			version += "@"
+		}
+		version += d.Digest().String()
+	}
+	return name, version
 }

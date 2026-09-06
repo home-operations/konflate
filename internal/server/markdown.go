@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -34,10 +35,18 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	var b strings.Builder
 	b.WriteString("### konflate — summary\n")
 
-	writeLink := func() {
-		if reviewURL != "" {
-			fmt.Fprintf(&b, "\n[View the full rendered diff →](%s)\n", reviewURL)
+	// writeFooter closes the comment with one small line: provenance (the commit
+	// this summary reflects — the comment is edited in place across pushes, so the
+	// rendered SHA is the only cue to which one it shows) and the review link.
+	writeFooter := func(headSHA string) {
+		parts := []string{"konflate"}
+		if sha := shortSHA(headSHA); sha != "" {
+			parts = append(parts, fmt.Sprintf("rendered `%s`", sha))
 		}
+		if reviewURL != "" {
+			parts = append(parts, fmt.Sprintf("[full diff →](%s)", reviewURL))
+		}
+		fmt.Fprintf(&b, "\n<sub>%s</sub>\n", strings.Join(parts, " · "))
 	}
 
 	if env.Status != api.JobReady || env.Diff == nil {
@@ -47,23 +56,11 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 		default:
 			b.WriteString("\n⏳ Still rendering — this updates once the diff is ready.\n")
 		}
-		writeLink()
+		writeFooter("")
 		return b.String()
 	}
 
 	d := env.Diff
-
-	// writeFooter closes the comment: the review link, then a subtle provenance
-	// line naming the commit this summary reflects. The comment is edited in place
-	// across pushes, so the rendered SHA is the only cue to which one it shows.
-	writeFooter := func() {
-		writeLink()
-		if sha := shortSHA(d.HeadSHA); sha != "" {
-			fmt.Fprintf(&b, "\n<sub>konflate · rendered `%s` · advisory, not a gate</sub>\n", sha)
-		} else {
-			b.WriteString("\n<sub>konflate · advisory, not a gate</sub>\n")
-		}
-	}
 	// writeRefreshNote flags that the most recent re-render failed and we're showing
 	// the last good diff, so a reviewer doesn't act on a stale render unaware.
 	writeRefreshNote := func() {
@@ -88,20 +85,23 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 			b.WriteString("\n✅ No rendered changes.\n")
 		}
 		writeRefreshNote()
-		writeFooter()
+		writeFooter(d.HeadSHA)
 		return b.String()
 	}
 	// The content blocks, each rendered once so a custom comment template can place
 	// them individually (commentTemplateData.Sections); the default body composes
 	// the same blocks in order. The refresh note and footer are konflate's own
-	// chrome and stay here.
+	// chrome and stay here. A routine PR's tip already carries the headline counts,
+	// so the impact line is dropped there rather than said twice.
 	sec := summarySectionsFor(d, admonitions)
 	appendSection := func(s string) {
 		if s != "" {
 			b.WriteString("\n" + s + "\n")
 		}
 	}
-	appendSection(sec.Impact)
+	if !d.Routine {
+		appendSection(sec.Impact)
+	}
 	appendSection(sec.Routine)
 	writeRefreshNote()
 	appendSection(sec.BlastRadius)
@@ -109,7 +109,7 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	appendSection(sec.Cautions)
 	appendSection(sec.Failures)
 	appendSection(sec.Images)
-	writeFooter()
+	writeFooter(d.HeadSHA)
 	return b.String()
 }
 
@@ -146,36 +146,66 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 }
 
 // sectionImpact is the headline counts line. On the GitHub flavour it sits inside
-// a [!NOTE] admonition; plain keeps it bare. Always non-empty (even +0).
+// a [!NOTE] admonition; plain keeps it bare. Always non-empty.
 func sectionImpact(d *api.DiffResult, admonitions bool) string {
-	var impact strings.Builder
-	fmt.Fprintf(&impact, "**+%d added · %d changed · −%d removed** — %d %s",
-		d.Summary.Added, d.Summary.Changed, d.Summary.Removed,
-		d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
+	impact := impactPhrase(d, true)
+	if admonitions {
+		return "> [!NOTE]\n> " + impact
+	}
+	return impact
+}
+
+// impactPhrase is the headline in words, zero terms omitted: "6 changed across 6
+// apps", or "+2 added · 3 changed · −1 removed — 6 resources across 2 apps · 1
+// CRD". The resource total is only spelled out when the delta has more than one
+// term (otherwise it just repeats that term). bold wraps the delta in ** so it
+// leads a [!NOTE]; the routine tip embeds it plain.
+func impactPhrase(d *api.DiffResult, bold bool) string {
+	var delta []string
+	if d.Summary.Added > 0 {
+		delta = append(delta, fmt.Sprintf("+%d added", d.Summary.Added))
+	}
+	if d.Summary.Changed > 0 {
+		delta = append(delta, fmt.Sprintf("%d changed", d.Summary.Changed))
+	}
+	if d.Summary.Removed > 0 {
+		delta = append(delta, fmt.Sprintf("−%d removed", d.Summary.Removed))
+	}
+	var b strings.Builder
+	switch {
+	case len(delta) == 0:
+		b.WriteString("no rendered changes")
+	case bold:
+		fmt.Fprintf(&b, "**%s**", strings.Join(delta, " · "))
+	default:
+		b.WriteString(strings.Join(delta, " · "))
+	}
+	if len(delta) > 1 {
+		fmt.Fprintf(&b, " — %d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
+	}
 	if d.Impact.Parents > 0 {
-		fmt.Fprintf(&impact, " · %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
+		fmt.Fprintf(&b, " across %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
 	}
 	if d.Impact.CRDs > 0 {
-		fmt.Fprintf(&impact, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
+		fmt.Fprintf(&b, " · %d %s", d.Impact.CRDs, plural(d.Impact.CRDs, "CRD", "CRDs"))
 	}
 	if d.Truncated > 0 {
-		fmt.Fprintf(&impact, " · %d not shown", d.Truncated)
+		fmt.Fprintf(&b, " · %d not shown", d.Truncated)
 	}
-	if admonitions {
-		return "> [!NOTE]\n> " + impact.String()
-	}
-	return impact.String()
+	return b.String()
 }
 
 // sectionRoutine surfaces a routine PR — only container-image and chart-version
-// changes, with nothing flagged. The GitHub flavour uses a green [!TIP], matching
-// the routine list pill's colour; plain keeps a bold line. Empty unless the diff
-// is routine. Like the pill, it describes the diff's shape, not runtime safety.
+// changes, with nothing flagged — in one line that also carries the headline
+// counts (the default body omits the impact line for a routine PR). The GitHub
+// flavour uses a green [!TIP], matching the routine list pill's colour; plain
+// keeps a bold line. Empty unless the diff is routine. Like the pill, it
+// describes the diff's shape, not runtime safety.
 func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 	if !d.Routine {
 		return ""
 	}
-	const msg = "**Routine** — only container-image and chart-version changes; nothing else changed."
+	msg := fmt.Sprintf("**Routine** — %s; only container-image and chart-version changes.", impactPhrase(d, false))
 	if admonitions {
 		return "> [!TIP]\n> " + msg
 	}
@@ -251,13 +281,40 @@ func sectionImages(d *api.DiffResult) string {
 	if len(d.Images) == 0 {
 		return ""
 	}
+	// The registry column only appears once verification has produced a verdict
+	// for some image; with KONFLATE_VERIFY_IMAGES off (or a fork PR, never
+	// dialed) a column of "unverified" would be noise, not information.
+	verified := slices.ContainsFunc(d.Images, func(im api.ImageChange) bool { return im.Upstream != "" })
 	var b strings.Builder
-	b.WriteString("**Image changes**\n\n| image | from | to | registry |\n|---|---|---|---|\n")
+	b.WriteString("**Image changes**\n\n| image | from | to |")
+	if verified {
+		b.WriteString(" registry |")
+	}
+	b.WriteString("\n|---|---|---|")
+	if verified {
+		b.WriteString("---|")
+	}
+	b.WriteString("\n")
 	for _, im := range d.Images {
-		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n",
-			mdCode(im.Name), mdCode(shortVer(im.From)), mdCode(shortVer(im.To)), upstreamCell(im))
+		fmt.Fprintf(&b, "| `%s` | %s | %s |", mdCode(im.Name), mdVersion(im.From), mdVersion(im.To))
+		if verified {
+			fmt.Fprintf(&b, " %s |", upstreamCell(im))
+		}
+		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// mdVersion renders one image version cell: a tag or digest in a code span
+// (digests shortened), or — for a digest-pinned tag, "1.2.3@sha256:…" — the tag
+// in the code span with the shortened digest trailing in small print, so a
+// Renovate bump reads by its tag while a digest-only re-pin still shows what moved.
+func mdVersion(v string) string {
+	tag, digest, pinned := strings.Cut(v, "@")
+	if !pinned {
+		return "`" + mdCode(shortVer(v)) + "`"
+	}
+	return fmt.Sprintf("`%s` <sub>%s</sub>", mdCode(tag), mdInline(shortVer(digest)))
 }
 
 // upstreamCell renders an image's registry verdict for the image table: found,

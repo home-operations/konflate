@@ -78,7 +78,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"<!-- konflate:pr-142 -->",
 		"### konflate — summary",
 		"> [!NOTE]",
-		"+2 added · 3 changed · −1 removed** — 6 resources · 2 apps · 1 CRD",
+		"**+2 added · 3 changed · −1 removed** — 6 resources across 2 apps · 1 CRD",
 		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
 		"> [!WARNING]\n> **⚠ Caution**",
 		"> - `Deployment web/api` — replicas set to 0",
@@ -89,15 +89,54 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
 		// Singular, no "+more" when the sample already covers the whole radius.
 		"- `Kustomization flux-system/db` — 1 dependent (`Kustomization flux-system/cache`)",
-		"| image | from | to | registry |",
-		// No Upstream on the fixture → the head ref was never confirmed.
-		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
-		"[View the full rendered diff →](https://k.example/#/pr/142)",
-		"konflate · rendered `1a2b3c4` · advisory, not a gate",
+		"| image | from | to |\n|---|---|---|\n",
+		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` |",
+		// Provenance and the review link share one small footer line.
+		"<sub>konflate · rendered `1a2b3c4` · [full diff →](https://k.example/#/pr/142)</sub>",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
+	}
+	// No image was verified → no registry column at all (a column of "unverified"
+	// would be noise with KONFLATE_VERIFY_IMAGES off).
+	if strings.Contains(md, "registry") || strings.Contains(md, "unverified") {
+		t.Errorf("registry column must be absent when nothing was verified:\n%s", md)
+	}
+	if strings.Contains(md, "advisory, not a gate") || strings.Contains(md, "View the full rendered diff") {
+		t.Errorf("old chrome should be gone:\n%s", md)
+	}
+}
+
+func TestImpactPhrase(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		d    api.DiffResult
+		want string
+	}{
+		{"single term omits the resource total",
+			api.DiffResult{Summary: api.DiffSummary{Changed: 6}, Impact: api.Impact{Resources: 6, Parents: 6}},
+			"**6 changed** across 6 apps"},
+		{"zero terms dropped, total kept for a mixed delta",
+			api.DiffResult{Summary: api.DiffSummary{Added: 1, Changed: 1}, Impact: api.Impact{Resources: 2, Parents: 1, CRDs: 1}},
+			"**+1 added · 1 changed** — 2 resources across 1 app · 1 CRD"},
+		{"no parents",
+			api.DiffResult{Summary: api.DiffSummary{Removed: 3}, Impact: api.Impact{Resources: 3}},
+			"**−3 removed**"},
+		{"nothing changed (failures only)",
+			api.DiffResult{},
+			"no rendered changes"},
+		{"truncated",
+			api.DiffResult{Summary: api.DiffSummary{Changed: 400}, Impact: api.Impact{Resources: 400, Parents: 9}, Truncated: 100},
+			"**400 changed** across 9 apps · 100 not shown"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := impactPhrase(&tc.d, true); got != tc.want {
+				t.Errorf("impactPhrase = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -112,8 +151,8 @@ func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 			t.Errorf("plain markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	// No review URL → no link line.
-	if strings.Contains(md, "View the full rendered diff") {
+	// No review URL → no link in the footer.
+	if strings.Contains(md, "full diff →") {
 		t.Errorf("empty review URL should omit the link:\n%s", md)
 	}
 }
@@ -131,16 +170,17 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 			Routine: true,
 		},
 	}
-	// GitHub flavour: a green [!TIP] naming itself, and — being routine — no
-	// caution/failure blocks.
+	// GitHub flavour: a green [!TIP] naming itself and carrying the headline
+	// counts — so the separate [!NOTE] impact line is dropped — and, being
+	// routine, no caution/failure blocks.
 	md := summaryMarkdown(env, "", true)
-	for _, want := range []string{"> [!TIP]", "**Routine**"} {
+	for _, want := range []string{"> [!TIP]", "**Routine** — 2 changed across 1 app; only container-image and chart-version changes."} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	if strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
-		t.Errorf("a routine PR carries no caution/failure blocks:\n%s", md)
+	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
+		t.Errorf("a routine PR carries only the tip — no impact note, caution, or failure blocks:\n%s", md)
 	}
 	// Plain flavour: the bold line, no admonition syntax.
 	plain := summaryMarkdown(env, "", false)
@@ -257,6 +297,23 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	}
 }
 
+func TestMdVersion(t *testing.T) {
+	t.Parallel()
+	digest := "sha256:" + strings.Repeat("a", 64)
+	cases := []struct{ in, want string }{
+		{"v1.15.0", "`v1.15.0`"},
+		{"", "`∅`"},
+		{digest, "`sha256:aaaaaaaaaaaa…`"},
+		// A digest-pinned tag reads by its tag, the digest trailing small.
+		{"4.0.19.3011@" + digest, "`4.0.19.3011` <sub>sha256:aaaaaaaaaaaa…</sub>"},
+	}
+	for _, c := range cases {
+		if got := mdVersion(c.in); got != c.want {
+			t.Errorf("mdVersion(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestShortVer(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ in, want string }{
@@ -364,6 +421,7 @@ func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
 	}
 	md := summaryMarkdown(env, "", true)
 	for _, want := range []string{
+		"| image | from | to | registry |", // present: at least one image has a verdict
 		"| `ghcr.io/ok` | `1.0` | `1.1` | ✓ found |",
 		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ⛔ **not found** |",
 		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",

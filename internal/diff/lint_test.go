@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -238,6 +239,76 @@ func TestLint_MajorChartBump(t *testing.T) {
 	}
 	if w.Level != api.LevelCaution || w.Resource != "app-template" || w.Detail == "" {
 		t.Errorf("major-chart-bump = {%s %q %q}, want caution app-template with a detail", w.Level, w.Resource, w.Detail)
+	}
+}
+
+// A digest-pinned tag ("v1.9.0@sha256:…") must still be read as semver — the
+// Renovate default pins every image this way, so without it the rule never fires.
+func TestLint_MajorImageBump_DigestPinned(t *testing.T) {
+	t.Parallel()
+	images := []api.ImageChange{{Name: "ghcr.io/app",
+		From: "v1.9.0@sha256:" + strings.Repeat("a", 64), To: "v2.0.0@sha256:" + strings.Repeat("b", 64)}}
+	n, w := countRule(Lint(nil, images, nil), "major-image-bump")
+	if n != 1 {
+		t.Fatalf("major-image-bump count = %d, want 1 for a digest-pinned major bump", n)
+	}
+	// The detail names the tags, not the 64-hex digests.
+	if !strings.Contains(w.Detail, "v1.9.0 → v2.0.0") || strings.Contains(w.Detail, "sha256") {
+		t.Errorf("detail should read by tag, got %q", w.Detail)
+	}
+}
+
+func ociRepo(tag string) map[string]any {
+	return map[string]any{"spec": map[string]any{"ref": map[string]any{"tag": tag}}}
+}
+
+func helmReleaseChart(version string) map[string]any {
+	return map[string]any{"spec": map[string]any{"chart": map[string]any{"spec": map[string]any{"chart": "app", "version": version}}}}
+}
+
+// TestLint_MajorRefBump: a major bump pinned on the Flux source object itself —
+// an OCIRepository tag or a HelmRelease chart version — is flagged from that
+// object's manifest, so a breaking chart upgrade surfaces even when no rendered
+// child changed (the label-based rule sees nothing then).
+func TestLint_MajorRefBump(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "kube-prometheus-stack",
+			Old: ociRepo("88.6.1"), New: ociRepo("89.0.0")}, // major → source caution
+		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "blackbox",
+			Old: ociRepo("11.17.2"), New: ociRepo("11.18.0")}, // minor → none
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
+			Old: helmReleaseChart("3.5.1"), New: helmReleaseChart("4.0.0")}, // major → chart caution
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "ranged",
+			Old: helmReleaseChart("3.x"), New: helmReleaseChart("4.x")}, // a range → not semver, none
+		{Status: "added", Kind: "OCIRepository", Namespace: "o11y", Name: "new",
+			New: ociRepo("2.0.0")}, // an add has no before side
+	}
+	ws := Lint(changes, nil, nil)
+	n, w := countRule(ws, "major-source-bump")
+	if n != 1 || w.Resource != "OCIRepository o11y/kube-prometheus-stack" || !strings.Contains(w.Detail, "88.6.1 → 89.0.0") {
+		t.Errorf("major-source-bump: count=%d %+v; want 1 on the kube-prometheus-stack OCIRepository", n, w)
+	}
+	n, w = countRule(ws, "major-chart-bump")
+	if n != 1 || w.Resource != "HelmRelease media/plex" || !strings.Contains(w.Detail, "3.5.1 → 4.0.0") {
+		t.Errorf("major-chart-bump: count=%d %+v; want 1 on the plex HelmRelease", n, w)
+	}
+}
+
+// When the source object and the rendered children both show the same bump (the
+// usual case: the render did pick the new chart up), it is reported once, from
+// the source object, not again from the helm.sh/chart label.
+func TestLint_MajorRefBump_DedupsLabelRule(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
+			Old: helmReleaseChart("3.5.1"), New: helmReleaseChart("4.0.0")},
+		{Status: "changed", Kind: "Deployment", Namespace: "media", Name: "plex", Parent: "HelmRelease media/plex",
+			OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+	}
+	ws := Lint(changes, nil, nil)
+	if n, w := countRule(ws, "major-chart-bump"); n != 1 || w.Resource != "HelmRelease media/plex" {
+		t.Errorf("want exactly one major-chart-bump, on the HelmRelease; got %d, last %+v", n, w)
 	}
 }
 

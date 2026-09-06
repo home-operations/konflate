@@ -451,9 +451,48 @@ func TestImageChanges_MergedMoveFoldsIntoRealBump(t *testing.T) {
 	}
 }
 
-// splitImageRef's behavior now lives in flate's image.Split (tested in
-// flate); konflate's collectImages composes image.Extract + image.Split,
-// exercised end to end by TestImageChanges above.
+// TestImageChanges_DigestPinnedKeepsTag: a Renovate-style pin ("tag@sha256:…")
+// must keep the tag in the version — flate's image.Split would reduce both sides
+// to opaque digests, hiding the human-readable bump and starving the semver
+// major-bump check.
+func TestImageChanges_DigestPinnedKeepsTag(t *testing.T) {
+	t.Parallel()
+	const (
+		oldRef = "ghcr.io/home-operations/sonarr:4.0.19.3009@sha256:67815effd2ea18398ffc2011d974b8b1cd3939eec5aa74688ffbf371ff65dd84"
+		newRef = "ghcr.io/home-operations/sonarr:4.0.19.3011@sha256:47d56de90c81eb2a8f0d36771328a95e7299609579b88db82b1473c314f26a47"
+	)
+	changes := []diff.Change{{Status: "changed", Kind: "Deployment", Namespace: "default", Name: "sonarr",
+		Old: deploy("default", "sonarr", oldRef), New: deploy("default", "sonarr", newRef)}}
+	got := imageChanges(changes)
+	if len(got) != 1 {
+		t.Fatalf("got %d image changes, want 1: %+v", len(got), got)
+	}
+	c := got[0]
+	if c.Name != "ghcr.io/home-operations/sonarr" ||
+		c.From != "4.0.19.3009@sha256:67815effd2ea18398ffc2011d974b8b1cd3939eec5aa74688ffbf371ff65dd84" ||
+		c.To != "4.0.19.3011@sha256:47d56de90c81eb2a8f0d36771328a95e7299609579b88db82b1473c314f26a47" {
+		t.Errorf("got %+v, want the tag kept ahead of the digest on both sides", c)
+	}
+}
+
+func TestSplitRef(t *testing.T) {
+	t.Parallel()
+	const digest = "sha256:67815effd2ea18398ffc2011d974b8b1cd3939eec5aa74688ffbf371ff65dd84"
+	cases := []struct{ ref, name, version string }{
+		{"ghcr.io/app:1.2.3", "ghcr.io/app", "1.2.3"},
+		{"ghcr.io/app@" + digest, "ghcr.io/app", digest},
+		{"ghcr.io/app:1.2.3@" + digest, "ghcr.io/app", "1.2.3@" + digest},
+		{"localhost:5000/app:v2", "localhost:5000/app", "v2"}, // a registry port is not the version
+		{"ghcr.io/app", "ghcr.io/app", ""},
+		{"not a ref", "not a ref", ""},
+	}
+	for _, tc := range cases {
+		name, version := splitRef(tc.ref)
+		if name != tc.name || version != tc.version {
+			t.Errorf("splitRef(%q) = (%q, %q), want (%q, %q)", tc.ref, name, version, tc.name, tc.version)
+		}
+	}
+}
 
 func TestDropFailedParents(t *testing.T) {
 	t.Parallel()

@@ -62,10 +62,11 @@
     return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
   }
 
-  // Reconstruct a pullable reference for the copy button: a digest joins the name
-  // with '@' (a tag can never contain ':', so a ':' in the version means digest).
+  // Reconstruct a pullable reference for the copy button: a bare digest
+  // ("sha256:…") joins the name with '@'; a tag — including a digest-pinned one,
+  // "1.2.3@sha256:…" — joins with ':'.
   function imageRef(name: string, ver: string): string {
-    return ver.includes(':') ? `${name}@${ver}` : `${name}:${ver}`;
+    return /^[a-z0-9]+:[0-9a-f]+$/i.test(ver) ? `${name}@${ver}` : `${name}:${ver}`;
   }
 
   // Blast-radius dependents are "Kind ns/name" and are always the parent's own
