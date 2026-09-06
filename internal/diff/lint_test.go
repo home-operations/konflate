@@ -258,13 +258,21 @@ func TestLint_MajorImageBump_DigestPinned(t *testing.T) {
 	}
 }
 
-func ociRepo(tag string) map[string]any {
-	return map[string]any{"spec": map[string]any{"ref": map[string]any{"tag": tag}}}
+func ociRepo(chart, tag string) map[string]any {
+	return map[string]any{
+		"apiVersion": "source.toolkit.fluxcd.io/v1",
+		"spec":       map[string]any{"url": "oci://ghcr.io/example/charts/" + chart, "ref": map[string]any{"tag": tag}},
+	}
 }
 
-func helmReleaseChart(version string) map[string]any {
-	return map[string]any{"spec": map[string]any{"chart": map[string]any{"spec": map[string]any{"chart": "app", "version": version}}}}
+func helmReleaseChart(apiVersion, chart, version string) map[string]any {
+	return map[string]any{
+		"apiVersion": apiVersion,
+		"spec":       map[string]any{"chart": map[string]any{"spec": map[string]any{"chart": chart, "version": version}}},
+	}
 }
+
+const fluxHelmAPI = "helm.toolkit.fluxcd.io/v2"
 
 // TestLint_MajorRefBump: a major bump pinned on the Flux source object itself —
 // an OCIRepository tag or a HelmRelease chart version — is flagged from that
@@ -274,15 +282,17 @@ func TestLint_MajorRefBump(t *testing.T) {
 	t.Parallel()
 	changes := []Change{
 		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "kube-prometheus-stack",
-			Old: ociRepo("88.6.1"), New: ociRepo("89.0.0")}, // major → source caution
+			Old: ociRepo("kube-prometheus-stack", "88.6.1"), New: ociRepo("kube-prometheus-stack", "89.0.0")}, // major → source caution
 		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "blackbox",
-			Old: ociRepo("11.17.2"), New: ociRepo("11.18.0")}, // minor → none
+			Old: ociRepo("blackbox", "11.17.2"), New: ociRepo("blackbox", "11.18.0")}, // minor → none
 		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
-			Old: helmReleaseChart("3.5.1"), New: helmReleaseChart("4.0.0")}, // major → chart caution
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")}, // major → chart caution
 		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "ranged",
-			Old: helmReleaseChart("3.x"), New: helmReleaseChart("4.x")}, // a range → not semver, none
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.x"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.x")}, // a range → not semver, none
+		{Status: "changed", Kind: "HelmRelease", Namespace: "other", Name: "not-flux",
+			Old: helmReleaseChart("example.com/v1", "x", "1.0.0"), New: helmReleaseChart("example.com/v1", "x", "2.0.0")}, // a non-Flux CRD of the same name → none
 		{Status: "added", Kind: "OCIRepository", Namespace: "o11y", Name: "new",
-			New: ociRepo("2.0.0")}, // an add has no before side
+			New: ociRepo("new", "2.0.0")}, // an add has no before side
 	}
 	ws := Lint(changes, nil, nil)
 	n, w := countRule(ws, "major-source-bump")
@@ -302,13 +312,24 @@ func TestLint_MajorRefBump_DedupsLabelRule(t *testing.T) {
 	t.Parallel()
 	changes := []Change{
 		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
-			Old: helmReleaseChart("3.5.1"), New: helmReleaseChart("4.0.0")},
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")},
 		{Status: "changed", Kind: "Deployment", Namespace: "media", Name: "plex", Parent: "HelmRelease media/plex",
 			OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+		// An unrelated chart that happens to move through the same version pair
+		// must still be reported: the dedup is by chart identity, not versions.
+		{Status: "changed", Kind: "Deployment", Namespace: "db", Name: "pg", Parent: "HelmRelease db/pg",
+			OldChart: "cloudnative-pg-3.5.1", NewChart: "cloudnative-pg-4.0.0", Old: map[string]any{}, New: map[string]any{}},
 	}
 	ws := Lint(changes, nil, nil)
-	if n, w := countRule(ws, "major-chart-bump"); n != 1 || w.Resource != "HelmRelease media/plex" {
-		t.Errorf("want exactly one major-chart-bump, on the HelmRelease; got %d, last %+v", n, w)
+	var got []string
+	for _, w := range ws {
+		if w.Rule == "major-chart-bump" {
+			got = append(got, w.Resource)
+		}
+	}
+	want := []string{"HelmRelease media/plex", "cloudnative-pg"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("major-chart-bump resources = %v, want %v (app-template once via the HelmRelease, cloudnative-pg via its label)", got, want)
 	}
 }
 

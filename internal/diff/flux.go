@@ -37,9 +37,12 @@ type ParentInfo struct {
 // document itself (guarded by API group — a non-Flux CRD that happens to be
 // called "Kustomization" must not trip the suspend rules).
 func fluxKind(c Change) bool {
-	if c.Kind != "Kustomization" && c.Kind != kindHelmRelease {
-		return false
-	}
+	return (c.Kind == "Kustomization" || c.Kind == kindHelmRelease) && fluxAPI(c)
+}
+
+// fluxAPI reports whether the change's document belongs to a Flux API group
+// (*.toolkit.fluxcd.io), read from whichever side is present.
+func fluxAPI(c Change) bool {
 	for _, m := range []map[string]any{c.New, c.Old} {
 		if m == nil {
 			continue

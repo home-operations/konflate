@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 
@@ -151,6 +152,7 @@ func largeChangeSet(changes []Change) (api.Warning, bool) {
 type refBump struct {
 	resource string // "Kind ns/name" of the HelmRelease / OCIRepository
 	rule     string
+	chart    string // chart name, to pair with the label rule's; "" when unknown
 	from, to string
 }
 
@@ -176,28 +178,36 @@ func (b refBump) warning() api.Warning {
 // itself. A HelmRelease's version may be a range ("1.x"); majorOf rejects those,
 // so only a pinned version can fire. An OCIRepository may track a non-chart
 // artifact (a manifests bundle), so its rule is named for the source, not a chart.
+// Guarded by API group like fluxKind: a non-Flux CRD that happens to be called
+// HelmRelease must not trip it.
 func chartRefBumps(changes []Change) []refBump {
 	var out []refBump
 	for _, c := range changes {
-		if c.Old == nil || c.New == nil {
+		if c.Old == nil || c.New == nil || !fluxAPI(c) {
 			continue // an add/remove has no before→after to compare
 		}
-		var path []string
-		var rule string
+		var fieldPath []string
+		var rule, chart string
 		switch c.Kind {
 		case kindHelmRelease:
-			path, rule = []string{spec, "chart", spec, "version"}, ruleMajorChartBump
+			fieldPath, rule = []string{spec, "chart", spec, "version"}, ruleMajorChartBump
+			chart, _ = stringField(c.New, spec, "chart", spec, "chart")
 		case "OCIRepository":
-			path, rule = []string{spec, "ref", "tag"}, "major-source-bump"
+			fieldPath, rule = []string{spec, "ref", "tag"}, "major-source-bump"
+			// oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack → the
+			// last path segment is the chart (repository) name.
+			if u, ok := stringField(c.New, spec, "url"); ok {
+				chart = path.Base(strings.TrimRight(u, "/"))
+			}
 		default:
 			continue
 		}
-		from, ok1 := stringField(c.Old, path...)
-		to, ok2 := stringField(c.New, path...)
+		from, ok1 := stringField(c.Old, fieldPath...)
+		to, ok2 := stringField(c.New, fieldPath...)
 		if !ok1 || !ok2 || !isMajorBump(from, to) {
 			continue
 		}
-		out = append(out, refBump{resource: resourceLabel(c), rule: rule, from: from, to: to})
+		out = append(out, refBump{resource: resourceLabel(c), rule: rule, chart: chart, from: from, to: to})
 	}
 	return out
 }
@@ -205,13 +215,17 @@ func chartRefBumps(changes []Change) []refBump {
 // chartBumpWarnings flags major Helm chart version bumps (caution), one per
 // chart, in first-seen order. A chart's children share its helm.sh/chart label,
 // so the bump is deduped by chart name. A bump chartRefBumps already reported
-// from the source object (same from → to versions) is skipped, so one chart
-// upgrade doesn't surface twice.
+// from the source object — the same chart moving through the same versions — is
+// skipped, so one chart upgrade doesn't surface twice; an unrelated chart that
+// happens to share the version pair is still reported.
 func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 	type bump struct{ from, to string }
-	reported := make(map[bump]struct{}, len(refBumps))
+	type chartBump struct{ chart, from, to string }
+	reported := make(map[chartBump]struct{}, len(refBumps))
 	for _, b := range refBumps {
-		reported[bump{b.from, b.to}] = struct{}{}
+		if b.chart != "" {
+			reported[chartBump{b.chart, b.from, b.to}] = struct{}{}
+		}
 	}
 	seen := make(map[string]bump)
 	var order []string
@@ -221,7 +235,7 @@ func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 		if oldName == "" || oldName != newName || !isMajorBump(oldVer, newVer) {
 			continue
 		}
-		if _, dup := reported[bump{oldVer, newVer}]; dup {
+		if _, dup := reported[chartBump{oldName, oldVer, newVer}]; dup {
 			continue
 		}
 		if _, ok := seen[oldName]; !ok {
