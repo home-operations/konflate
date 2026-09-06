@@ -335,22 +335,10 @@ func sectionImages(d *api.DiffResult) string {
 	var b strings.Builder
 	b.WriteString("| image | from | to | upstream |\n|---|---|---|---|\n")
 	for _, im := range d.Images {
-		from, to := mdVersions(im.From, im.To)
-		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n", mdCode(im.Name), from, to, upstreamCell(im))
+		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n",
+			mdCode(im.Name), mdCode(shortVer(im.From)), mdCode(shortVer(im.To)), upstreamCell(im))
 	}
 	return strings.TrimRight(b.String(), "\n")
-}
-
-// mdVersions renders an image transition's two cells. A digest-pinned tag
-// ("1.2.3@sha256:…") is shown as its tag alone when the tag itself moved — the
-// digest adds nothing a reviewer reads — and only when the tags are equal (a
-// digest-only re-pin) does the shortened digest stay, so the row still shows
-// what changed. Bare tags and bare digests pass through shortVer as before.
-func mdVersions(from, to string) (string, string) {
-	if tagOf(from) != tagOf(to) {
-		from, to = tagOf(from), tagOf(to)
-	}
-	return mdCode(shortVer(from)), mdCode(shortVer(to))
 }
 
 // bareRef strips the kind from a "Kind ns/name" label, leaving "ns/name".
@@ -481,7 +469,8 @@ func mdCode(s string) string {
 	return strings.ReplaceAll(s, "|", `\|`)
 }
 
-// shortVer trims an "algo:hexdigest" reference to "algo:<6 hex>…" so a
+// shortVer trims the digest in a version — a bare "algo:hexdigest" or the digest
+// half of a pinned "tag@algo:hexdigest" — to "algo:<6 hex>…" so a
 // digest-pinned image doesn't sprawl across the table; tags pass through.
 func shortVer(v string) string {
 	if v == "" {

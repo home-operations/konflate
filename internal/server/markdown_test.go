@@ -338,33 +338,14 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	}
 }
 
-func TestMdVersions(t *testing.T) {
-	t.Parallel()
-	d1 := "sha256:" + strings.Repeat("a", 64)
-	d2 := "sha256:" + strings.Repeat("b", 64)
-	cases := []struct{ from, to, wantFrom, wantTo string }{
-		{"v1.14.9", "v1.15.0", "v1.14.9", "v1.15.0"},
-		{"", "v1.15.0", "∅", "v1.15.0"},
-		// A digest-pinned bump reads by its tags alone.
-		{"4.0.19.3009@" + d1, "4.0.19.3011@" + d2, "4.0.19.3009", "4.0.19.3011"},
-		// A digest-only re-pin keeps the (shortened) digest, or the row would show no change.
-		{"4.0.19.3011@" + d1, "4.0.19.3011@" + d2, "4.0.19.3011@sha256:aaaaaa…", "4.0.19.3011@sha256:bbbbbb…"},
-		{d1, d2, "sha256:aaaaaa…", "sha256:bbbbbb…"},
-	}
-	for _, c := range cases {
-		gotFrom, gotTo := mdVersions(c.from, c.to)
-		if gotFrom != c.wantFrom || gotTo != c.wantTo {
-			t.Errorf("mdVersions(%q, %q) = (%q, %q), want (%q, %q)", c.from, c.to, gotFrom, gotTo, c.wantFrom, c.wantTo)
-		}
-	}
-}
-
 func TestShortVer(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ in, want string }{
 		{"", "∅"},
 		{"v1.15.0", "v1.15.0"},
 		{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("a", 6) + "…"},
+		// A digest-pinned tag keeps the tag and shortens the digest half.
+		{"4.0.19.3011@sha256:" + strings.Repeat("a", 64), "4.0.19.3011@sha256:aaaaaa…"},
 	}
 	for _, c := range cases {
 		if got := shortVer(c.in); got != c.want {
