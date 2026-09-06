@@ -29,7 +29,7 @@
           cls: 'missing',
           icon: mdiCloseCircleOutline,
           text: 'not found',
-          hint: 'Not found in upstream registry — this image would fail to pull',
+          hint: 'Not found in upstream registry; this image would fail to pull',
         };
       default:
         return {

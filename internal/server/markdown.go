@@ -91,29 +91,19 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	// The content blocks, each rendered once so a custom comment template can place
 	// them individually (commentTemplateData.Sections); the default body composes
 	// the same blocks in severity order — red, amber, then the neutral note — so
-	// what fails the check is the first thing read: the failing box, the cautions,
-	// the stale-render warning, then the headline counts (or the routine tip, which
-	// already carries them, so the impact line is dropped there rather than said
-	// twice), blast radius and images. The refresh note and footer are konflate's
-	// own chrome and stay here.
+	// what fails the check is the first thing read: the failing block (blockers
+	// and render failures), the cautions, the stale-render warning, then the
+	// headline counts (or the routine tip, which already carries them, so the
+	// impact line is dropped there rather than said twice), blast radius and
+	// images. The refresh note and footer are konflate's own chrome and stay here.
 	sec := summarySectionsFor(d, admonitions)
 	appendSection := func(s string) {
 		if s != "" {
 			b.WriteString("\n" + s + "\n")
 		}
 	}
-	if admonitions {
-		// One red box for everything that fails the check — blockers, then render
-		// failures — and one amber box for the cautions. Splitting same-severity
-		// findings into separate boxes only added headlines to tell them apart;
-		// each item already says what it is.
-		appendSection(sectionFailing(d))
-		appendSection(sec.Cautions)
-	} else {
-		appendSection(sec.Blocking)
-		appendSection(sec.Failures)
-		appendSection(sec.Cautions)
-	}
+	appendSection(sec.Failing)
+	appendSection(sec.Cautions)
 	writeRefreshNote()
 	if !d.Routine {
 		appendSection(sec.Impact)
@@ -131,12 +121,13 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 // forge's flavour (GitHub admonitions vs plain), or empty when that block has
 // nothing to show. summaryMarkdownBody composes the same blocks for the default.
 type summarySections struct {
-	Impact      string // headline counts: +added · changed · −removed — N resources · …
+	Impact      string // headline counts: +added · changed · −removed: N resources · …
 	Routine     string // image/chart-version-only bump, nothing flagged (green [!TIP])
 	BlastRadius string // downstream apps transitively depending on the changed ones
+	Failing     string // everything that fails the check: Blocking + Failures (one red [!CAUTION] on GitHub)
 	Blocking    string // blocking-tier warnings — fail the check (red [!CAUTION])
 	Cautions    string // caution-tier warnings — advisory (amber [!WARNING])
-	Failures    string // resources that failed to render
+	Failures    string // resources that failed to render (red [!CAUTION])
 	Images      string // container image changes (a Markdown table)
 }
 
@@ -150,6 +141,7 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 		Impact:      sectionImpact(d, admonitions),
 		Routine:     sectionRoutine(d, admonitions),
 		BlastRadius: sectionBlastRadius(d),
+		Failing:     sectionFailing(d, admonitions),
 		Blocking:    sectionBlocking(d, admonitions),
 		Cautions:    sectionCautions(d, admonitions),
 		Failures:    sectionFailures(d, admonitions),
@@ -160,19 +152,18 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 // sectionImpact is the headline counts line. On the GitHub flavour it sits inside
 // a [!NOTE] admonition; plain keeps it bare. Always non-empty.
 func sectionImpact(d *api.DiffResult, admonitions bool) string {
-	impact := impactPhrase(d, true)
+	impact := impactPhrase(d)
 	if admonitions {
 		return "> [!NOTE]\n> " + impact
 	}
 	return impact
 }
 
-// impactPhrase is the headline in words, zero terms omitted. A single-kind delta
-// names the resources directly — "6 resources changed across 6 apps" — while a
-// mixed one lists the signed terms and then the total: "+2 added · 3 changed ·
-// −1 removed: 6 resources across 2 apps · 1 CRD". bold wraps the delta in ** so
-// it leads a [!NOTE]; the routine tip embeds it plain.
-func impactPhrase(d *api.DiffResult, bold bool) string {
+// impactPhrase is the bold headline in words, zero terms omitted. A single-kind
+// delta names the resources directly — "**6 resources changed** across 6 apps" —
+// while a mixed one lists the signed terms and then the total: "**+2 added · 3
+// changed · −1 removed**: 6 resources across 2 apps · 1 CRD".
+func impactPhrase(d *api.DiffResult) string {
 	type term struct {
 		n    int
 		verb string
@@ -188,29 +179,30 @@ func impactPhrase(d *api.DiffResult, bold bool) string {
 	if d.Summary.Removed > 0 {
 		terms = append(terms, term{d.Summary.Removed, "removed", "−"})
 	}
-	var delta string
+	var b strings.Builder
 	switch len(terms) {
 	case 0:
-		delta = "no rendered changes"
+		b.WriteString("no rendered changes")
 	case 1:
 		t := terms[0]
-		delta = fmt.Sprintf("%d %s %s", t.n, plural(t.n, "resource", "resources"), t.verb)
+		fmt.Fprintf(&b, "**%d %s %s**", t.n, plural(t.n, "resource", "resources"), t.verb)
 	default:
 		parts := make([]string, len(terms))
 		for i, t := range terms {
 			parts[i] = fmt.Sprintf("%s%d %s", t.sign, t.n, t.verb)
 		}
-		delta = strings.Join(parts, " · ")
+		fmt.Fprintf(&b, "**%s**: %d %s", strings.Join(parts, " · "), d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
 	}
+	b.WriteString(impactTail(d))
+	return b.String()
+}
+
+// impactTail is the scope that follows a resource count in the headline and the
+// routine tip: " across N apps · N CRDs · N not shown", each term only when
+// non-zero. "not shown" is the one cue that the linked render is partial, so it
+// must ride along wherever the count does.
+func impactTail(d *api.DiffResult) string {
 	var b strings.Builder
-	if bold && len(terms) > 0 {
-		fmt.Fprintf(&b, "**%s**", delta)
-	} else {
-		b.WriteString(delta)
-	}
-	if len(terms) > 1 {
-		fmt.Fprintf(&b, ": %d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
-	}
 	if d.Impact.Parents > 0 {
 		fmt.Fprintf(&b, " across %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
 	}
@@ -233,11 +225,8 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 	if !d.Routine {
 		return ""
 	}
-	scope := fmt.Sprintf("%d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
-	if d.Impact.Parents > 0 {
-		scope += fmt.Sprintf(" across %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
-	}
-	msg := "**Routine**: only container-image and chart-version changes; " + scope
+	msg := fmt.Sprintf("**Routine**: only container-image and chart-version changes; %d %s%s",
+		d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"), impactTail(d))
 	if admonitions {
 		return "> [!TIP]\n> " + msg
 	}
@@ -251,14 +240,12 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 // mdItem is one "- `code` — detail" line in a summary block.
 type mdItem struct{ code, detail string }
 
-// mdBlock renders a summary block: a header — a GitHub admonition (> [!ALERT],
-// plus a bold line when admonitionHeader is non-empty) when admonitions, else a
-// plain bold line — then one "- `code`: detail" item per entry (mdCode/mdInline
-// escape the forge-controlled halves). The admonition and plain headers differ:
-// the alert box already shows a titled severity icon, so a block whose items
-// speak for themselves passes "" and lists them directly, while the plain form
-// always carries a glyph + title because it has no box. Empty when no items.
-func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, items []mdItem) string {
+// mdBlock renders a summary block, then one "- `code`: detail" item per entry
+// (mdCode/mdDetail escape the forge-controlled halves). With admonitions the
+// block is a GitHub alert (> [!ALERT]) and nothing else: the box already shows a
+// titled severity icon and each item says what it is. The plain flavour has no
+// box, so it opens with a bold glyph + title line instead. Empty when no items.
+func mdBlock(admonitions bool, alert, plainHeader string, items []mdItem) string {
 	if len(items) == 0 {
 		return ""
 	}
@@ -266,9 +253,6 @@ func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, item
 	prefix := "- "
 	if admonitions {
 		fmt.Fprintf(&b, "> [!%s]\n", alert)
-		if admonitionHeader != "" {
-			fmt.Fprintf(&b, "> **%s**\n", admonitionHeader)
-		}
 		prefix = "> - "
 	} else {
 		fmt.Fprintf(&b, "**%s**\n", plainHeader)
@@ -293,7 +277,7 @@ func sectionBlocking(d *api.DiffResult, admonitions bool) string {
 	// Red [!CAUTION] — a blocker is the top of the severity ramp. The box's own
 	// title does the labelling; only the plain form spells "Blocker(s)" out.
 	h := fmt.Sprintf("⛔ %s", plural(len(ws), "Blocker", "Blockers"))
-	return mdBlock(admonitions, "CAUTION", "", h, warningItems(ws))
+	return mdBlock(admonitions, "CAUTION", h, warningItems(ws))
 }
 
 func sectionCautions(d *api.DiffResult, admonitions bool) string {
@@ -302,31 +286,42 @@ func sectionCautions(d *api.DiffResult, admonitions bool) string {
 	// red of a blocker or render failure); the box's own "Warning" title does the
 	// labelling, so only the plain form spells "Caution(s)" out.
 	h := fmt.Sprintf("⚠ %s", plural(len(ws), "Caution", "Cautions"))
-	return mdBlock(admonitions, "WARNING", "", h, warningItems(ws))
+	return mdBlock(admonitions, "WARNING", h, warningItems(ws))
 }
 
-// sectionFailing is the GitHub flavour's single red [!CAUTION] box: the
-// blocking-tier warnings followed by the render failures — everything that turns
-// the check red — with no headline, since the box's title and each item's text
-// carry it. Empty when neither exists. The per-block Blocking / Failures
-// sections stay available to custom templates.
-func sectionFailing(d *api.DiffResult) string {
-	items := warningItems(api.WarningsByLevel(d.Warnings, api.LevelBlocking))
-	for _, f := range d.Failures {
-		items = append(items, mdItem{code: f.Parent, detail: f.Message})
+// sectionFailing is everything that turns the check red: the blocking-tier
+// warnings followed by the render failures. On GitHub that is one red [!CAUTION]
+// box with no headline — the box's title and each item's text carry it; the
+// plain flavour, with no box to lean on, keeps its two labelled blocks. Empty
+// when neither exists.
+func sectionFailing(d *api.DiffResult, admonitions bool) string {
+	if !admonitions {
+		var blocks []string
+		for _, s := range []string{sectionBlocking(d, false), sectionFailures(d, false)} {
+			if s != "" {
+				blocks = append(blocks, s)
+			}
+		}
+		return strings.Join(blocks, "\n\n")
 	}
-	return mdBlock(true, "CAUTION", "", "", items)
+	items := append(warningItems(api.WarningsByLevel(d.Warnings, api.LevelBlocking)), failureItems(d)...)
+	return mdBlock(true, "CAUTION", "", items)
 }
 
-func sectionFailures(d *api.DiffResult, admonitions bool) string {
+// failureItems maps render failures to block items (Parent → code, Message → detail).
+func failureItems(d *api.DiffResult) []mdItem {
 	items := make([]mdItem, len(d.Failures))
 	for i, f := range d.Failures {
 		items[i] = mdItem{code: f.Parent, detail: f.Message}
 	}
-	// Red [!CAUTION] like a blocker; the plain form adds the ⛔ glyph the box drops.
-	admHeader := fmt.Sprintf("%d render %s", len(d.Failures), plural(len(d.Failures), "failure", "failures"))
+	return items
+}
+
+func sectionFailures(d *api.DiffResult, admonitions bool) string {
+	// Red [!CAUTION] like a blocker, headline-less like it too; the plain form
+	// carries the ⛔ glyph and label the box would otherwise supply.
 	plainHeader := "⛔ " + plural(len(d.Failures), "Render failure", "Render failures")
-	return mdBlock(admonitions, "CAUTION", admHeader, plainHeader, items)
+	return mdBlock(admonitions, "CAUTION", plainHeader, failureItems(d))
 }
 
 func sectionImages(d *api.DiffResult) string {
@@ -348,13 +343,6 @@ func bareRef(label string) string {
 		return rest
 	}
 	return label
-}
-
-// tagOf strips the digest from a digest-pinned version ("1.2.3@sha256:…" →
-// "1.2.3"); a bare tag or bare digest passes through unchanged.
-func tagOf(v string) string {
-	tag, _, _ := strings.Cut(v, "@")
-	return tag
 }
 
 // upstreamCell renders the image table's "upstream" column — the registry's
@@ -465,8 +453,10 @@ var mdInlineReplacer = strings.NewReplacer(
 // schema error, "spec.suspend" or "spec.dependsOn" in a lint detail — as a token
 // that starts with a dot or a top-level manifest key and runs over dotted /
 // bracketed segments, ending on a word character or "]" so a sentence's full
-// stop stays outside. The leading char is captured so it can be re-emitted.
-var fieldPathRe = regexp.MustCompile(`(^|[\s(,])((?:\.|spec\.|metadata\.|status\.|data\.)[A-Za-z0-9_][A-Za-z0-9_.\-\[\]]*[A-Za-z0-9_\]])`)
+// stop stays outside. The token must follow the start, whitespace, "(" or ","
+// (so a ".2" inside a version can't match); that leading char is not part of
+// the capture and stays prose.
+var fieldPathRe = regexp.MustCompile(`(?:^|[\s(,])((?:\.|spec\.|metadata\.|status\.|data\.)[A-Za-z0-9_][A-Za-z0-9_.\-\[\]]*[A-Za-z0-9_\]])`)
 
 // mdDetail renders a finding's detail as escaped Markdown (mdInline) with each
 // field path set in a code span, so ".image.tag is required" reads with the
@@ -476,10 +466,10 @@ func mdDetail(detail string) string {
 	var b strings.Builder
 	last := 0
 	for _, m := range fieldPathRe.FindAllStringSubmatchIndex(detail, -1) {
-		// m[2:4] is the leading char (kept as prose), m[4:6] the path.
-		b.WriteString(mdInline(detail[last:m[4]]))
-		b.WriteString("`" + mdCode(detail[m[4]:m[5]]) + "`")
-		last = m[5]
+		// m[2:4] is the path; whatever precedes it in the match is prose.
+		b.WriteString(mdInline(detail[last:m[2]]))
+		b.WriteString("`" + mdCode(detail[m[2]:m[3]]) + "`")
+		last = m[3]
 	}
 	b.WriteString(mdInline(detail[last:]))
 	return b.String()

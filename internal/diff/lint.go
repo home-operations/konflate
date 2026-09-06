@@ -147,25 +147,40 @@ func largeChangeSet(changes []Change) (api.Warning, bool) {
 	}, true
 }
 
-// refBump is a major bump of the version a Flux source object pins, found by
-// chartRefBumps; warning renders it as the caution.
+// Detail formats for a major chart / source bump; %s is the "from → to"
+// versions, optionally followed by "across N <objects>" for a grouped bump.
+const (
+	chartBumpDetail  = "major chart version bump %s; check the chart's upgrade notes for breaking changes"
+	sourceBumpDetail = "major version bump %s of the OCI source; check the upstream release notes for breaking changes"
+)
+
+// refBump is a major bump of the version Flux source objects pin, found by
+// chartRefBumps; warning renders it as one caution. resources lists every
+// object that pins the same bump (the first is the one the caution names), so a
+// grouped Renovate PR bumping one chart across many HelmReleases reads as one
+// finding, not one per HelmRelease.
 type refBump struct {
-	resource string // "Kind ns/name" of the HelmRelease / OCIRepository
-	rule     string
-	chart    string // chart name, to pair with the label rule's; "" when unknown
-	from, to string
+	resources []string // "Kind ns/name" of each HelmRelease / OCIRepository
+	kind      string
+	rule      string
+	chart     string // chart name, to pair with the label rule's; "" when unknown
+	from, to  string
 }
 
 func (b refBump) warning() api.Warning {
-	detail := "major version bump %s → %s of the OCI source; check the upstream release notes for breaking changes"
+	versions := b.from + " → " + b.to
+	if n := len(b.resources); n > 1 {
+		versions += fmt.Sprintf(" across %d %ss", n, b.kind)
+	}
+	detail := sourceBumpDetail
 	if b.rule == ruleMajorChartBump {
-		detail = "major chart version bump %s → %s; check the chart's upgrade notes for breaking changes"
+		detail = chartBumpDetail
 	}
 	return api.Warning{
 		Level:    api.LevelCaution,
 		Rule:     b.rule,
-		Resource: b.resource,
-		Detail:   fmt.Sprintf(detail, b.from, b.to),
+		Resource: b.resources[0],
+		Detail:   fmt.Sprintf(detail, versions),
 	}
 }
 
@@ -179,9 +194,13 @@ func (b refBump) warning() api.Warning {
 // so only a pinned version can fire. An OCIRepository may track a non-chart
 // artifact (a manifests bundle), so its rule is named for the source, not a chart.
 // Guarded by API group like fluxKind: a non-Flux CRD that happens to be called
-// HelmRelease must not trip it.
+// HelmRelease must not trip it. Objects pinning the same chart through the same
+// versions fold into one refBump (first-seen order); a bump whose chart name is
+// unknown stays per-object.
 func chartRefBumps(changes []Change) []refBump {
+	type key struct{ rule, chart, from, to string }
 	var out []refBump
+	index := map[key]int{}
 	for _, c := range changes {
 		if c.Old == nil || c.New == nil || !fluxAPI(c) {
 			continue // an add/remove has no before→after to compare
@@ -207,24 +226,43 @@ func chartRefBumps(changes []Change) []refBump {
 		if !ok1 || !ok2 || !isMajorBump(from, to) {
 			continue
 		}
-		out = append(out, refBump{resource: resourceLabel(c), rule: rule, chart: chart, from: from, to: to})
+		label := resourceLabel(c)
+		if chart != "" {
+			k := key{rule, chart, from, to}
+			if i, ok := index[k]; ok {
+				out[i].resources = append(out[i].resources, label)
+				continue
+			}
+			index[k] = len(out)
+		}
+		out = append(out, refBump{resources: []string{label}, kind: c.Kind, rule: rule, chart: chart, from: from, to: to})
 	}
 	return out
 }
 
 // chartBumpWarnings flags major Helm chart version bumps (caution), one per
 // chart, in first-seen order. A chart's children share its helm.sh/chart label,
-// so the bump is deduped by chart name. A bump chartRefBumps already reported
-// from the source object — the same chart moving through the same versions — is
-// skipped, so one chart upgrade doesn't surface twice; an unrelated chart that
-// happens to share the version pair is still reported.
+// so the bump is deduped by chart name. A bump chartRefBumps already reported is
+// skipped so one chart upgrade doesn't surface twice: by identity when the
+// child's producing HelmRelease is one that fired (the pinned string and the
+// label can spell the same version differently — "v4.0.0" vs "4.0.0", a chart
+// path vs its name), else by the same chart moving through the same versions
+// (the OCIRepository case, where the child's parent is the HelmRelease that
+// consumes it). An unrelated chart that happens to share the version pair is
+// still reported.
 func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 	type bump struct{ from, to string }
 	type chartBump struct{ chart, from, to string }
 	reported := make(map[chartBump]struct{}, len(refBumps))
+	firedParents := map[string]struct{}{}
 	for _, b := range refBumps {
 		if b.chart != "" {
 			reported[chartBump{b.chart, b.from, b.to}] = struct{}{}
+		}
+		if b.kind == kindHelmRelease {
+			for _, r := range b.resources {
+				firedParents[r] = struct{}{}
+			}
 		}
 	}
 	seen := make(map[string]bump)
@@ -233,6 +271,9 @@ func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 		oldName, oldVer := splitChart(c.OldChart)
 		newName, newVer := splitChart(c.NewChart)
 		if oldName == "" || oldName != newName || !isMajorBump(oldVer, newVer) {
+			continue
+		}
+		if _, dup := firedParents[c.Parent]; dup {
 			continue
 		}
 		if _, dup := reported[chartBump{oldName, oldVer, newVer}]; dup {
@@ -250,8 +291,7 @@ func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 			Level:    api.LevelCaution,
 			Rule:     ruleMajorChartBump,
 			Resource: name,
-			Detail: fmt.Sprintf("major chart version bump %s → %s; check the chart's upgrade notes for breaking changes",
-				b.from, b.to),
+			Detail:   fmt.Sprintf(chartBumpDetail, b.from+" → "+b.to),
 		})
 	}
 	return out
@@ -267,7 +307,7 @@ func imageBumpWarnings(images []api.ImageChange) []api.Warning {
 				Level:    api.LevelCaution,
 				Rule:     "major-image-bump",
 				Resource: img.Name,
-				Detail:   fmt.Sprintf("major image version bump %s → %s; likely breaking changes", tagOf(img.From), tagOf(img.To)),
+				Detail:   fmt.Sprintf("major image version bump %s → %s; likely breaking changes", api.TagOf(img.From), api.TagOf(img.To)),
 			})
 		}
 	}
@@ -308,18 +348,11 @@ func isMajorBump(from, to string) bool {
 // date tag like 20240131, or a calver year — so those never read as a major
 // bump. (A bare integer such as a postgres:16 tag does parse, by design.)
 func majorOf(v string) (uint64, bool) {
-	ver, err := semver.NewVersion(strings.TrimSpace(tagOf(v)))
+	ver, err := semver.NewVersion(strings.TrimSpace(api.TagOf(v)))
 	if err != nil || ver.Major() >= 1000 {
 		return 0, false
 	}
 	return ver.Major(), true
-}
-
-// tagOf strips the digest from a digest-pinned version ("1.2.3@sha256:…" →
-// "1.2.3"); a bare tag or bare digest passes through unchanged.
-func tagOf(v string) string {
-	tag, _, _ := strings.Cut(v, "@")
-	return tag
 }
 
 // resourceLabel renders "Kind ns/name", or "Kind name" for cluster-scoped

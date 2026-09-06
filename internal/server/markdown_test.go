@@ -118,9 +118,6 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	if strings.Contains(md, "advisory, not a gate") || strings.Contains(md, "View the full rendered diff") {
-		t.Errorf("old chrome should be gone:\n%s", md)
-	}
 	// Severity order: the red box, the amber box, then the neutral headline note,
 	// and only then the informational blast radius and images.
 	order := []string{"[!CAUTION]", "[!WARNING]", "[!NOTE]", "**Blast radius**", "| image | from | to |"}
@@ -152,6 +149,30 @@ func TestMdDetail_FieldPathsAsCode(t *testing.T) {
 	for _, c := range cases {
 		if got := mdDetail(c.in); got != c.want {
 			t.Errorf("mdDetail(%q)\n got %q\nwant %q", c.in, got, c.want)
+		}
+	}
+}
+
+// .Sections.Failing gives a custom template the same single red box the
+// default body uses; on the plain flavour it is the two labelled blocks.
+func TestSummarySections_Failing(t *testing.T) {
+	t.Parallel()
+	d := &api.DiffResult{
+		Warnings: []api.Warning{{Level: api.LevelBlocking, Rule: "image-not-found", Resource: "Deployment web/api", Detail: "image x:1 not found in upstream registry"}},
+		Failures: []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}},
+	}
+	gh := summarySectionsFor(d, true)
+	if strings.Count(gh.Failing, "[!CAUTION]") != 1 || !strings.Contains(gh.Failing, "x:1 not found") || !strings.Contains(gh.Failing, "values don't meet") {
+		t.Errorf("github .Sections.Failing should be one box with both items:\n%s", gh.Failing)
+	}
+	// The per-block sections are headline-less on GitHub too, like the merged one.
+	if strings.Contains(gh.Failures, "render failure") {
+		t.Errorf("github .Sections.Failures should carry no headline:\n%s", gh.Failures)
+	}
+	plain := summarySectionsFor(d, false)
+	for _, want := range []string{"**⛔ Blocker**", "**⛔ Render failure**"} {
+		if !strings.Contains(plain.Failing, want) {
+			t.Errorf("plain .Sections.Failing missing %q:\n%s", want, plain.Failing)
 		}
 	}
 }
@@ -196,7 +217,7 @@ func TestImpactPhrase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := impactPhrase(&tc.d, true); got != tc.want {
+			if got := impactPhrase(&tc.d); got != tc.want {
 				t.Errorf("impactPhrase = %q, want %q", got, tc.want)
 			}
 		})
@@ -245,6 +266,14 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("a routine PR carries only the tip — no impact note, caution, or failure blocks:\n%s", md)
 	}
+	// The tip carries the whole scope, including the truncation cue and CRD
+	// count, since the impact line is dropped for a routine PR.
+	env.Diff.Impact.CRDs = 3
+	env.Diff.Truncated = 40
+	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "2 resources across 1 app · 3 CRDs · 40 not shown") {
+		t.Errorf("routine tip must keep the CRD count and the truncation cue:\n%s", md)
+	}
+	env.Diff.Impact.CRDs, env.Diff.Truncated = 0, 0
 	// Plain flavour: the bold line, no admonition syntax.
 	plain := summaryMarkdown(env, "", false, "")
 	if strings.Contains(plain, "[!TIP]") {

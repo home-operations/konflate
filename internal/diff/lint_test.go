@@ -311,8 +311,10 @@ func TestLint_MajorRefBump(t *testing.T) {
 func TestLint_MajorRefBump_DedupsLabelRule(t *testing.T) {
 	t.Parallel()
 	changes := []Change{
+		// The HelmRelease pins "v4.0.0" while the rendered label reads "4.0.0": the
+		// child is deduped through its producing parent, not by string equality.
 		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
-			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")},
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "v3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "v4.0.0")},
 		{Status: "changed", Kind: "Deployment", Namespace: "media", Name: "plex", Parent: "HelmRelease media/plex",
 			OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
 		// An unrelated chart that happens to move through the same version pair
@@ -330,6 +332,29 @@ func TestLint_MajorRefBump_DedupsLabelRule(t *testing.T) {
 	want := []string{"HelmRelease media/plex", "cloudnative-pg"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("major-chart-bump resources = %v, want %v (app-template once via the HelmRelease, cloudnative-pg via its label)", got, want)
+	}
+}
+
+// A grouped Renovate PR bumping one chart across many HelmReleases is one
+// finding, named on the first HelmRelease and counting the rest, and the label
+// rule adds nothing on top.
+func TestLint_MajorRefBump_GroupedIsOneFinding(t *testing.T) {
+	t.Parallel()
+	changes := make([]Change, 0, 6)
+	for _, app := range []string{"plex", "sonarr", "radarr"} {
+		changes = append(changes,
+			Change{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: app,
+				Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")},
+			Change{Status: "changed", Kind: "Deployment", Namespace: "media", Name: app, Parent: "HelmRelease media/" + app,
+				OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+		)
+	}
+	n, w := countRule(Lint(changes, nil, nil), "major-chart-bump")
+	if n != 1 || w.Resource != "HelmRelease media/plex" {
+		t.Fatalf("want one major-chart-bump on the first HelmRelease, got %d (last %+v)", n, w)
+	}
+	if !strings.Contains(w.Detail, "3.5.1 → 4.0.0 across 3 HelmReleases") {
+		t.Errorf("detail should count the grouped objects, got %q", w.Detail)
 	}
 }
 

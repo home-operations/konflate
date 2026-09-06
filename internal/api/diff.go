@@ -19,6 +19,8 @@
 //     types can use string literal unions without a code-generation step.
 package api
 
+import "strings"
+
 // DiffResult is the top-level payload for GET /api/prs/{number}/diff.
 // It is the JSON equivalent of flate's internal htmlData struct, with
 // Go-specific types replaced by plain strings and the chroma stylesheet
@@ -127,9 +129,12 @@ type BlastRadiusEntry struct {
 // merge-base and head renders. From == "" means newly introduced; To == ""
 // means removed.
 type ImageChange struct {
-	Name string   `json:"name"` // image repository, e.g. "ghcr.io/rook/ceph"
-	From string   `json:"from"` // old tag or digest ("" when added)
-	To   string   `json:"to"`   // new tag or digest ("" when removed)
+	Name string `json:"name"` // image repository, e.g. "ghcr.io/rook/ceph"
+	// From / To are the old and new versions: a tag, a bare digest, or, for a
+	// digest-pinned reference, "tag@sha256:…" with both kept ("" when added /
+	// removed). TagOf strips the digest half.
+	From string   `json:"from"`
+	To   string   `json:"to"`
 	Refs []string `json:"refs"` // resources referencing it, "Kind ns/name"
 	// Upstream is the registry's verdict on To, stamped by image verification
 	// (KONFLATE_VERIFY_IMAGES). Empty — and omitted from the JSON — when To was
@@ -183,6 +188,13 @@ type Warning struct {
 	Rule     string `json:"rule"`
 	Resource string `json:"resource"` // "Kind ns/name" the warning concerns
 	Detail   string `json:"detail"`   // human-readable explanation
+}
+
+// TagOf strips the digest from a digest-pinned image version ("1.2.3@sha256:…"
+// → "1.2.3"); a bare tag or bare digest passes through unchanged.
+func TagOf(version string) string {
+	tag, _, _ := strings.Cut(version, "@")
+	return tag
 }
 
 // WarningsByLevel returns the subset of ws at the given severity level,

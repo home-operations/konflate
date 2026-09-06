@@ -100,17 +100,15 @@ func verifyImages(ctx context.Context, chk imageChecker, images []api.ImageChang
 // imageNotFound builds the blockers for one absent image: one per referencing
 // resource so each lands on (and deep-links to) the workload that would fail to
 // pull, or a single one on the image name when the diff recorded no referrers.
-// The detail names the image by tag (a digest-pinned ref drops the digest; a
-// bare digest is shortened): the finding is read, not pasted into a pull.
+// The detail names the reference as the table shows it — tag, and the shortened
+// digest when pinned, since a pin is checked by digest and the tag alone may
+// well exist upstream.
 func imageNotFound(name, version string, refs []string) []api.Warning {
 	resources := refs
 	if len(resources) == 0 {
 		resources = []string{name}
 	}
-	shown := imageRef(name, tagOf(version))
-	if tagOf(version) == version { // no tag to fall back on: a bare digest
-		shown = imageRef(name, shortVer(version))
-	}
+	shown := imageRef(name, shortVer(version))
 	out := make([]api.Warning, 0, len(resources))
 	for _, r := range resources {
 		out = append(out, api.Warning{
