@@ -259,9 +259,13 @@ func TestLint_MajorImageBump_DigestPinned(t *testing.T) {
 }
 
 func ociRepo(chart, tag string) map[string]any {
+	return ociRepoAt("oci://ghcr.io/example/charts/"+chart, tag)
+}
+
+func ociRepoAt(url, tag string) map[string]any {
 	return map[string]any{
 		"apiVersion": "source.toolkit.fluxcd.io/v1",
-		"spec":       map[string]any{"url": "oci://ghcr.io/example/charts/" + chart, "ref": map[string]any{"tag": tag}},
+		"spec":       map[string]any{"url": url, "ref": map[string]any{"tag": tag}},
 	}
 }
 
@@ -355,6 +359,31 @@ func TestLint_MajorRefBump_GroupedIsOneFinding(t *testing.T) {
 	}
 	if !strings.Contains(w.Detail, "3.5.1 → 4.0.0 across 3 HelmReleases") {
 		t.Errorf("detail should count the grouped objects, got %q", w.Detail)
+	}
+}
+
+// Two OCI sources whose URLs end in the same name are different charts: grouping
+// is by full URL, so each keeps its own finding (and its own release notes).
+func TestLint_MajorRefBump_DistinctSourcesStayApart(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "OCIRepository", Namespace: "a", Name: "app",
+			Old: ociRepoAt("oci://ghcr.io/acme/charts/app", "1.0.0"), New: ociRepoAt("oci://ghcr.io/acme/charts/app", "2.0.0")},
+		{Status: "changed", Kind: "OCIRepository", Namespace: "b", Name: "app",
+			Old: ociRepoAt("oci://registry.example/other/app", "1.0.0"), New: ociRepoAt("oci://registry.example/other/app", "2.0.0")},
+		// The same source pinned twice does fold.
+		{Status: "changed", Kind: "OCIRepository", Namespace: "c", Name: "app",
+			Old: ociRepoAt("oci://ghcr.io/acme/charts/app", "1.0.0"), New: ociRepoAt("oci://ghcr.io/acme/charts/app", "2.0.0")},
+	}
+	var got []string
+	for _, w := range Lint(changes, nil, nil) {
+		if w.Rule == "major-source-bump" {
+			got = append(got, w.Resource)
+		}
+	}
+	want := []string{"OCIRepository a/app", "OCIRepository b/app"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("major-source-bump resources = %v, want %v", got, want)
 	}
 }
 

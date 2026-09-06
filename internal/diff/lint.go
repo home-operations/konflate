@@ -195,10 +195,12 @@ func (b refBump) warning() api.Warning {
 // artifact (a manifests bundle), so its rule is named for the source, not a chart.
 // Guarded by API group like fluxKind: a non-Flux CRD that happens to be called
 // HelmRelease must not trip it. Objects pinning the same chart through the same
-// versions fold into one refBump (first-seen order); a bump whose chart name is
-// unknown stays per-object.
+// versions fold into one refBump (first-seen order): HelmReleases by chart name,
+// OCIRepositories by full URL, since two registries can both serve a chart called
+// "app" and those are different upgrades with different release notes. A bump
+// whose identity is unknown stays per-object.
 func chartRefBumps(changes []Change) []refBump {
-	type key struct{ rule, chart, from, to string }
+	type key struct{ rule, identity, from, to string }
 	var out []refBump
 	index := map[key]int{}
 	for _, c := range changes {
@@ -206,16 +208,19 @@ func chartRefBumps(changes []Change) []refBump {
 			continue // an add/remove has no before→after to compare
 		}
 		var fieldPath []string
-		var rule, chart string
+		var rule, chart, identity string
 		switch c.Kind {
 		case kindHelmRelease:
 			fieldPath, rule = []string{spec, "chart", spec, "version"}, ruleMajorChartBump
 			chart, _ = stringField(c.New, spec, "chart", spec, "chart")
+			identity = chart
 		case "OCIRepository":
 			fieldPath, rule = []string{spec, "ref", "tag"}, "major-source-bump"
 			// oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack → the
-			// last path segment is the chart (repository) name.
+			// last path segment is the chart (repository) name the label rule sees;
+			// the whole URL is what makes the source distinct.
 			if u, ok := stringField(c.New, spec, "url"); ok {
+				identity = u
 				chart = path.Base(strings.TrimRight(u, "/"))
 			}
 		default:
@@ -227,8 +232,8 @@ func chartRefBumps(changes []Change) []refBump {
 			continue
 		}
 		label := resourceLabel(c)
-		if chart != "" {
-			k := key{rule, chart, from, to}
+		if identity != "" {
+			k := key{rule, identity, from, to}
 			if i, ok := index[k]; ok {
 				out[i].resources = append(out[i].resources, label)
 				continue
