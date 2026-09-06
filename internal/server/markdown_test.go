@@ -98,7 +98,6 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true)
 	for _, want := range []string{
 		"<!-- konflate:pr-142 -->",
-		"### konflate summary",
 		"> [!NOTE]",
 		"**+2 added · 3 changed · −1 removed**: 6 resources across 2 apps · 1 CRD",
 		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
@@ -106,9 +105,9 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"> [!CAUTION]\n> - `HelmRelease media/plex`: values don't meet the schema",
 		"**Blast radius**",
 		// Sample capped at 3 direct names; count + sample reconcile to the headline.
-		"- `Kustomization flux-system/cluster-apps`: 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
+		"- `Kustomization flux-system/cluster-apps`: 12 dependents (flux-system/app-a, flux-system/app-b, flux-system/app-c +9 more)",
 		// Singular, no "+more" when the sample already covers the whole radius.
-		"- `Kustomization flux-system/db`: 1 dependent (`Kustomization flux-system/cache`)",
+		"- `Kustomization flux-system/db`: 1 dependent (flux-system/cache)",
 		"| image | from | to | upstream |\n|---|---|---|---|\n",
 		// Nothing verified on the fixture → the column says so rather than staying silent.
 		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
@@ -124,7 +123,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	}
 	// Severity order: the red box, the amber box, then the neutral headline note,
 	// and only then the informational blast radius and images.
-	order := []string{"[!CAUTION]", "[!WARNING]", "[!NOTE]", "**Blast radius**", "**Image changes**"}
+	order := []string{"[!CAUTION]", "[!WARNING]", "[!NOTE]", "**Blast radius**", "| image | from | to |"}
 	last := -1
 	for _, marker := range order {
 		at := strings.Index(md, marker)
@@ -176,7 +175,7 @@ func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("plain markdown must not use GitHub admonitions:\n%s", md)
 	}
-	for _, want := range []string{"**⚠ Caution**", "**⛔ Render failures (1)**"} {
+	for _, want := range []string{"**⚠ Caution**", "**⛔ Render failure**"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("plain markdown missing %q\n---\n%s", want, md)
 		}
@@ -204,7 +203,7 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	// counts — so the separate [!NOTE] impact line is dropped — and, being
 	// routine, no caution/failure blocks.
 	md := summaryMarkdown(env, "", true)
-	for _, want := range []string{"> [!TIP]", "**Routine**: 2 resources changed across 1 app; only container-image and chart-version changes."} {
+	for _, want := range []string{"> [!TIP]", "**Routine**: only container-image and chart-version changes; 2 resources across 1 app"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
 		}
@@ -456,8 +455,8 @@ func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 	md := summaryMarkdown(env, "", true)
 	for _, want := range []string{
 		"| image | from | to | upstream |",
-		"| `ghcr.io/ok` | `1.0` | `1.1` | ✓ found |",
-		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ⛔ **not found** |",
+		"| `ghcr.io/ok` | `1.0` | `1.1` | found |",
+		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | **not found** |",
 		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",
 		"| `ghcr.io/gone` | `1.0` | `∅` | n/a |", // a removal has nothing to verify
 	} {

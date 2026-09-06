@@ -23,8 +23,8 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions)
 }
 
-// summaryMarkdownBody is the marker-less summary body. It opens with an H3 title
-// (### konflate summary); with admonitions=true the sections use GitHub-flavoured
+// summaryMarkdownBody is the marker-less summary body. It carries no heading —
+// the footer names konflate — and with admonitions=true the sections use GitHub-flavoured
 // alert blocks (> [!TIP] / > [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
 // lists that render anywhere. Every forge-controlled
 // value is escaped (see mdInline/mdCode) so a crafted resource name or a render
@@ -32,7 +32,6 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 // template as {{ .Summary }}.
 func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
 	var b strings.Builder
-	b.WriteString("### konflate summary\n")
 
 	// writeFooter closes the comment with one small line: provenance (the commit
 	// this summary reflects — the comment is edited in place across pushes, so the
@@ -79,9 +78,9 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	if d.Summary.Added == 0 && d.Summary.Changed == 0 && d.Summary.Removed == 0 &&
 		len(d.Warnings) == 0 && len(d.Failures) == 0 && len(d.Images) == 0 {
 		if admonitions {
-			b.WriteString("\n> [!NOTE]\n> ✅ No rendered changes.\n")
+			b.WriteString("\n> [!NOTE]\n> No rendered changes.\n")
 		} else {
-			b.WriteString("\n✅ No rendered changes.\n")
+			b.WriteString("\nNo rendered changes.\n")
 		}
 		writeRefreshNote()
 		writeFooter(d.HeadSHA)
@@ -232,7 +231,11 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 	if !d.Routine {
 		return ""
 	}
-	msg := fmt.Sprintf("**Routine**: %s; only container-image and chart-version changes.", impactPhrase(d, false))
+	scope := fmt.Sprintf("%d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
+	if d.Impact.Parents > 0 {
+		scope += fmt.Sprintf(" across %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
+	}
+	msg := "**Routine**: only container-image and chart-version changes; " + scope
 	if admonitions {
 		return "> [!TIP]\n> " + msg
 	}
@@ -320,7 +323,7 @@ func sectionFailures(d *api.DiffResult, admonitions bool) string {
 	}
 	// Red [!CAUTION] like a blocker; the plain form adds the ⛔ glyph the box drops.
 	admHeader := fmt.Sprintf("%d render %s", len(d.Failures), plural(len(d.Failures), "failure", "failures"))
-	plainHeader := fmt.Sprintf("⛔ Render failures (%d)", len(d.Failures))
+	plainHeader := "⛔ " + plural(len(d.Failures), "Render failure", "Render failures")
 	return mdBlock(admonitions, "CAUTION", admHeader, plainHeader, items)
 }
 
@@ -329,7 +332,7 @@ func sectionImages(d *api.DiffResult) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("**Image changes**\n\n| image | from | to | upstream |\n|---|---|---|---|\n")
+	b.WriteString("| image | from | to | upstream |\n|---|---|---|---|\n")
 	for _, im := range d.Images {
 		from, to := mdVersions(im.From, im.To)
 		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n", mdCode(im.Name), from, to, upstreamCell(im))
@@ -349,6 +352,14 @@ func mdVersions(from, to string) (string, string) {
 	return mdCode(shortVer(from)), mdCode(shortVer(to))
 }
 
+// bareRef strips the kind from a "Kind ns/name" label, leaving "ns/name".
+func bareRef(label string) string {
+	if _, rest, ok := strings.Cut(label, " "); ok {
+		return rest
+	}
+	return label
+}
+
 // tagOf strips the digest from a digest-pinned version ("1.2.3@sha256:…" →
 // "1.2.3"); a bare tag or bare digest passes through unchanged.
 func tagOf(v string) string {
@@ -357,7 +368,7 @@ func tagOf(v string) string {
 }
 
 // upstreamCell renders the image table's "upstream" column — the registry's
-// verdict on the new reference: found, ⛔ not found (the row's image raised a
+// verdict on the new reference: found, **not found** (the row's image raised a
 // blocker), "unverified" when the head ref was never confirmed (verification
 // off, a fork PR, or an indeterminate registry answer), or "n/a" for a removal,
 // which has nothing to verify. Always present so a reader learns the images
@@ -367,9 +378,9 @@ func upstreamCell(im api.ImageChange) string {
 	case im.To == "":
 		return "n/a"
 	case im.Upstream == api.ImageFound:
-		return "✓ found"
+		return "found"
 	case im.Upstream == api.ImageMissing:
-		return "⛔ **not found**"
+		return "**not found**"
 	default:
 		return "unverified"
 	}
@@ -398,11 +409,13 @@ func sectionBlastRadius(d *api.DiffResult) string {
 		if len(shown) > sample {
 			shown = shown[:sample]
 		}
-		quoted := make([]string, len(shown))
+		// Flux dependsOn is same-kind, so the parent's kind already names the
+		// dependents' kind; list them as bare ns/name (as the review does).
+		names := make([]string, len(shown))
 		for i, s := range shown {
-			quoted[i] = "`" + mdCode(s) + "`"
+			names[i] = mdInline(bareRef(s))
 		}
-		fmt.Fprintf(&b, " (%s", strings.Join(quoted, ", "))
+		fmt.Fprintf(&b, " (%s", strings.Join(names, ", "))
 		if more := br.Transitive - len(shown); more > 0 {
 			fmt.Fprintf(&b, " +%d more", more)
 		}
