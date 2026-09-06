@@ -110,7 +110,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"- `Kustomization flux-system/db`: 1 dependent (flux-system/cache)",
 		"| image | from | to | upstream |\n|---|---|---|---|\n",
 		// Nothing verified on the fixture → the column says so rather than staying silent.
-		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
+		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | ❔ unverified |",
 		// Provenance and the review link share one small footer line.
 		"<sub>konflate · rendered `1a2b3c4` · [full diff →](https://k.example/#/pr/142)</sub>",
 	} {
@@ -467,10 +467,10 @@ func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{
 		"| image | from | to | upstream |",
-		"| `ghcr.io/ok` | `1.0` | `1.1` | found |",
-		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | **not found** |",
-		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",
-		"| `ghcr.io/gone` | `1.0` | `∅` | n/a |", // a removal has nothing to verify
+		"| `ghcr.io/ok` | `1.0` | `1.1` | ✅ found |",
+		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ❌ not found |",
+		"| `ghcr.io/private` | `1.0` | `1.1` | ❔ unverified |",
+		"| `ghcr.io/gone` | `1.0` | `∅` | ➖ |", // a removal has nothing to verify
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("image table missing %q\n---\n%s", want, md)

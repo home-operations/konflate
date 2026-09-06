@@ -369,21 +369,21 @@ func tagOf(v string) string {
 }
 
 // upstreamCell renders the image table's "upstream" column — the registry's
-// verdict on the new reference: found, **not found** (the row's image raised a
-// blocker), "unverified" when the head ref was never confirmed (verification
-// off, a fork PR, or an indeterminate registry answer), or "n/a" for a removal,
-// which has nothing to verify. Always present so a reader learns the images
+// verdict on the new reference as an icon plus a word: ✅ found, ❌ not found
+// (the row's image raised a blocker), ❔ unverified when the head ref was never
+// confirmed (verification off, a fork PR, or an indeterminate registry answer),
+// or ➖ for a removal, which has nothing to verify. Always present so a reader learns the images
 // were not checked rather than assuming a clean table means they were.
 func upstreamCell(im api.ImageChange) string {
 	switch {
 	case im.To == "":
-		return "n/a"
+		return "➖"
 	case im.Upstream == api.ImageFound:
-		return "found"
+		return "✅ found"
 	case im.Upstream == api.ImageMissing:
-		return "**not found**"
+		return "❌ not found"
 	default:
-		return "unverified"
+		return "❔ unverified"
 	}
 }
 
