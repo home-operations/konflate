@@ -467,7 +467,7 @@ func mdCode(s string) string {
 	return strings.ReplaceAll(s, "|", `\|`)
 }
 
-// shortVer trims an "algo:hexdigest" reference to "algo:<12 hex>…" so a
+// shortVer trims an "algo:hexdigest" reference to "algo:<6 hex>…" so a
 // digest-pinned image doesn't sprawl across the table; tags pass through.
 func shortVer(v string) string {
 	if v == "" {
@@ -477,8 +477,8 @@ func shortVer(v string) string {
 	if i < 0 {
 		return v
 	}
-	if hex := v[i+1:]; len(hex) > 12 && isHex(hex) {
-		return v[:i+1] + hex[:12] + "…"
+	if hex := v[i+1:]; len(hex) > 6 && isHex(hex) {
+		return v[:i+1] + hex[:6] + "…"
 	}
 	return v
 }

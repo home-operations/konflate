@@ -337,8 +337,8 @@ func TestMdVersions(t *testing.T) {
 		// A digest-pinned bump reads by its tags alone.
 		{"4.0.19.3009@" + d1, "4.0.19.3011@" + d2, "4.0.19.3009", "4.0.19.3011"},
 		// A digest-only re-pin keeps the (shortened) digest, or the row would show no change.
-		{"4.0.19.3011@" + d1, "4.0.19.3011@" + d2, "4.0.19.3011@sha256:aaaaaaaaaaaa…", "4.0.19.3011@sha256:bbbbbbbbbbbb…"},
-		{d1, d2, "sha256:aaaaaaaaaaaa…", "sha256:bbbbbbbbbbbb…"},
+		{"4.0.19.3011@" + d1, "4.0.19.3011@" + d2, "4.0.19.3011@sha256:aaaaaa…", "4.0.19.3011@sha256:bbbbbb…"},
+		{d1, d2, "sha256:aaaaaa…", "sha256:bbbbbb…"},
 	}
 	for _, c := range cases {
 		gotFrom, gotTo := mdVersions(c.from, c.to)
@@ -353,7 +353,7 @@ func TestShortVer(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", "∅"},
 		{"v1.15.0", "v1.15.0"},
-		{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("a", 12) + "…"},
+		{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("a", 6) + "…"},
 	}
 	for _, c := range cases {
 		if got := shortVer(c.in); got != c.want {

@@ -701,9 +701,9 @@ test('image changes shorten digest versions (full value on hover + correct copy)
   await page.goto('/#/pr/142');
 
   const block = page.locator('.img-change', { hasText: 'thelounge' });
-  // Displayed as tag@sha256:<12 hex>…, never the full 64-hex digest (which blew out the width).
-  await expect(block.locator('.img-ver.to')).toHaveText('4.5.0@sha256:7f2fff6e2644…');
-  await expect(block.locator('.img-ver.from')).toHaveText('4.5.0@sha256:9c3667236b1a…');
+  // Displayed as tag@sha256:<6 hex>…, never the full 64-hex digest (which blew out the width).
+  await expect(block.locator('.img-ver.to')).toHaveText('4.5.0@sha256:7f2fff…');
+  await expect(block.locator('.img-ver.from')).toHaveText('4.5.0@sha256:9c3667…');
   await expect(block.locator('.img-ver.to')).not.toContainText('aadf18cd1abc'); // the truncated tail
   // Full version preserved on hover.
   await expect(block.locator('.img-ver.to')).toHaveAttribute(

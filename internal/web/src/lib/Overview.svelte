@@ -51,7 +51,7 @@
     if (router.route.name === 'review') openSel(router.route.pr, id);
   }
 
-  // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
+  // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<6 hex>…" so a
   // digest-pinned image doesn't blow out the layout; tags are short already and
   // shown in full. The full value stays in the title tooltip and the copy button.
   function shortVer(v: string): string {
@@ -59,7 +59,7 @@
     const i = v.indexOf(':');
     if (i < 0) return v; // a tag — no algo prefix
     const hex = v.slice(i + 1);
-    return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
+    return /^[0-9a-f]+$/i.test(hex) && hex.length > 6 ? `${v.slice(0, i + 1)}${hex.slice(0, 6)}…` : v;
   }
 
   // Reconstruct a pullable reference for the copy button. A tag can never
