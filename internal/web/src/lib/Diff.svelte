@@ -39,7 +39,7 @@
   import { diffIndex } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import { mdiAlert, mdiAlertOctagonOutline, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
   // `active` gates the heavy diff table: when false (the section is parked
   // off-screen — see Diffs.svelte's lazy-mount) the sticky header still renders
@@ -52,6 +52,9 @@
   // scroll the global caution strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
   const cautions = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
+  // A blocker (image-not-found: this workload would fail to pull) outranks the
+  // cautions — the badge reads "blocking" in red rather than "caution" in amber.
+  const blocking = $derived(cautions.some((w) => w.level === 'blocking'));
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
@@ -84,7 +87,11 @@
        server's structured fields (title is exactly "kind name"). -->
   <span class="res-title"><span class="res-kind">{resource.kind}</span> {resource.name}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  {#if cautions.length}
+  {#if blocking}
+    <span class="badge blocking" title={detail(cautions)}>
+      <Icon path={mdiAlertOctagonOutline} size={13} /> blocking{cautions.length > 1 ? ` ${cautions.length}` : ''}
+    </span>
+  {:else if cautions.length}
     <span class="badge caution" title={detail(cautions)}>
       <Icon path={mdiAlert} size={13} /> caution{cautions.length > 1 ? ` ${cautions.length}` : ''}
     </span>

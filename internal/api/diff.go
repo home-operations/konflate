@@ -58,8 +58,9 @@ type DiffResult struct {
 
 	// Warnings are heuristic flags over the rendered diff (data-loss, privilege,
 	// RBAC, availability). Advisory by default (LevelCaution → a neutral check);
-	// a LevelBlocking warning escalates the check to a failure. Every rule is a
-	// caution today, so konflate stays a reviewer aid, not a gate.
+	// a LevelBlocking warning escalates the check to a failure. Every heuristic
+	// rule is a caution; only the deterministic image-not-found finding (an
+	// image the registry lacks, so the change cannot deploy) blocks.
 	Warnings []Warning `json:"warnings"`
 
 	// Routine is true when every changed resource differs only in container
@@ -130,7 +131,28 @@ type ImageChange struct {
 	From string   `json:"from"` // old tag or digest ("" when added)
 	To   string   `json:"to"`   // new tag or digest ("" when removed)
 	Refs []string `json:"refs"` // resources referencing it, "Kind ns/name"
+	// Upstream is the registry's verdict on To, stamped by image verification
+	// (KONFLATE_VERIFY_IMAGES). Empty — and omitted from the JSON — when To was
+	// not checked: verification is off, the PR is a fork (never dialed), the
+	// image was removed (no To), or the registry gave no definitive answer
+	// (auth/network/timeout). Consumers must treat empty as "unverified", not
+	// "present".
+	Upstream ImageUpstream `json:"upstream,omitempty"`
 }
+
+// ImageUpstream is an image reference's registry existence as determined by
+// image verification. A string type so the JSON contract (and the TypeScript
+// union) stays the plain value.
+type ImageUpstream string
+
+const (
+	// ImageFound: the registry served a manifest for the reference.
+	ImageFound ImageUpstream = "found"
+	// ImageMissing: the registry definitively reported the reference absent —
+	// the image would ImagePullBackOff in-cluster. Raises an image-not-found
+	// blocker (LevelBlocking).
+	ImageMissing ImageUpstream = "missing"
+)
 
 // RenderFailure is a resource flate could not render on the head side.
 type RenderFailure struct {
@@ -148,8 +170,9 @@ const (
 	// Every heuristic diff flag is a caution today.
 	LevelCaution Level = "caution"
 	// LevelBlocking escalates the PR's check to a failing conclusion — for a
-	// finding that means the change would not deploy (e.g. an image tag missing
-	// upstream). No rule emits it yet; it is the promotion target for such a rule.
+	// finding that means the change would not deploy. Emitted by image-not-found
+	// (a head-side image reference the registry definitively lacks); heuristic
+	// lint rules stay at LevelCaution.
 	LevelBlocking Level = "blocking"
 )
 

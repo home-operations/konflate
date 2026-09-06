@@ -621,6 +621,10 @@ a.repo:focus-visible .repo-ext {
 .card-shell.caution {
   box-shadow: inset 3px 0 0 var(--caution);
 }
+/* A blocker (the change would not deploy) is red like a render failure. */
+.card-shell.blocking {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
 /* A render failure outranks a caution — a red edge. Defined after the caution
    rule so a card carrying both reads red (equal specificity, source order wins). */
 .card-shell.failure {
@@ -783,6 +787,9 @@ a.repo:focus-visible .repo-ext {
 .pv-caution {
   color: var(--caution);
 }
+.pv-caution.blocking {
+  color: var(--danger);
+}
 .pv-failure {
   color: var(--danger);
 }
@@ -922,21 +929,26 @@ button.sum-pill:hover {
 .sum-pill.caution strong {
   color: var(--caution);
 }
-/* The render-failure pill mirrors the caution pill a notch up the severity
-   scale — red (--danger), matching the card's red edge and the failures badge. */
-.sum-pill.failure {
+/* The render-failure and blocking pills mirror the caution pill a notch up the
+   severity scale — red (--danger), matching the card's red edge and the
+   failures/blocking badges. Both fail the check. */
+.sum-pill.failure,
+.sum-pill.blocking {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
-.sum-pill.failure strong {
+.sum-pill.failure strong,
+.sum-pill.blocking strong {
   color: var(--danger);
 }
-.sum-pill.failure.active {
+.sum-pill.failure.active,
+.sum-pill.blocking.active {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, var(--panel));
   color: color-mix(in srgb, var(--danger) 75%, var(--text));
 }
-.sum-pill.failure:hover {
+.sum-pill.failure:hover,
+.sum-pill.blocking:hover {
   border-color: var(--danger);
 }
 /* The routine pill reads green (--ok) — deliberately off the red→amber severity
@@ -1016,6 +1028,12 @@ button.sum-pill:hover {
 .badge.caution {
   color: var(--caution);
   border-color: color-mix(in srgb, var(--caution) 40%, var(--border));
+}
+/* A blocking finding: red like a render failure (both fail the check), kept a
+   separate class so the two counts stay distinguishable in a badge row. */
+.badge.blocking {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
 /* The stale-render badge ("showing the last render") is a soft amber notice —
    the same amber as a caution, but distinct in context (a status, not a lint). */
@@ -1416,6 +1434,19 @@ button.sum-pill:hover {
 .flag.caution {
   border-left-color: var(--caution);
 }
+.flag.blocking {
+  border-left-color: var(--danger);
+}
+/* The inline "blocking" badge leads the flag title; a hair smaller than the
+   title text so the resource name stays the anchor. */
+.flag-title .badge.blocking {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  margin-right: 4px;
+}
 .flag:last-child {
   margin-bottom: 0;
 }
@@ -1432,6 +1463,9 @@ button.sum-pill:hover {
 }
 .flag-link.caution:hover {
   background: color-mix(in srgb, var(--caution) 8%, transparent);
+}
+.flag-link.blocking:hover {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 .flag-title {
   display: block;
@@ -1524,6 +1558,26 @@ button.sum-pill:hover {
   color: var(--ok);
 }
 .img-arrow {
+  color: var(--muted);
+}
+/* The registry verdict on the new reference. Missing is the one that matters
+   (red, matching the blocker it raised); found is a quiet green tick; an
+   unchecked image says so in muted text rather than staying silent. */
+.img-upstream {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.img-upstream.found {
+  color: var(--ok);
+}
+.img-upstream.missing {
+  color: var(--danger);
+  font-weight: 600;
+}
+.img-upstream.unverified {
   color: var(--muted);
 }
 /* ---- diffs (rail + diff) --------------------------------------------- */
@@ -1668,6 +1722,11 @@ button.sum-pill:hover {
 .summary-caution {
   display: inline-flex;
   color: var(--caution);
+}
+.summary-caution.blocking,
+.leaf-blocking {
+  display: inline-flex;
+  color: var(--danger);
 }
 .tree-parent {
   margin-top: 10px;
@@ -1867,6 +1926,12 @@ tr.search-hit > td {
    flagged resource reads as flagged even with the Summary scrolled away. */
 .res-header .badge.caution {
   background: color-mix(in srgb, var(--caution) 10%, transparent);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.res-header .badge.blocking {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0.06em;

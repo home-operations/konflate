@@ -13,6 +13,7 @@
     mdiHistory,
     mdiSourcePull,
     mdiAlert,
+    mdiAlertOctagonOutline,
     mdiAlertCircleOutline,
     mdiFilterOutline,
   } from './icons';
@@ -53,7 +54,7 @@
 
   const parsed = $derived(parseQuery(q));
 
-  // Matching PRs, risk first: render failures (unknown risk) then cautions as a
+  // Matching PRs, risk first: render failures (unknown risk), blockers, then cautions as a
   // bonus on top of recency, so the PR that most needs eyes is one Enter away.
   const matches = $derived.by(() => {
     const score = (p: PRStatus): number => {
@@ -61,7 +62,7 @@
       const t = Date.parse(p.updatedAt ?? '') || 0;
       // A failed render means unknown risk — weight it like render failures.
       const failed = s?.failures || p.status === 'error';
-      return t / 1e9 + (failed ? 50 : 0) + (s?.caution ? 20 : 0);
+      return t / 1e9 + (failed ? 50 : 0) + (s?.blocking ? 40 : 0) + (s?.caution ? 20 : 0);
     };
     return store.prs
       .filter((p) => matchesQuery(p, parsed))
@@ -71,6 +72,7 @@
 
   // Facet examples offered while the query is empty.
   const suggestions = [
+    { query: 'status:blocking', hint: 'only PRs with a blocking finding' },
     { query: 'status:caution', hint: 'only PRs with cautions' },
     { query: 'author:renovate', hint: 'only renovate PRs' },
     { query: 'status:merged', hint: 'recently merged PRs' },
@@ -193,6 +195,7 @@
                 </span>
               </span>
               <span class="row-right">
+                {#if row.pr.signals?.blocking}<span class="badge blocking"><Icon path={mdiAlertOctagonOutline} size={12} /> {row.pr.signals.blocking}</span>{/if}
                 {#if row.pr.signals?.caution}<span class="badge caution"><Icon path={mdiAlert} size={12} /> {row.pr.signals.caution}</span>{/if}
                 {#if row.pr.signals?.failures}<span class="badge danger"><Icon path={mdiAlertCircleOutline} size={12} /> {row.pr.signals.failures}</span>{/if}
               </span>

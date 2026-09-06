@@ -2,7 +2,7 @@
   import { router } from './router.svelte';
   import { store, diffIndex, openSel } from './store.svelte';
   import Icon from './Icon.svelte';
-  import { mdiAlert, mdiFileDocumentOutline } from './icons';
+  import { mdiAlert, mdiAlertOctagonOutline, mdiFileDocumentOutline } from './icons';
 
   // d can briefly be null while a new diff loads — every use below tolerates it.
   const d = $derived(store.diff);
@@ -11,7 +11,9 @@
   // Resource titles ("Kind ns/name") carrying a caution, and the total caution
   // count — both from the shared diff index (computed once per diff).
   const cautionLabels = $derived(diffIndex().cautionResources);
+  const blockingLabels = $derived(diffIndex().blockingResources);
   const cautionCount = $derived(diffIndex().cautionCount);
+  const blockingCount = $derived(diffIndex().blockingCount);
 
   function open(id: string) {
     if (router.route.name === 'review') openSel(router.route.pr, id);
@@ -27,7 +29,9 @@
   >
     <Icon path={mdiFileDocumentOutline} size={14} />
     <span class="leaf-name">Summary</span>
-    {#if cautionCount}
+    {#if blockingCount}
+      <span class="summary-caution blocking"><Icon path={mdiAlertOctagonOutline} size={13} label="has a blocker" /></span>
+    {:else if cautionCount}
       <span class="summary-caution"><Icon path={mdiAlert} size={13} label="has cautions" /></span>
     {/if}
   </button>
@@ -45,7 +49,9 @@
             onclick={() => open(item.id)}
           >
             <span class="leaf-name">{item.name}</span>
-            {#if cautionLabels.has(`${kind.kind} ${item.name}`)}
+            {#if blockingLabels.has(`${kind.kind} ${item.name}`)}
+              <span class="leaf-blocking"><Icon path={mdiAlertOctagonOutline} size={13} label="has a blocker" /></span>
+            {:else if cautionLabels.has(`${kind.kind} ${item.name}`)}
               <Icon path={mdiAlert} size={13} label="has a caution" />
             {/if}
             <span class="leaf-counts">

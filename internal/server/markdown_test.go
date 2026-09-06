@@ -89,8 +89,9 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
 		// Singular, no "+more" when the sample already covers the whole radius.
 		"- `Kustomization flux-system/db` — 1 dependent (`Kustomization flux-system/cache`)",
-		"| image | from | to |",
-		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` |",
+		"| image | from | to | registry |",
+		// No Upstream on the fixture → the head ref was never confirmed.
+		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
 		"[View the full rendered diff →](https://k.example/#/pr/142)",
 		"konflate · rendered `1a2b3c4` · advisory, not a gate",
 	} {
@@ -344,5 +345,32 @@ func TestReviewURL_AppendsBasePath(t *testing.T) {
 				t.Errorf("reviewURL() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
+	t.Parallel()
+	env := api.DiffEnvelope{
+		Status: api.JobReady,
+		PR:     api.PR{Number: 7},
+		Diff: &api.DiffResult{
+			Images: []api.ImageChange{
+				{Name: "ghcr.io/ok", From: "1.0", To: "1.1", Upstream: api.ImageFound},
+				{Name: "ghcr.io/typo", From: "1.0", To: "1.1-typo", Upstream: api.ImageMissing},
+				{Name: "ghcr.io/private", From: "1.0", To: "1.1"},
+				{Name: "ghcr.io/gone", From: "1.0", To: ""},
+			},
+		},
+	}
+	md := summaryMarkdown(env, "", true)
+	for _, want := range []string{
+		"| `ghcr.io/ok` | `1.0` | `1.1` | ✓ found |",
+		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ⛔ **not found** |",
+		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",
+		"| `ghcr.io/gone` | `1.0` | `∅` | — |", // a removal has nothing to verify
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("image table missing %q\n---\n%s", want, md)
+		}
 	}
 }

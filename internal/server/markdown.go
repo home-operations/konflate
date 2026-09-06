@@ -184,8 +184,8 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 
 // sectionBlocking renders the blocking-tier warnings — findings that fail the
 // check (see checkConclusion). Red [!CAUTION], the top of the ramp, above the
-// amber cautions. Empty unless a rule emitted a LevelBlocking warning (none do
-// yet).
+// amber cautions. Empty unless a rule emitted a LevelBlocking warning (today
+// only image-not-found).
 // mdItem is one "- `code` — detail" line in a summary block.
 type mdItem struct{ code, detail string }
 
@@ -252,12 +252,29 @@ func sectionImages(d *api.DiffResult) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("**Image changes**\n\n| image | from | to |\n|---|---|---|\n")
+	b.WriteString("**Image changes**\n\n| image | from | to | registry |\n|---|---|---|---|\n")
 	for _, im := range d.Images {
-		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` |\n",
-			mdCode(im.Name), mdCode(shortVer(im.From)), mdCode(shortVer(im.To)))
+		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n",
+			mdCode(im.Name), mdCode(shortVer(im.From)), mdCode(shortVer(im.To)), upstreamCell(im))
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// upstreamCell renders an image's registry verdict for the image table: found,
+// ⛔ not found (the row's image raised a blocker), "unverified" when the head
+// ref was never confirmed (verification off, a fork PR, or an indeterminate
+// registry answer), or "—" for a removal, which has nothing to verify.
+func upstreamCell(im api.ImageChange) string {
+	switch {
+	case im.To == "":
+		return "—"
+	case im.Upstream == api.ImageFound:
+		return "✓ found"
+	case im.Upstream == api.ImageMissing:
+		return "⛔ **not found**"
+	default:
+		return "unverified"
+	}
 }
 
 // writeBlastRadius renders the blast-radius block: for each changed/failed app,

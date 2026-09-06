@@ -3,9 +3,46 @@
   import { router } from './router.svelte';
   import { store, diffIndex, openSel } from './store.svelte';
   import Copy from './Copy.svelte';
-  import type { BlastRadiusEntry } from './types';
+  import Icon from './Icon.svelte';
+  import { mdiAlertOctagonOutline, mdiCheck, mdiCloseCircleOutline, mdiCircleOutline } from './icons';
+  import type { BlastRadiusEntry, ImageChange } from './types';
 
   const d = $derived(store.diff);
+
+  // Blockers lead the column: they fail the check, so they're what the reviewer
+  // must act on first. Stable, so the server's order holds within each tier.
+  const warnings = $derived.by(() => {
+    const rank = (l: string) => (l === 'blocking' ? 0 : 1);
+    return [...(d?.warnings ?? [])].sort((a, b) => rank(a.level) - rank(b.level));
+  });
+  const hasBlocker = $derived(warnings.some((w) => w.level === 'blocking'));
+
+  // The registry verdict on an image's head-side ref (see ImageChange.upstream).
+  // A removal has no head ref and gets no marker; an absent verdict is shown as
+  // "unverified" rather than nothing, so a clean-looking column never implies
+  // the images were confirmed.
+  type Upstream = { cls: string; icon: string; text: string; hint: string };
+  function upstream(img: ImageChange): Upstream | null {
+    if (!img.to) return null;
+    switch (img.upstream) {
+      case 'found':
+        return { cls: 'found', icon: mdiCheck, text: 'found', hint: 'Confirmed present in its registry' };
+      case 'missing':
+        return {
+          cls: 'missing',
+          icon: mdiCloseCircleOutline,
+          text: 'not found',
+          hint: 'Not found in its registry — this image would fail to pull',
+        };
+      default:
+        return {
+          cls: 'unverified',
+          icon: mdiCircleOutline,
+          text: 'unverified',
+          hint: "Not checked against its registry: verification is off, this is a fork PR, or the registry didn't answer",
+        };
+    }
+  }
 
   // A warning's resource ("Kind ns/name") matches the diff resource's title, so
   // a warning can deep-link to the diff it flags. Null when the resource didn't
@@ -74,7 +111,11 @@
 {/snippet}
 
 {#snippet warningBody(w: { level: string; resource: string; detail: string })}
-  <span class="flag-title">{w.resource}</span>
+  <span class="flag-title"
+    >{#if w.level === 'blocking'}<span class="badge blocking" title="Fails the check — the change would not deploy"
+        ><Icon path={mdiAlertOctagonOutline} size={12} /> blocking</span
+      > {/if}{w.resource}</span
+  >
   <span class="flag-detail">{w.detail}</span>
 {/snippet}
 
@@ -88,7 +129,7 @@
 {/snippet}
 
 {#snippet cautionsBody()}
-  {#each d?.warnings ?? [] as w}
+  {#each warnings as w}
     {@const target = warningTarget(w.resource)}
     <!-- Cautions whose resource rendered into the diff deep-link to it. -->
     {#if target}
@@ -119,9 +160,10 @@
 {#snippet imagesBody()}
   <ul class="img-list">
     {#each d?.images ?? [] as img}
+      {@const up = upstream(img)}
       <li class="img-change">
-        <!-- Name, from → to and copy share one line; ∅ = no reference on that
-             side (image added/removed) and the tooltip spells it out. -->
+        <!-- Name, from → to, copy and the registry verdict share one line; ∅ = no
+             reference on that side (image added/removed) and the tooltip spells it out. -->
         <div class="img-top">
           <span class="img-name">{img.name}</span>
           <span class="img-delta">
@@ -130,6 +172,9 @@
             <span class="img-ver to" title={img.to || 'not present after this change'}>{shortVer(img.to)}</span>
           </span>
           {#if img.to}<Copy text={imageRef(img.name, img.to)} label="Copy new image reference" />{/if}
+          {#if up}
+            <span class="img-upstream {up.cls}" title={up.hint}><Icon path={up.icon} size={12} /> {up.text}</span>
+          {/if}
         </div>
       </li>
     {/each}
@@ -149,7 +194,8 @@
        collapses to fewer columns as the pane narrows. -->
   <div class="ov-grid">
     {@render column('Render failures', d.failures?.length ?? 0, 'fail-section', failuresBody)}
-    {@render column('Cautions', d.warnings?.length ?? 0, 'caution-section', cautionsBody)}
+    <!-- A blocker turns the column red: it fails the check, like a render failure. -->
+    {@render column('Cautions', warnings.length, hasBlocker ? 'fail-section' : 'caution-section', cautionsBody)}
     {@render column('Blast radius', d.blastRadius?.length ?? 0, '', blastBody)}
     {@render column('Image changes', d.images?.length ?? 0, '', imagesBody)}
   </div>
