@@ -29,7 +29,7 @@
           cls: 'missing',
           icon: mdiCloseCircleOutline,
           text: 'not found',
-          hint: 'Not found in its registry — this image would fail to pull',
+          hint: 'Not found in upstream registry; this image would fail to pull',
         };
       default:
         return {
@@ -51,7 +51,7 @@
     if (router.route.name === 'review') openSel(router.route.pr, id);
   }
 
-  // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<12 hex>…" so a
+  // Shorten an "algo:hexdigest" (e.g. sha256:<64 hex>) to "algo:<6 hex>…" so a
   // digest-pinned image doesn't blow out the layout; tags are short already and
   // shown in full. The full value stays in the title tooltip and the copy button.
   function shortVer(v: string): string {
@@ -59,13 +59,15 @@
     const i = v.indexOf(':');
     if (i < 0) return v; // a tag — no algo prefix
     const hex = v.slice(i + 1);
-    return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
+    return /^[0-9a-f]+$/i.test(hex) && hex.length > 6 ? `${v.slice(0, i + 1)}${hex.slice(0, 6)}…` : v;
   }
 
-  // Reconstruct a pullable reference for the copy button: a digest joins the name
-  // with '@' (a tag can never contain ':', so a ':' in the version means digest).
+  // Reconstruct a pullable reference for the copy button. A tag can never
+  // contain ':' and a bare digest ("sha256:…", or any other algorithm) always
+  // does, so a version with ':' and no '@' is a bare digest and joins with '@';
+  // a tag — including a digest-pinned one, "1.2.3@sha256:…" — joins with ':'.
   function imageRef(name: string, ver: string): string {
-    return ver.includes(':') ? `${name}@${ver}` : `${name}:${ver}`;
+    return ver.includes(':') && !ver.includes('@') ? `${name}@${ver}` : `${name}:${ver}`;
   }
 
   // Blast-radius dependents are "Kind ns/name" and are always the parent's own

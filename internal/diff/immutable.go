@@ -85,7 +85,7 @@ func immutableFieldWarnings(c Change) []api.Warning {
 			Level:    api.LevelCaution,
 			Rule:     "immutable-field",
 			Resource: resourceLabel(c),
-			Detail: fmt.Sprintf("%s changed — immutable on %s; the apply fails until the resource is recreated (or Flux force is enabled)",
+			Detail: fmt.Sprintf("%s changed; immutable on %s; the apply fails until the resource is recreated (or Flux force is enabled)",
 				strings.Join(fields, ", "), c.Kind),
 		})
 	}
@@ -111,7 +111,7 @@ func pvcShrinkWarning(c Change) (api.Warning, bool) {
 		Level:    api.LevelCaution,
 		Rule:     "pvc-shrink",
 		Resource: resourceLabel(c),
-		Detail: fmt.Sprintf("storage request decreased %s → %s — PersistentVolumeClaims can only grow; the apply will be rejected",
+		Detail: fmt.Sprintf("storage request decreased %s → %s; PersistentVolumeClaims can only grow; the apply will be rejected",
 			oldRaw, newRaw),
 	}, true
 }

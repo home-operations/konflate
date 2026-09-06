@@ -82,6 +82,20 @@ func TestVerifyImages(t *testing.T) {
 	}
 }
 
+// A digest-pinned reference is checked by digest, so the blocker names the
+// short digest alongside the tag: the tag alone may well exist upstream.
+func TestImageNotFound_NamesThePinnedDigest(t *testing.T) {
+	t.Parallel()
+	digest := "sha256:" + strings.Repeat("c", 64)
+	w := imageNotFound("ghcr.io/x", "1.2.3@"+digest, nil)
+	if len(w) != 1 || !strings.Contains(w[0].Detail, "ghcr.io/x:1.2.3@sha256:cccccc…") {
+		t.Errorf("want the tag and short digest in the detail, got %+v", w)
+	}
+	if w := imageNotFound("ghcr.io/x", "1.2.3", nil); !strings.Contains(w[0].Detail, "ghcr.io/x:1.2.3 not found") {
+		t.Errorf("a bare tag reads as-is, got %+v", w)
+	}
+}
+
 func TestImageRef(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, ver, want string }{

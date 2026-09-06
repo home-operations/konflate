@@ -231,7 +231,7 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusOK)
 		}
-		_, _ = io.WriteString(w, summaryMarkdown(env, env.ReviewURL, flavor == "github"))
+		_, _ = io.WriteString(w, summaryMarkdown(env, env.ReviewURL, flavor == "github", s.Version))
 		return
 	}
 	code := http.StatusOK

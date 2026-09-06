@@ -48,72 +48,195 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 			},
 		},
 	}
-	// Blocking → red [!CAUTION] "Blocker"; caution → amber [!WARNING], its own block.
-	md := summaryMarkdown(env, "", true)
+	// Blocking → red [!CAUTION]; caution → amber [!WARNING], its own block. The
+	// alert box supplies the titled icon, so the items follow the marker directly
+	// with no repeated "Blocker"/"Caution" headline.
+	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{
-		"> [!CAUTION]\n> **⛔ Blocker**",
-		"> - `Deployment web/api` — image ghcr.io/x:9.9.9 not found upstream",
-		"> [!WARNING]\n> **⚠ Caution**",
-		"> - `Deployment web/api` — replicas set to 0",
+		"> [!CAUTION]\n> - `Deployment web/api`: image ghcr.io/x:9.9.9 not found upstream",
+		"> [!WARNING]\n> - `Deployment web/api`: replicas set to 0",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("blocking markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	// The blocking finding must not be double-counted into the caution block — with
-	// one caution the header stays singular ("Caution", never plural "Cautions").
-	if strings.Contains(md, "**⚠ Cautions**") {
-		t.Errorf("blocking warning leaked into the caution count:\n%s", md)
+	if strings.Contains(md, "Blocker") || strings.Contains(md, "⚠") {
+		t.Errorf("github flavour must not repeat the box's title inside it:\n%s", md)
+	}
+	// A render failure joins the blocker in the same red box (both fail the
+	// check) — blockers first — rather than opening a second [!CAUTION].
+	env.Diff.Failures = []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}}
+	merged := summaryMarkdown(env, "", true, "")
+	if n := strings.Count(merged, "[!CAUTION]"); n != 1 {
+		t.Errorf("blocker + render failure should share one [!CAUTION] box, got %d:\n%s", n, merged)
+	}
+	if bi, fi := strings.Index(merged, "not found upstream"), strings.Index(merged, "values don't meet"); bi < 0 || fi < 0 || bi > fi {
+		t.Errorf("blocker should precede the render failure in the shared box:\n%s", merged)
+	}
+	if strings.Contains(merged, "render failure") {
+		t.Errorf("no headline in the shared box:\n%s", merged)
 	}
 	// Blocking (higher severity) renders before the caution block.
-	if bi, ci := strings.Index(md, "⛔ Blocker"), strings.Index(md, "⚠ Caution"); bi < 0 || ci < 0 || bi > ci {
+	if bi, ci := strings.Index(md, "[!CAUTION]"), strings.Index(md, "[!WARNING]"); bi < 0 || ci < 0 || bi > ci {
 		t.Errorf("blocking block should render before caution (blocking=%d caution=%d)\n%s", bi, ci, md)
+	}
+	// The plain flavour has no box, so it keeps the glyph + title — singular with
+	// one finding each (the blocker must not be double-counted into the cautions).
+	plain := summaryMarkdown(env, "", false, "")
+	for _, want := range []string{"**⛔ Blocker**", "**⚠ Caution**"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("plain markdown missing %q\n---\n%s", want, plain)
+		}
+	}
+	if strings.Contains(plain, "Cautions") {
+		t.Errorf("blocking warning leaked into the caution count:\n%s", plain)
 	}
 }
 
 func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true)
+	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true, "")
 	for _, want := range []string{
 		"<!-- konflate:pr-142 -->",
-		"### konflate — summary",
 		"> [!NOTE]",
-		"+2 added · 3 changed · −1 removed** — 6 resources · 2 apps · 1 CRD",
+		"**+2 added · 3 changed · −1 removed**: 6 resources across 2 apps · 1 CRD",
 		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
-		"> [!WARNING]\n> **⚠ Caution**",
-		"> - `Deployment web/api` — replicas set to 0",
-		"> [!CAUTION]\n> **1 render failure**",
-		"> - `HelmRelease media/plex` — values don't meet the schema",
+		"> [!WARNING]\n> - `Deployment web/api`: replicas set to 0",
+		"> [!CAUTION]\n> - `HelmRelease media/plex`: values don't meet the schema",
 		"**Blast radius**",
 		// Sample capped at 3 direct names; count + sample reconcile to the headline.
-		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
+		"- `Kustomization flux-system/cluster-apps`: 12 dependents (flux-system/app-a, flux-system/app-b, flux-system/app-c +9 more)",
 		// Singular, no "+more" when the sample already covers the whole radius.
-		"- `Kustomization flux-system/db` — 1 dependent (`Kustomization flux-system/cache`)",
-		"| image | from | to | registry |",
-		// No Upstream on the fixture → the head ref was never confirmed.
-		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
-		"[View the full rendered diff →](https://k.example/#/pr/142)",
-		"konflate · rendered `1a2b3c4` · advisory, not a gate",
+		"- `Kustomization flux-system/db`: 1 dependent (flux-system/cache)",
+		"| image | from | to | upstream |\n|---|---|---|---|\n",
+		// Nothing verified on the fixture → the column says so rather than staying silent.
+		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | ❔ |",
+		// Provenance and the review link share one small footer line.
+		"<sub>konflate · rendered `1a2b3c4` · [full diff →](https://k.example/#/pr/142)</sub>",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
 	}
+	// Severity order: the red box, the amber box, then the neutral headline note,
+	// and only then the informational blast radius and images.
+	order := []string{"[!CAUTION]", "[!WARNING]", "[!NOTE]", "**Blast radius**", "| image | from | to |"}
+	last := -1
+	for _, marker := range order {
+		at := strings.Index(md, marker)
+		if at < last {
+			t.Errorf("%s is out of order; want %v top to bottom:\n%s", marker, order, md)
+		}
+		last = at
+	}
+}
+
+func TestMdDetail_FieldPathsAsCode(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ in, want string }{
+		{"values don't meet the schema: .image.tag is required", "values don't meet the schema: `.image.tag` is required"},
+		{"spec.suspend set; reconciliation freezes on merge", "`spec.suspend` set; reconciliation freezes on merge"},
+		{"still declared in spec.dependsOn by Kustomization a/b; those will wedge", "still declared in `spec.dependsOn` by Kustomization a/b; those will wedge"},
+		// Several paths, comma-separated, and a sentence-ending full stop stays outside.
+		{"spec.selector, spec.template changed; immutable on Deployment.", "`spec.selector`, `spec.template` changed; immutable on Deployment."},
+		{"(spec.template.spec.containers[0].image)", "(`spec.template.spec.containers[0].image`)"},
+		// Not field paths: versions, image refs, hostnames.
+		{"major version bump 88.6.1 → 89.0.0 of the OCI source", "major version bump 88.6.1 → 89.0.0 of the OCI source"},
+		{"image ghcr.io/x:1.2 not found in upstream registry", "image ghcr.io/x:1.2 not found in upstream registry"},
+		// Forge text stays defanged on both sides of a path.
+		{"[x](u) .spec.a `b`", "\\[x\\](u) `.spec.a` \\`b\\`"},
+	}
+	for _, c := range cases {
+		if got := mdDetail(c.in); got != c.want {
+			t.Errorf("mdDetail(%q)\n got %q\nwant %q", c.in, got, c.want)
+		}
+	}
+}
+
+// .Sections.Failing gives a custom template the same single red box the
+// default body uses; on the plain flavour it is the two labelled blocks.
+func TestSummarySections_Failing(t *testing.T) {
+	t.Parallel()
+	d := &api.DiffResult{
+		Warnings: []api.Warning{{Level: api.LevelBlocking, Rule: "image-not-found", Resource: "Deployment web/api", Detail: "image x:1 not found in upstream registry"}},
+		Failures: []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}},
+	}
+	gh := summarySectionsFor(d, true)
+	if strings.Count(gh.Failing, "[!CAUTION]") != 1 || !strings.Contains(gh.Failing, "x:1 not found") || !strings.Contains(gh.Failing, "values don't meet") {
+		t.Errorf("github .Sections.Failing should be one box with both items:\n%s", gh.Failing)
+	}
+	// The per-block sections are headline-less on GitHub too, like the merged one.
+	if strings.Contains(gh.Failures, "render failure") {
+		t.Errorf("github .Sections.Failures should carry no headline:\n%s", gh.Failures)
+	}
+	plain := summarySectionsFor(d, false)
+	for _, want := range []string{"**⛔ Blocker**", "**⛔ Render failure**"} {
+		if !strings.Contains(plain.Failing, want) {
+			t.Errorf("plain .Sections.Failing missing %q:\n%s", want, plain.Failing)
+		}
+	}
+}
+
+func TestSummaryMarkdown_FooterVersion(t *testing.T) {
+	t.Parallel()
+	env := sampleSummaryEnv()
+	if md := summaryMarkdown(env, "", true, "v9.9.9"); !strings.Contains(md, "<sub>konflate v9.9.9 · rendered `1a2b3c4`</sub>") {
+		t.Errorf("footer should carry the build version:\n%s", md)
+	}
+	// Unset (a local build before main stamps it) → just "konflate", no dangling space.
+	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "<sub>konflate · rendered `1a2b3c4`</sub>") {
+		t.Errorf("footer without a version:\n%s", md)
+	}
+}
+
+func TestImpactPhrase(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		d    api.DiffResult
+		want string
+	}{
+		{"single term names the resources directly",
+			api.DiffResult{Summary: api.DiffSummary{Changed: 6}, Impact: api.Impact{Resources: 6, Parents: 6}},
+			"**6 resources changed** across 6 apps"},
+		{"single term, singular",
+			api.DiffResult{Summary: api.DiffSummary{Added: 1}, Impact: api.Impact{Resources: 1, Parents: 1}},
+			"**1 resource added** across 1 app"},
+		{"zero terms dropped, total kept for a mixed delta",
+			api.DiffResult{Summary: api.DiffSummary{Added: 1, Changed: 1}, Impact: api.Impact{Resources: 2, Parents: 1, CRDs: 1}},
+			"**+1 added · 1 changed**: 2 resources across 1 app · 1 CRD"},
+		{"no parents",
+			api.DiffResult{Summary: api.DiffSummary{Removed: 3}, Impact: api.Impact{Resources: 3}},
+			"**3 resources removed**"},
+		{"nothing changed (failures only)",
+			api.DiffResult{},
+			"no rendered changes"},
+		{"truncated",
+			api.DiffResult{Summary: api.DiffSummary{Changed: 400}, Impact: api.Impact{Resources: 400, Parents: 9}, Truncated: 100},
+			"**400 resources changed** across 9 apps · 100 not shown"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := impactPhrase(&tc.d); got != tc.want {
+				t.Errorf("impactPhrase = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "", false)
+	md := summaryMarkdown(sampleSummaryEnv(), "", false, "")
 	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("plain markdown must not use GitHub admonitions:\n%s", md)
 	}
-	for _, want := range []string{"**⚠ Caution**", "**⛔ Render failures (1)**"} {
+	for _, want := range []string{"**⚠ Caution**", "**⛔ Render failure**"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("plain markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	// No review URL → no link line.
-	if strings.Contains(md, "View the full rendered diff") {
+	// No review URL → no link in the footer.
+	if strings.Contains(md, "full diff →") {
 		t.Errorf("empty review URL should omit the link:\n%s", md)
 	}
 }
@@ -131,19 +254,28 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 			Routine: true,
 		},
 	}
-	// GitHub flavour: a green [!TIP] naming itself, and — being routine — no
-	// caution/failure blocks.
-	md := summaryMarkdown(env, "", true)
-	for _, want := range []string{"> [!TIP]", "**Routine**"} {
+	// GitHub flavour: a green [!TIP] naming itself and carrying the headline
+	// counts — so the separate [!NOTE] impact line is dropped — and, being
+	// routine, no caution/failure blocks.
+	md := summaryMarkdown(env, "", true, "")
+	for _, want := range []string{"> [!TIP]", "**Routine**: only container-image and chart-version changes; 2 resources across 1 app"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	if strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
-		t.Errorf("a routine PR carries no caution/failure blocks:\n%s", md)
+	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
+		t.Errorf("a routine PR carries only the tip — no impact note, caution, or failure blocks:\n%s", md)
 	}
+	// The tip carries the whole scope, including the truncation cue and CRD
+	// count, since the impact line is dropped for a routine PR.
+	env.Diff.Impact.CRDs = 3
+	env.Diff.Truncated = 40
+	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "2 resources across 1 app · 3 CRDs · 40 not shown") {
+		t.Errorf("routine tip must keep the CRD count and the truncation cue:\n%s", md)
+	}
+	env.Diff.Impact.CRDs, env.Diff.Truncated = 0, 0
 	// Plain flavour: the bold line, no admonition syntax.
-	plain := summaryMarkdown(env, "", false)
+	plain := summaryMarkdown(env, "", false, "")
 	if strings.Contains(plain, "[!TIP]") {
 		t.Errorf("plain markdown must not use admonitions:\n%s", plain)
 	}
@@ -164,7 +296,7 @@ func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 		// and a code span into konflate's own comment/check-run.
 		Message: "boom | <script>alert(1)</script>\nsecond line [click](https://evil.example) ![x](https://evil.example/p.png) `code`",
 	}}
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	if strings.Contains(md, "<script>") {
 		t.Errorf("raw HTML must be escaped:\n%s", md)
 	}
@@ -213,7 +345,7 @@ func TestMdInline_DefangsMarkdown(t *testing.T) {
 
 func TestSummaryMarkdown_NotReady(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true)
+	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true, "")
 	if !strings.Contains(md, "Still rendering") {
 		t.Errorf("a running PR should say it's still rendering:\n%s", md)
 	}
@@ -230,7 +362,7 @@ func TestSummaryMarkdown_NoChanges(t *testing.T) {
 		Diff:   &api.DiffResult{HeadSHA: "deadbeefcafef00d"},
 	}
 	for _, admonitions := range []bool{true, false} {
-		md := summaryMarkdown(env, "", admonitions)
+		md := summaryMarkdown(env, "", admonitions, "")
 		if !strings.Contains(md, "No rendered changes") {
 			t.Errorf("admonitions=%v: expected a no-changes message:\n%s", admonitions, md)
 		}
@@ -247,7 +379,7 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
 	env.RefreshError = "forge timeout"
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	if !strings.Contains(md, "showing the last good render") {
 		t.Errorf("a refresh failure should be flagged:\n%s", md)
 	}
@@ -262,7 +394,9 @@ func TestShortVer(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", "∅"},
 		{"v1.15.0", "v1.15.0"},
-		{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("a", 12) + "…"},
+		{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("a", 6) + "…"},
+		// A digest-pinned tag keeps the tag and shortens the digest half.
+		{"4.0.19.3011@sha256:" + strings.Repeat("a", 64), "4.0.19.3011@sha256:aaaaaa…"},
 	}
 	for _, c := range cases {
 		if got := shortVer(c.in); got != c.want {
@@ -348,7 +482,7 @@ func TestReviewURL_AppendsBasePath(t *testing.T) {
 	}
 }
 
-func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
+func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 	t.Parallel()
 	env := api.DiffEnvelope{
 		Status: api.JobReady,
@@ -362,12 +496,13 @@ func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
 			},
 		},
 	}
-	md := summaryMarkdown(env, "", true)
+	md := summaryMarkdown(env, "", true, "")
 	for _, want := range []string{
-		"| `ghcr.io/ok` | `1.0` | `1.1` | ✓ found |",
-		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ⛔ **not found** |",
-		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",
-		"| `ghcr.io/gone` | `1.0` | `∅` | — |", // a removal has nothing to verify
+		"| image | from | to | upstream |",
+		"| `ghcr.io/ok` | `1.0` | `1.1` | ✅ |",
+		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ❌ |",
+		"| `ghcr.io/private` | `1.0` | `1.1` | ❔ |",
+		"| `ghcr.io/gone` | `1.0` | `∅` | ➖ |", // a removal has nothing to verify
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("image table missing %q\n---\n%s", want, md)

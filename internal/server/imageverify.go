@@ -35,10 +35,11 @@ const imageVerifyConcurrency = 8
 // render's DiffTimeout via ctx. Callers gate this to trusted (non-fork) PRs.
 func verifyImages(ctx context.Context, chk imageChecker, images []api.ImageChange, timeout time.Duration, log *slog.Logger) []api.Warning {
 	type target struct {
-		idx  int // index into images, to stamp Upstream
-		name string
-		ref  string
-		refs []string
+		idx     int // index into images, to stamp Upstream
+		name    string
+		version string // To, as recorded on the change
+		ref     string // the pullable reference dialed
+		refs    []string
 	}
 	var targets []target
 	for i, im := range images {
@@ -46,7 +47,7 @@ func verifyImages(ctx context.Context, chk imageChecker, images []api.ImageChang
 			continue
 		}
 		if ref := imageRef(im.Name, im.To); ref != "" {
-			targets = append(targets, target{i, im.Name, ref, im.Refs})
+			targets = append(targets, target{i, im.Name, im.To, ref, im.Refs})
 		}
 	}
 	if len(targets) == 0 {
@@ -84,7 +85,7 @@ func verifyImages(ctx context.Context, chk imageChecker, images []api.ImageChang
 				return
 			}
 			images[t.idx].Upstream = api.ImageMissing
-			results[i] = imageNotFound(t.name, t.ref, t.refs)
+			results[i] = imageNotFound(t.name, t.version, t.refs)
 		}(i, t)
 	}
 	wg.Wait()
@@ -99,18 +100,22 @@ func verifyImages(ctx context.Context, chk imageChecker, images []api.ImageChang
 // imageNotFound builds the blockers for one absent image: one per referencing
 // resource so each lands on (and deep-links to) the workload that would fail to
 // pull, or a single one on the image name when the diff recorded no referrers.
-func imageNotFound(name, ref string, refs []string) []api.Warning {
+// The detail names the reference as the table shows it — tag, and the shortened
+// digest when pinned, since a pin is checked by digest and the tag alone may
+// well exist upstream.
+func imageNotFound(name, version string, refs []string) []api.Warning {
 	resources := refs
 	if len(resources) == 0 {
 		resources = []string{name}
 	}
+	shown := imageRef(name, shortVer(version))
 	out := make([]api.Warning, 0, len(resources))
 	for _, r := range resources {
 		out = append(out, api.Warning{
 			Level:    api.LevelBlocking,
 			Rule:     "image-not-found",
 			Resource: r,
-			Detail:   fmt.Sprintf("image %s not found in its registry — it would fail to pull", ref),
+			Detail:   fmt.Sprintf("image %s not found in upstream registry", shown),
 		})
 	}
 	return out

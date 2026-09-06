@@ -108,10 +108,11 @@ export const sampleDiff: DiffResult = {
       refs: ['Deployment rook-ceph/rook-ceph-operator'],
     },
     {
-      // Digest-pinned image: the full sha256 digests must be shortened in the UI.
-      name: 'ghcr.io/thelounge/thelounge:4.5.0',
-      from: 'sha256:9c3667236b1a82cf79b1b35e012ddf58e1e2de46f3596befbc699825c0793680',
-      to: 'sha256:7f2fff6e264411ce8608bd1fdf5142a3cd980677b0479e7e3702aadf18cd1abc',
+      // Digest-pinned tag (the Renovate default): the version keeps the tag ahead
+      // of the digest, and the full sha256 must be shortened in the UI.
+      name: 'ghcr.io/thelounge/thelounge',
+      from: '4.5.0@sha256:9c3667236b1a82cf79b1b35e012ddf58e1e2de46f3596befbc699825c0793680',
+      to: '4.5.0@sha256:7f2fff6e264411ce8608bd1fdf5142a3cd980677b0479e7e3702aadf18cd1abc',
       refs: ['Deployment default/thelounge'],
     },
   ],
@@ -123,13 +124,13 @@ export const sampleDiff: DiffResult = {
       level: 'caution',
       rule: 'removed-statefulset',
       resource: 'StatefulSet default/postgres',
-      detail: 'removed StatefulSet — its PersistentVolumeClaims and data may be deleted',
+      detail: 'removed StatefulSet; its PersistentVolumeClaims and data may be deleted',
     },
     {
       level: 'caution',
       rule: 'replicas-zero',
       resource: 'Deployment default/web',
-      detail: 'replicas set to 0 — the workload will be scaled to zero',
+      detail: 'replicas set to 0; the workload will be scaled to zero',
     },
   ],
   routine: false, // has warnings + failures → not a routine bump

@@ -151,7 +151,7 @@ func routineField(kind string, path []string) bool {
 			pathEq(path, "spec", "ref", "semver")
 	case "GitRepository":
 		return pathEq(path, "spec", "ref", "tag")
-	case "HelmRelease":
+	case kindHelmRelease:
 		return pathEq(path, "spec", "chart", "spec", "version")
 	}
 	return false

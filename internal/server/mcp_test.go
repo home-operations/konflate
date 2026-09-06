@@ -57,7 +57,7 @@ func TestMCP_Tools(t *testing.T) {
 	}
 
 	// get_pr_summary: the Markdown overview, carrying the caution.
-	if text := toolText(mustCallTool(t, cs, "get_pr_summary", map[string]any{"number": 7})); !strings.Contains(text, "konflate — summary") || !strings.Contains(text, "gatus") {
+	if text := toolText(mustCallTool(t, cs, "get_pr_summary", map[string]any{"number": 7})); !strings.Contains(text, "konflate ·") || !strings.Contains(text, "gatus") {
 		t.Errorf("summary missing expected content:\n%s", text)
 	}
 

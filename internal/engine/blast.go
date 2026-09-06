@@ -169,7 +169,7 @@ func danglingDependsOn(
 			Level:    api.LevelCaution,
 			Rule:     "dangling-dependson",
 			Resource: parentLabel(removed),
-			Detail: fmt.Sprintf("removed, but still declared in spec.dependsOn by %s — those will wedge on the missing dependency",
+			Detail: fmt.Sprintf("removed, but still declared in spec.dependsOn by %s; those will wedge on the missing dependency",
 				strings.Join(labels, ", ")),
 		})
 	}
@@ -221,7 +221,7 @@ func staleValues(base, head []manifest.Warning) []api.Warning {
 			Level:    api.LevelCaution,
 			Rule:     "stale-helm-values",
 			Resource: parentLabel(w.Resource),
-			Detail: fmt.Sprintf("sets %s the chart no longer defines (%s) — the override has no effect",
+			Detail: fmt.Sprintf("sets %s the chart no longer defines (%s); the override has no effect",
 				noun, strings.Join(fresh, ", ")),
 		})
 	}

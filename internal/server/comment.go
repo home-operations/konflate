@@ -77,7 +77,7 @@ func newCommentTemplate(cfg *config.Config, log *slog.Logger) *template.Template
 func (s *Server) commentBody(env api.DiffEnvelope) string {
 	reviewURL := s.reviewURL(env.PR.Number)
 	admonitions := s.cfg.Forge.Kind == config.ForgeGitHub
-	defaultBody := func() string { return summaryMarkdown(env, reviewURL, admonitions) }
+	defaultBody := func() string { return summaryMarkdown(env, reviewURL, admonitions, s.Version) }
 	if s.commentTmpl == nil {
 		return defaultBody()
 	}
@@ -107,7 +107,7 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 		PR:        pr,
 		Diff:      env.Diff,
 		ReviewURL: reviewURL,
-		Summary:   summaryMarkdownBody(env, reviewURL, admonitions),
+		Summary:   summaryMarkdownBody(env, reviewURL, admonitions, s.Version),
 		Sections:  summarySectionsFor(env.Diff, admonitions),
 	}
 	var b strings.Builder

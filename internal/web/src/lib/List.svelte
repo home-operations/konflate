@@ -201,7 +201,7 @@
     const i = v.indexOf(':');
     if (i < 0) return v;
     const hex = v.slice(i + 1);
-    return /^[0-9a-f]+$/i.test(hex) && hex.length > 12 ? `${v.slice(0, i + 1)}${hex.slice(0, 12)}…` : v;
+    return /^[0-9a-f]+$/i.test(hex) && hex.length > 6 ? `${v.slice(0, i + 1)}${hex.slice(0, 6)}…` : v;
   }
 
   // A '#'-prefixed color for a label dot, or '' when the forge gave no usable

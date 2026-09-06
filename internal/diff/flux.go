@@ -37,9 +37,12 @@ type ParentInfo struct {
 // document itself (guarded by API group — a non-Flux CRD that happens to be
 // called "Kustomization" must not trip the suspend rules).
 func fluxKind(c Change) bool {
-	if c.Kind != "Kustomization" && c.Kind != "HelmRelease" {
-		return false
-	}
+	return (c.Kind == "Kustomization" || c.Kind == kindHelmRelease) && fluxAPI(c)
+}
+
+// fluxAPI reports whether the change's document belongs to a Flux API group
+// (*.toolkit.fluxcd.io), read from whichever side is present.
+func fluxAPI(c Change) bool {
 	for _, m := range []map[string]any{c.New, c.Old} {
 		if m == nil {
 			continue
@@ -64,12 +67,12 @@ func suspendToggleWarnings(c Change) []api.Warning {
 	case !oldSusp && newSusp:
 		return []api.Warning{{
 			Level: api.LevelCaution, Rule: "suspends", Resource: resourceLabel(c),
-			Detail: "spec.suspend set — reconciliation freezes on merge; later changes will sit unapplied until it is resumed",
+			Detail: "spec.suspend set; reconciliation freezes on merge; later changes will sit unapplied until it is resumed",
 		}}
 	case oldSusp && !newSusp:
 		return []api.Warning{{
 			Level: api.LevelCaution, Rule: "resumes", Resource: resourceLabel(c),
-			Detail: "spec.suspend removed — reconciliation resumes on merge and every change accumulated while suspended applies at once",
+			Detail: "spec.suspend removed; reconciliation resumes on merge and every change accumulated while suspended applies at once",
 		}}
 	}
 	return nil
@@ -87,7 +90,7 @@ func suspendedParentWarnings(changes []Change, parents map[string]ParentInfo) []
 		}
 	}
 	return aggregateParentWarnings(counts, "suspended-parent", func(parent string, n int) string {
-		return fmt.Sprintf("%d %s under the suspended %s — Flux will not reconcile %s until it is resumed",
+		return fmt.Sprintf("%d %s under the suspended %s; Flux will not reconcile %s until it is resumed",
 			n, plural(n, "changed resource", "changed resources"), parent, plural(n, "it", "them"))
 	})
 }
@@ -108,7 +111,7 @@ func notPrunedWarnings(changes []Change, parents map[string]ParentInfo) []api.Wa
 		}
 	}
 	return aggregateParentWarnings(counts, "not-pruned", func(parent string, n int) string {
-		return fmt.Sprintf("%d removed %s under %s, which does not prune — Flux will leave %s running in-cluster, unmanaged",
+		return fmt.Sprintf("%d removed %s under %s, which does not prune; Flux will leave %s running in-cluster, unmanaged",
 			n, plural(n, "resource", "resources"), parent, plural(n, "it", "them"))
 	})
 }

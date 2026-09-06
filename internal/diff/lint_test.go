@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -238,6 +239,151 @@ func TestLint_MajorChartBump(t *testing.T) {
 	}
 	if w.Level != api.LevelCaution || w.Resource != "app-template" || w.Detail == "" {
 		t.Errorf("major-chart-bump = {%s %q %q}, want caution app-template with a detail", w.Level, w.Resource, w.Detail)
+	}
+}
+
+// A digest-pinned tag ("v1.9.0@sha256:…") must still be read as semver — the
+// Renovate default pins every image this way, so without it the rule never fires.
+func TestLint_MajorImageBump_DigestPinned(t *testing.T) {
+	t.Parallel()
+	images := []api.ImageChange{{Name: "ghcr.io/app",
+		From: "v1.9.0@sha256:" + strings.Repeat("a", 64), To: "v2.0.0@sha256:" + strings.Repeat("b", 64)}}
+	n, w := countRule(Lint(nil, images, nil), "major-image-bump")
+	if n != 1 {
+		t.Fatalf("major-image-bump count = %d, want 1 for a digest-pinned major bump", n)
+	}
+	// The detail names the tags, not the 64-hex digests.
+	if !strings.Contains(w.Detail, "v1.9.0 → v2.0.0") || strings.Contains(w.Detail, "sha256") {
+		t.Errorf("detail should read by tag, got %q", w.Detail)
+	}
+}
+
+func ociRepo(chart, tag string) map[string]any {
+	return ociRepoAt("oci://ghcr.io/example/charts/"+chart, tag)
+}
+
+func ociRepoAt(url, tag string) map[string]any {
+	return map[string]any{
+		"apiVersion": "source.toolkit.fluxcd.io/v1",
+		"spec":       map[string]any{"url": url, "ref": map[string]any{"tag": tag}},
+	}
+}
+
+func helmReleaseChart(apiVersion, chart, version string) map[string]any {
+	return map[string]any{
+		"apiVersion": apiVersion,
+		"spec":       map[string]any{"chart": map[string]any{"spec": map[string]any{"chart": chart, "version": version}}},
+	}
+}
+
+const fluxHelmAPI = "helm.toolkit.fluxcd.io/v2"
+
+// TestLint_MajorRefBump: a major bump pinned on the Flux source object itself —
+// an OCIRepository tag or a HelmRelease chart version — is flagged from that
+// object's manifest, so a breaking chart upgrade surfaces even when no rendered
+// child changed (the label-based rule sees nothing then).
+func TestLint_MajorRefBump(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "kube-prometheus-stack",
+			Old: ociRepo("kube-prometheus-stack", "88.6.1"), New: ociRepo("kube-prometheus-stack", "89.0.0")}, // major → source caution
+		{Status: "changed", Kind: "OCIRepository", Namespace: "o11y", Name: "blackbox",
+			Old: ociRepo("blackbox", "11.17.2"), New: ociRepo("blackbox", "11.18.0")}, // minor → none
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")}, // major → chart caution
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "ranged",
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.x"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.x")}, // a range → not semver, none
+		{Status: "changed", Kind: "HelmRelease", Namespace: "other", Name: "not-flux",
+			Old: helmReleaseChart("example.com/v1", "x", "1.0.0"), New: helmReleaseChart("example.com/v1", "x", "2.0.0")}, // a non-Flux CRD of the same name → none
+		{Status: "added", Kind: "OCIRepository", Namespace: "o11y", Name: "new",
+			New: ociRepo("new", "2.0.0")}, // an add has no before side
+	}
+	ws := Lint(changes, nil, nil)
+	n, w := countRule(ws, "major-source-bump")
+	if n != 1 || w.Resource != "OCIRepository o11y/kube-prometheus-stack" || !strings.Contains(w.Detail, "88.6.1 → 89.0.0") {
+		t.Errorf("major-source-bump: count=%d %+v; want 1 on the kube-prometheus-stack OCIRepository", n, w)
+	}
+	n, w = countRule(ws, "major-chart-bump")
+	if n != 1 || w.Resource != "HelmRelease media/plex" || !strings.Contains(w.Detail, "3.5.1 → 4.0.0") {
+		t.Errorf("major-chart-bump: count=%d %+v; want 1 on the plex HelmRelease", n, w)
+	}
+}
+
+// When the source object and the rendered children both show the same bump (the
+// usual case: the render did pick the new chart up), it is reported once, from
+// the source object, not again from the helm.sh/chart label.
+func TestLint_MajorRefBump_DedupsLabelRule(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		// The HelmRelease pins "v4.0.0" while the rendered label reads "4.0.0": the
+		// child is deduped through its producing parent, not by string equality.
+		{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: "plex",
+			Old: helmReleaseChart(fluxHelmAPI, "app-template", "v3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "v4.0.0")},
+		{Status: "changed", Kind: "Deployment", Namespace: "media", Name: "plex", Parent: "HelmRelease media/plex",
+			OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+		// An unrelated chart that happens to move through the same version pair
+		// must still be reported: the dedup is by chart identity, not versions.
+		{Status: "changed", Kind: "Deployment", Namespace: "db", Name: "pg", Parent: "HelmRelease db/pg",
+			OldChart: "cloudnative-pg-3.5.1", NewChart: "cloudnative-pg-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+	}
+	ws := Lint(changes, nil, nil)
+	var got []string
+	for _, w := range ws {
+		if w.Rule == "major-chart-bump" {
+			got = append(got, w.Resource)
+		}
+	}
+	want := []string{"HelmRelease media/plex", "cloudnative-pg"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("major-chart-bump resources = %v, want %v (app-template once via the HelmRelease, cloudnative-pg via its label)", got, want)
+	}
+}
+
+// A grouped Renovate PR bumping one chart across many HelmReleases is one
+// finding, named on the first HelmRelease and counting the rest, and the label
+// rule adds nothing on top.
+func TestLint_MajorRefBump_GroupedIsOneFinding(t *testing.T) {
+	t.Parallel()
+	changes := make([]Change, 0, 6)
+	for _, app := range []string{"plex", "sonarr", "radarr"} {
+		changes = append(changes,
+			Change{Status: "changed", Kind: "HelmRelease", Namespace: "media", Name: app,
+				Old: helmReleaseChart(fluxHelmAPI, "app-template", "3.5.1"), New: helmReleaseChart(fluxHelmAPI, "app-template", "4.0.0")},
+			Change{Status: "changed", Kind: "Deployment", Namespace: "media", Name: app, Parent: "HelmRelease media/" + app,
+				OldChart: "app-template-3.5.1", NewChart: "app-template-4.0.0", Old: map[string]any{}, New: map[string]any{}},
+		)
+	}
+	n, w := countRule(Lint(changes, nil, nil), "major-chart-bump")
+	if n != 1 || w.Resource != "HelmRelease media/plex" {
+		t.Fatalf("want one major-chart-bump on the first HelmRelease, got %d (last %+v)", n, w)
+	}
+	if !strings.Contains(w.Detail, "3.5.1 → 4.0.0 across 3 HelmReleases") {
+		t.Errorf("detail should count the grouped objects, got %q", w.Detail)
+	}
+}
+
+// Two OCI sources whose URLs end in the same name are different charts: grouping
+// is by full URL, so each keeps its own finding (and its own release notes).
+func TestLint_MajorRefBump_DistinctSourcesStayApart(t *testing.T) {
+	t.Parallel()
+	changes := []Change{
+		{Status: "changed", Kind: "OCIRepository", Namespace: "a", Name: "app",
+			Old: ociRepoAt("oci://ghcr.io/acme/charts/app", "1.0.0"), New: ociRepoAt("oci://ghcr.io/acme/charts/app", "2.0.0")},
+		{Status: "changed", Kind: "OCIRepository", Namespace: "b", Name: "app",
+			Old: ociRepoAt("oci://registry.example/other/app", "1.0.0"), New: ociRepoAt("oci://registry.example/other/app", "2.0.0")},
+		// The same source pinned twice does fold.
+		{Status: "changed", Kind: "OCIRepository", Namespace: "c", Name: "app",
+			Old: ociRepoAt("oci://ghcr.io/acme/charts/app", "1.0.0"), New: ociRepoAt("oci://ghcr.io/acme/charts/app", "2.0.0")},
+	}
+	var got []string
+	for _, w := range Lint(changes, nil, nil) {
+		if w.Rule == "major-source-bump" {
+			got = append(got, w.Resource)
+		}
+	}
+	want := []string{"OCIRepository a/app", "OCIRepository b/app"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("major-source-bump resources = %v, want %v", got, want)
 	}
 }
 

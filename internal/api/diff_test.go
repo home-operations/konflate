@@ -21,3 +21,17 @@ func TestWarningsByLevel(t *testing.T) {
 		t.Errorf("nil input = %+v, want empty", got)
 	}
 }
+
+func TestTagOf(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"1.2.3":            "1.2.3",
+		"1.2.3@sha256:abc": "1.2.3",
+		"sha256:abc":       "sha256:abc",
+		"":                 "",
+	} {
+		if got := TagOf(in); got != want {
+			t.Errorf("TagOf(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
