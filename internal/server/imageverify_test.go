@@ -101,7 +101,8 @@ func TestImageRef(t *testing.T) {
 func TestRenderFuncSkipsForkPRs(t *testing.T) {
 	t.Parallel()
 	eng := &fakeEngine{fn: func(pr api.PR) (api.DiffResult, error) {
-		return api.DiffResult{PRNumber: pr.Number, Images: []api.ImageChange{{Name: "ghcr.io/app", To: "9.9.9"}}}, nil
+		// An image-only bump: the engine calls it Routine before verification runs.
+		return api.DiffResult{PRNumber: pr.Number, Routine: true, Images: []api.ImageChange{{Name: "ghcr.io/app", To: "9.9.9"}}}, nil
 	}}
 	s := newTestServer(t, ghCfg("tok"), &fakeProvider{}, eng)
 	chk := &fakeChecker{missing: map[string]bool{"ghcr.io/app:9.9.9": true}}
@@ -123,6 +124,9 @@ func TestRenderFuncSkipsForkPRs(t *testing.T) {
 	if got := res.Images[0].Upstream; got != api.ImageMissing {
 		t.Errorf("trusted PR: Images[0].Upstream = %q, want %q", got, api.ImageMissing)
 	}
+	if res.Routine {
+		t.Error("trusted PR: a blocker must clear Routine — a bump to a missing tag is not the easy pile")
+	}
 
 	// Fork PR: never dialed, never flagged — a fork's images are attacker-chosen (SSRF).
 	before := len(chk.calls)
@@ -135,6 +139,9 @@ func TestRenderFuncSkipsForkPRs(t *testing.T) {
 	}
 	if got := res.Images[0].Upstream; got != "" {
 		t.Errorf("fork PR: Images[0].Upstream = %q, want unverified (empty)", got)
+	}
+	if !res.Routine {
+		t.Error("fork PR: nothing was flagged, so the engine's Routine verdict must stand")
 	}
 	if len(chk.calls) != before {
 		t.Errorf("fork PR must not dial the registry; extra calls: %v", chk.calls[before:])

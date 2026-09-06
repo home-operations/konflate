@@ -113,6 +113,15 @@ const diffIndexState = $derived.by(() => {
   return { warningsByResource, cautionResources, blockingResources, cautionCount, blockingCount, idByTitle };
 });
 
+// blockersFirst orders warnings by tier — blockers (they fail the check) ahead
+// of cautions — keeping the server's order within each tier. Every list that
+// shows warnings, and especially one that truncates them, goes through this so
+// a blocker appended after a pile of cautions is never the one cut off.
+export function blockersFirst<T extends { level: Warning['level'] }>(ws: readonly T[]): T[] {
+  const rank = (l: Warning['level']) => (l === 'blocking' ? 0 : 1);
+  return [...ws].sort((a, b) => rank(a.level) - rank(b.level));
+}
+
 // diffIndex exposes the shared diff lookups (see diffIndexState). Read it inside
 // a component's reactive context ($derived/template) to stay live.
 export function diffIndex() {

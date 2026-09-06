@@ -168,6 +168,9 @@ func (s *Server) renderFunc() diffFunc {
 		}
 		if w := verifyImages(ctx, s.imageCheck, res.Images, s.cfg.ImageVerifyTimeout, s.log); len(w) > 0 {
 			res.Warnings = append(res.Warnings, w...)
+			// The engine decided Routine before these blockers existed; a bump to a
+			// tag that isn't published is the opposite of the easy pile.
+			res.Routine = false
 		}
 		return res, err
 	}

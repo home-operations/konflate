@@ -51,10 +51,13 @@
   // This resource's lint cautions, shown in its sticky header — in the stacked
   // scroll the global caution strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
-  const cautions = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
-  // A blocker (image-not-found: this workload would fail to pull) outranks the
-  // cautions — the badge reads "blocking" in red rather than "caution" in amber.
-  const blocking = $derived(cautions.some((w) => w.level === 'blocking'));
+  const warnings = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
+  // Each tier gets its own badge with its own count: a blocker (image-not-found:
+  // this workload would fail to pull) reads "blocking" in red, the advisory
+  // cautions "caution" in amber, so one blocker plus two cautions never reads
+  // as three blockers.
+  const blockers = $derived(warnings.filter((w) => w.level === 'blocking'));
+  const cautions = $derived(warnings.filter((w) => w.level !== 'blocking'));
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
@@ -87,11 +90,12 @@
        server's structured fields (title is exactly "kind name"). -->
   <span class="res-title"><span class="res-kind">{resource.kind}</span> {resource.name}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
-  {#if blocking}
-    <span class="badge blocking" title={detail(cautions)}>
-      <Icon path={mdiAlertOctagonOutline} size={13} /> blocking{cautions.length > 1 ? ` ${cautions.length}` : ''}
+  {#if blockers.length}
+    <span class="badge blocking" title={detail(blockers)}>
+      <Icon path={mdiAlertOctagonOutline} size={13} /> blocking{blockers.length > 1 ? ` ${blockers.length}` : ''}
     </span>
-  {:else if cautions.length}
+  {/if}
+  {#if cautions.length}
     <span class="badge caution" title={detail(cautions)}>
       <Icon path={mdiAlert} size={13} /> caution{cautions.length > 1 ? ` ${cautions.length}` : ''}
     </span>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { router } from './router.svelte';
-  import { store, diffIndex, openSel } from './store.svelte';
+  import { store, diffIndex, openSel, blockersFirst } from './store.svelte';
   import Copy from './Copy.svelte';
   import Icon from './Icon.svelte';
   import { mdiAlertOctagonOutline, mdiCheck, mdiCloseCircleOutline, mdiCircleOutline } from './icons';
@@ -10,11 +10,8 @@
   const d = $derived(store.diff);
 
   // Blockers lead the column: they fail the check, so they're what the reviewer
-  // must act on first. Stable, so the server's order holds within each tier.
-  const warnings = $derived.by(() => {
-    const rank = (l: string) => (l === 'blocking' ? 0 : 1);
-    return [...(d?.warnings ?? [])].sort((a, b) => rank(a.level) - rank(b.level));
-  });
+  // must act on first.
+  const warnings = $derived(blockersFirst(d?.warnings ?? []));
   const hasBlocker = $derived(warnings.some((w) => w.level === 'blocking'));
 
   // The registry verdict on an image's head-side ref (see ImageChange.upstream).

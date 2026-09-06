@@ -7,6 +7,7 @@
     openPR,
     ensurePreview,
     type StatusFilter,
+    blockersFirst,
   } from './store.svelte';
   import { router, navigate, replace } from './router.svelte';
   import { paging, setPageSize, parsePageSize, PAGE_SIZES, DEFAULT_PAGE_SIZE, type PageSize } from './paging.svelte';
@@ -322,7 +323,7 @@
       <div class="pv-group">
         <span class="pv-label">Cautions</span>
         <ul class="pv-list">
-          {#each pv.warnings.slice(0, 8) as w}
+          {#each blockersFirst(pv.warnings).slice(0, 8) as w}
             <li class="pv-caution" class:blocking={w.level === 'blocking'}><Icon path={w.level === 'blocking' ? mdiAlertOctagonOutline : mdiAlert} size={13} /> <span class="pv-res">{w.resource}</span> <span class="pv-detail">{w.detail}</span></li>
           {/each}
           {#if pv.warnings.length > 8}<li class="pv-more">+{pv.warnings.length - 8} more cautions</li>{/if}

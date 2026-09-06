@@ -35,8 +35,16 @@ const envelope: DiffEnvelope = {
       { ...sampleDiff.images[1], upstream: 'found' },
       { name: 'registry.example.com/private/app', from: '1.0', to: '1.1', refs: [] },
     ],
+    // The blocker is appended after the cautions, as the server does, and the
+    // Deployment it names also carries an ordinary caution (mixed tiers).
     warnings: [
       ...sampleDiff.warnings,
+      {
+        level: 'caution',
+        rule: 'replicas-zero',
+        resource: 'Deployment rook-ceph/rook-ceph-operator',
+        detail: 'replicas set to 0 — the workload will be scaled to zero',
+      },
       {
         level: 'blocking',
         rule: 'image-not-found',
@@ -80,6 +88,15 @@ test('a blocker gets its own red pill, card edge and badge, and a status:blockin
 
   await page.locator('input.pr-search').fill('status:blocking');
   await expect(cards).toHaveCount(1);
+
+  // The row preview lists the blocker first even though the server appended it
+  // after the cautions, so a truncated preview never cuts off the blocker.
+  const row = page.locator('.card-li:has(.card-shell[data-pr="7"])');
+  await row.locator('.card-expand').click();
+  const previewFlags = row.locator('.card-preview .pv-caution');
+  await expect(previewFlags).toHaveCount(4);
+  await expect(previewFlags.first()).toHaveClass(/blocking/);
+  await expect(previewFlags.first()).toContainText('rook-ceph-operator');
 });
 
 test('the review shows the blocker first, deep-linked to the workload, and a verdict per image', async ({ page }) => {
@@ -91,7 +108,7 @@ test('the review shows the blocker first, deep-linked to the workload, and a ver
   const column = page.locator('.ov-section', { has: page.locator('h3', { hasText: 'Cautions' }) });
   await expect(column).toHaveClass(/fail-section/);
   const flags = column.locator('.flag');
-  await expect(flags).toHaveCount(3);
+  await expect(flags).toHaveCount(4);
   await expect(flags.first()).toHaveClass(/blocking/);
   await expect(flags.first().locator('.badge.blocking')).toContainText('blocking');
   await expect(flags.first()).toContainText('Deployment rook-ceph/rook-ceph-operator');
@@ -106,11 +123,12 @@ test('the review shows the blocker first, deep-linked to the workload, and a ver
   await expect(page.locator('.tree-summary .summary-caution.blocking')).toBeVisible();
   await expect(page.locator('.tree-item', { hasText: 'rook-ceph-operator' }).locator('.leaf-blocking')).toBeVisible();
 
-  // The blocker is a button: clicking it opens the Deployment's diff, whose
-  // sticky header carries a red "blocking" badge instead of the amber caution one.
+  // The blocker is a button: clicking it opens the Deployment's diff. Its sticky
+  // header counts each tier on its own badge — one blocker and one caution here
+  // read "blocking" + "caution", never "blocking 2".
   await flags.first().click();
   await expect(page).toHaveURL(/#\/pr\/7\/r0$/);
   const header = page.locator('.res-header', { hasText: 'rook-ceph-operator' });
-  await expect(header.locator('.badge.blocking')).toContainText('blocking');
-  await expect(header.locator('.badge.caution')).toHaveCount(0);
+  await expect(header.locator('.badge.blocking')).toHaveText(/^\s*blocking\s*$/);
+  await expect(header.locator('.badge.caution')).toHaveText(/^\s*caution\s*$/);
 });
