@@ -155,32 +155,48 @@ func sectionImpact(d *api.DiffResult, admonitions bool) string {
 	return impact
 }
 
-// impactPhrase is the headline in words, zero terms omitted: "6 changed across 6
-// apps", or "+2 added · 3 changed · −1 removed — 6 resources across 2 apps · 1
-// CRD". The resource total is only spelled out when the delta has more than one
-// term (otherwise it just repeats that term). bold wraps the delta in ** so it
-// leads a [!NOTE]; the routine tip embeds it plain.
+// impactPhrase is the headline in words, zero terms omitted. A single-kind delta
+// names the resources directly — "6 resources changed across 6 apps" — while a
+// mixed one lists the signed terms and then the total: "+2 added · 3 changed ·
+// −1 removed — 6 resources across 2 apps · 1 CRD". bold wraps the delta in ** so
+// it leads a [!NOTE]; the routine tip embeds it plain.
 func impactPhrase(d *api.DiffResult, bold bool) string {
-	var delta []string
+	type term struct {
+		n    int
+		verb string
+		sign string
+	}
+	var terms []term
 	if d.Summary.Added > 0 {
-		delta = append(delta, fmt.Sprintf("+%d added", d.Summary.Added))
+		terms = append(terms, term{d.Summary.Added, "added", "+"})
 	}
 	if d.Summary.Changed > 0 {
-		delta = append(delta, fmt.Sprintf("%d changed", d.Summary.Changed))
+		terms = append(terms, term{d.Summary.Changed, "changed", ""})
 	}
 	if d.Summary.Removed > 0 {
-		delta = append(delta, fmt.Sprintf("−%d removed", d.Summary.Removed))
+		terms = append(terms, term{d.Summary.Removed, "removed", "−"})
+	}
+	var delta string
+	switch len(terms) {
+	case 0:
+		delta = "no rendered changes"
+	case 1:
+		t := terms[0]
+		delta = fmt.Sprintf("%d %s %s", t.n, plural(t.n, "resource", "resources"), t.verb)
+	default:
+		parts := make([]string, len(terms))
+		for i, t := range terms {
+			parts[i] = fmt.Sprintf("%s%d %s", t.sign, t.n, t.verb)
+		}
+		delta = strings.Join(parts, " · ")
 	}
 	var b strings.Builder
-	switch {
-	case len(delta) == 0:
-		b.WriteString("no rendered changes")
-	case bold:
-		fmt.Fprintf(&b, "**%s**", strings.Join(delta, " · "))
-	default:
-		b.WriteString(strings.Join(delta, " · "))
+	if bold && len(terms) > 0 {
+		fmt.Fprintf(&b, "**%s**", delta)
+	} else {
+		b.WriteString(delta)
 	}
-	if len(delta) > 1 {
+	if len(terms) > 1 {
 		fmt.Fprintf(&b, " — %d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
 	}
 	if d.Impact.Parents > 0 {

@@ -115,21 +115,24 @@ func TestImpactPhrase(t *testing.T) {
 		d    api.DiffResult
 		want string
 	}{
-		{"single term omits the resource total",
+		{"single term names the resources directly",
 			api.DiffResult{Summary: api.DiffSummary{Changed: 6}, Impact: api.Impact{Resources: 6, Parents: 6}},
-			"**6 changed** across 6 apps"},
+			"**6 resources changed** across 6 apps"},
+		{"single term, singular",
+			api.DiffResult{Summary: api.DiffSummary{Added: 1}, Impact: api.Impact{Resources: 1, Parents: 1}},
+			"**1 resource added** across 1 app"},
 		{"zero terms dropped, total kept for a mixed delta",
 			api.DiffResult{Summary: api.DiffSummary{Added: 1, Changed: 1}, Impact: api.Impact{Resources: 2, Parents: 1, CRDs: 1}},
 			"**+1 added · 1 changed** — 2 resources across 1 app · 1 CRD"},
 		{"no parents",
 			api.DiffResult{Summary: api.DiffSummary{Removed: 3}, Impact: api.Impact{Resources: 3}},
-			"**−3 removed**"},
+			"**3 resources removed**"},
 		{"nothing changed (failures only)",
 			api.DiffResult{},
 			"no rendered changes"},
 		{"truncated",
 			api.DiffResult{Summary: api.DiffSummary{Changed: 400}, Impact: api.Impact{Resources: 400, Parents: 9}, Truncated: 100},
-			"**400 changed** across 9 apps · 100 not shown"},
+			"**400 resources changed** across 9 apps · 100 not shown"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -174,7 +177,7 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	// counts — so the separate [!NOTE] impact line is dropped — and, being
 	// routine, no caution/failure blocks.
 	md := summaryMarkdown(env, "", true)
-	for _, want := range []string{"> [!TIP]", "**Routine** — 2 changed across 1 app; only container-image and chart-version changes."} {
+	for _, want := range []string{"> [!TIP]", "**Routine** — 2 resources changed across 1 app; only container-image and chart-version changes."} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
 		}
