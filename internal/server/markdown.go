@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -297,27 +296,11 @@ func sectionImages(d *api.DiffResult) string {
 	if len(d.Images) == 0 {
 		return ""
 	}
-	// The registry column only appears once verification has produced a verdict
-	// for some image; with KONFLATE_VERIFY_IMAGES off (or a fork PR, never
-	// dialed) a column of "unverified" would be noise, not information.
-	verified := slices.ContainsFunc(d.Images, func(im api.ImageChange) bool { return im.Upstream != "" })
 	var b strings.Builder
-	b.WriteString("**Image changes**\n\n| image | from | to |")
-	if verified {
-		b.WriteString(" registry |")
-	}
-	b.WriteString("\n|---|---|---|")
-	if verified {
-		b.WriteString("---|")
-	}
-	b.WriteString("\n")
+	b.WriteString("**Image changes**\n\n| image | from | to | upstream |\n|---|---|---|---|\n")
 	for _, im := range d.Images {
 		from, to := mdVersions(im.From, im.To)
-		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` |", mdCode(im.Name), from, to)
-		if verified {
-			fmt.Fprintf(&b, " %s |", upstreamCell(im))
-		}
-		b.WriteString("\n")
+		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %s |\n", mdCode(im.Name), from, to, upstreamCell(im))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -341,10 +324,12 @@ func tagOf(v string) string {
 	return tag
 }
 
-// upstreamCell renders an image's registry verdict for the image table: found,
-// ⛔ not found (the row's image raised a blocker), "unverified" when the head
-// ref was never confirmed (verification off, a fork PR, or an indeterminate
-// registry answer), or "—" for a removal, which has nothing to verify.
+// upstreamCell renders the image table's "upstream" column — the registry's
+// verdict on the new reference: found, ⛔ not found (the row's image raised a
+// blocker), "unverified" when the head ref was never confirmed (verification
+// off, a fork PR, or an indeterminate registry answer), or "—" for a removal,
+// which has nothing to verify. Always present so a reader learns the images
+// were not checked rather than assuming a clean table means they were.
 func upstreamCell(im api.ImageChange) string {
 	switch {
 	case im.To == "":

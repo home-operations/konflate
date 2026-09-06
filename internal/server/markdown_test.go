@@ -89,19 +89,15 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"- `Kustomization flux-system/cluster-apps` — 12 dependents (`Kustomization flux-system/app-a`, `Kustomization flux-system/app-b`, `Kustomization flux-system/app-c` +9 more)",
 		// Singular, no "+more" when the sample already covers the whole radius.
 		"- `Kustomization flux-system/db` — 1 dependent (`Kustomization flux-system/cache`)",
-		"| image | from | to |\n|---|---|---|\n",
-		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` |",
+		"| image | from | to | upstream |\n|---|---|---|---|\n",
+		// Nothing verified on the fixture → the column says so rather than staying silent.
+		"| `ghcr.io/rook/ceph` | `v1.14.9` | `v1.15.0` | unverified |",
 		// Provenance and the review link share one small footer line.
 		"<sub>konflate · rendered `1a2b3c4` · [full diff →](https://k.example/#/pr/142)</sub>",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("github markdown missing %q\n---\n%s", want, md)
 		}
-	}
-	// No image was verified → no registry column at all (a column of "unverified"
-	// would be noise with KONFLATE_VERIFY_IMAGES off).
-	if strings.Contains(md, "registry") || strings.Contains(md, "unverified") {
-		t.Errorf("registry column must be absent when nothing was verified:\n%s", md)
 	}
 	if strings.Contains(md, "advisory, not a gate") || strings.Contains(md, "View the full rendered diff") {
 		t.Errorf("old chrome should be gone:\n%s", md)
@@ -412,7 +408,7 @@ func TestReviewURL_AppendsBasePath(t *testing.T) {
 	}
 }
 
-func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
+func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 	t.Parallel()
 	env := api.DiffEnvelope{
 		Status: api.JobReady,
@@ -428,7 +424,7 @@ func TestSummaryMarkdown_ImageRegistryColumn(t *testing.T) {
 	}
 	md := summaryMarkdown(env, "", true)
 	for _, want := range []string{
-		"| image | from | to | registry |", // present: at least one image has a verdict
+		"| image | from | to | upstream |",
 		"| `ghcr.io/ok` | `1.0` | `1.1` | ✓ found |",
 		"| `ghcr.io/typo` | `1.0` | `1.1-typo` | ⛔ **not found** |",
 		"| `ghcr.io/private` | `1.0` | `1.1` | unverified |",
