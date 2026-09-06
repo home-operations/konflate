@@ -44,7 +44,7 @@ func TestCommentBody_DefaultSummary(t *testing.T) {
 	if !strings.HasPrefix(body, konflateMarker(7)) {
 		t.Errorf("default body should start with the marker: %q", body)
 	}
-	if !strings.Contains(body, "### konflate — summary") {
+	if !strings.Contains(body, "### konflate summary") {
 		t.Errorf("default body missing the summary heading: %q", body)
 	}
 }
@@ -63,7 +63,7 @@ func TestCommentBody_CustomTemplate(t *testing.T) {
 	if n := strings.Count(body, konflateMarker(7)); n != 1 {
 		t.Errorf("expected exactly one marker, got %d: %q", n, body)
 	}
-	if !strings.Contains(body, "### konflate — summary") {
+	if !strings.Contains(body, "### konflate summary") {
 		t.Errorf("custom body should embed the default summary via .Summary: %q", body)
 	}
 }
@@ -145,7 +145,7 @@ func TestCommentBody_ExecuteErrorFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 	// .PR.Bogus parses but errors at execute → fall back to the default body.
 	body := newCommentServer(t, "{{ .PR.Bogus }}").commentBody(readyEnvelope())
-	if !strings.Contains(body, "### konflate — summary") {
+	if !strings.Contains(body, "### konflate summary") {
 		t.Errorf("a failing template should fall back to the default summary: %q", body)
 	}
 	if !strings.Contains(body, konflateMarker(7)) {

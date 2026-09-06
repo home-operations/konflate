@@ -124,13 +124,13 @@ export const sampleDiff: DiffResult = {
       level: 'caution',
       rule: 'removed-statefulset',
       resource: 'StatefulSet default/postgres',
-      detail: 'removed StatefulSet — its PersistentVolumeClaims and data may be deleted',
+      detail: 'removed StatefulSet; its PersistentVolumeClaims and data may be deleted',
     },
     {
       level: 'caution',
       rule: 'replicas-zero',
       resource: 'Deployment default/web',
-      detail: 'replicas set to 0 — the workload will be scaled to zero',
+      detail: 'replicas set to 0; the workload will be scaled to zero',
     },
   ],
   routine: false, // has warnings + failures → not a routine bump

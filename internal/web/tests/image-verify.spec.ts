@@ -43,7 +43,7 @@ const envelope: DiffEnvelope = {
         level: 'caution',
         rule: 'replicas-zero',
         resource: 'Deployment rook-ceph/rook-ceph-operator',
-        detail: 'replicas set to 0 — the workload will be scaled to zero',
+        detail: 'replicas set to 0; the workload will be scaled to zero',
       },
       {
         level: 'blocking',

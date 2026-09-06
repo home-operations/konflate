@@ -24,7 +24,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 }
 
 // summaryMarkdownBody is the marker-less summary body. It opens with an H3 title
-// (### konflate — summary); with admonitions=true the sections use GitHub-flavoured
+// (### konflate summary); with admonitions=true the sections use GitHub-flavoured
 // alert blocks (> [!TIP] / > [!CAUTION] / > [!WARNING]), otherwise plain bold-subheading bullet
 // lists that render anywhere. Every forge-controlled
 // value is escaped (see mdInline/mdCode) so a crafted resource name or a render
@@ -32,7 +32,7 @@ func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool) s
 // template as {{ .Summary }}.
 func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions bool) string {
 	var b strings.Builder
-	b.WriteString("### konflate — summary\n")
+	b.WriteString("### konflate summary\n")
 
 	// writeFooter closes the comment with one small line: provenance (the commit
 	// this summary reflects — the comment is edited in place across pushes, so the
@@ -53,7 +53,7 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 		case api.JobError:
 			fmt.Fprintf(&b, "\nRender failed: %s\n", mdInline(env.Error))
 		default:
-			b.WriteString("\n⏳ Still rendering — this updates once the diff is ready.\n")
+			b.WriteString("\n⏳ Still rendering; this updates once the diff is ready.\n")
 		}
 		writeFooter("")
 		return b.String()
@@ -67,9 +67,9 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 			return
 		}
 		if admonitions {
-			b.WriteString("\n> [!WARNING]\n> Couldn't refresh against the latest push — showing the last good render.\n")
+			b.WriteString("\n> [!WARNING]\n> Couldn't refresh against the latest push; showing the last good render.\n")
 		} else {
-			b.WriteString("\n**⚠ Stale render** — couldn't refresh against the latest push; showing the last good render.\n")
+			b.WriteString("\n**⚠ Stale render**: couldn't refresh against the latest push; showing the last good render.\n")
 		}
 	}
 
@@ -166,7 +166,7 @@ func sectionImpact(d *api.DiffResult, admonitions bool) string {
 // impactPhrase is the headline in words, zero terms omitted. A single-kind delta
 // names the resources directly — "6 resources changed across 6 apps" — while a
 // mixed one lists the signed terms and then the total: "+2 added · 3 changed ·
-// −1 removed — 6 resources across 2 apps · 1 CRD". bold wraps the delta in ** so
+// −1 removed: 6 resources across 2 apps · 1 CRD". bold wraps the delta in ** so
 // it leads a [!NOTE]; the routine tip embeds it plain.
 func impactPhrase(d *api.DiffResult, bold bool) string {
 	type term struct {
@@ -205,7 +205,7 @@ func impactPhrase(d *api.DiffResult, bold bool) string {
 		b.WriteString(delta)
 	}
 	if len(terms) > 1 {
-		fmt.Fprintf(&b, " — %d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
+		fmt.Fprintf(&b, ": %d %s", d.Impact.Resources, plural(d.Impact.Resources, "resource", "resources"))
 	}
 	if d.Impact.Parents > 0 {
 		fmt.Fprintf(&b, " across %d %s", d.Impact.Parents, plural(d.Impact.Parents, "app", "apps"))
@@ -229,7 +229,7 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 	if !d.Routine {
 		return ""
 	}
-	msg := fmt.Sprintf("**Routine** — %s; only container-image and chart-version changes.", impactPhrase(d, false))
+	msg := fmt.Sprintf("**Routine**: %s; only container-image and chart-version changes.", impactPhrase(d, false))
 	if admonitions {
 		return "> [!TIP]\n> " + msg
 	}
@@ -245,7 +245,7 @@ type mdItem struct{ code, detail string }
 
 // mdBlock renders a summary block: a header — a GitHub admonition (> [!ALERT],
 // plus a bold line when admonitionHeader is non-empty) when admonitions, else a
-// plain bold line — then one "- `code` — detail" item per entry (mdCode/mdInline
+// plain bold line — then one "- `code`: detail" item per entry (mdCode/mdInline
 // escape the forge-controlled halves). The admonition and plain headers differ:
 // the alert box already shows a titled severity icon, so a block whose items
 // speak for themselves passes "" and lists them directly, while the plain form
@@ -266,7 +266,7 @@ func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, item
 		fmt.Fprintf(&b, "**%s**\n", plainHeader)
 	}
 	for _, it := range items {
-		fmt.Fprintf(&b, "%s`%s` — %s\n", prefix, mdCode(it.code), mdInline(it.detail))
+		fmt.Fprintf(&b, "%s`%s`: %s\n", prefix, mdCode(it.code), mdInline(it.detail))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -356,13 +356,13 @@ func tagOf(v string) string {
 // upstreamCell renders the image table's "upstream" column — the registry's
 // verdict on the new reference: found, ⛔ not found (the row's image raised a
 // blocker), "unverified" when the head ref was never confirmed (verification
-// off, a fork PR, or an indeterminate registry answer), or "—" for a removal,
+// off, a fork PR, or an indeterminate registry answer), or "n/a" for a removal,
 // which has nothing to verify. Always present so a reader learns the images
 // were not checked rather than assuming a clean table means they were.
 func upstreamCell(im api.ImageChange) string {
 	switch {
 	case im.To == "":
-		return "—"
+		return "n/a"
 	case im.Upstream == api.ImageFound:
 		return "✓ found"
 	case im.Upstream == api.ImageMissing:
@@ -385,7 +385,7 @@ func sectionBlastRadius(d *api.DiffResult) string {
 	var b strings.Builder
 	b.WriteString("**Blast radius**\n")
 	for _, br := range d.BlastRadius {
-		fmt.Fprintf(&b, "- `%s` — %d %s", mdCode(br.Parent), br.Transitive, plural(br.Transitive, "dependent", "dependents"))
+		fmt.Fprintf(&b, "- `%s`: %d %s", mdCode(br.Parent), br.Transitive, plural(br.Transitive, "dependent", "dependents"))
 		shown := br.Direct
 		if len(shown) == 0 {
 			b.WriteString("\n")

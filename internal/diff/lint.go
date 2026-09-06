@@ -62,15 +62,15 @@ func Lint(changes []Change, images []api.ImageChange, parents map[string]ParentI
 			// Kustomization's spec is known.
 			switch c.Kind {
 			case kindStatefulSet:
-				add("removed-statefulset", "removed StatefulSet — its PersistentVolumeClaims and data may be deleted"+pruneSuffix(c, parents), c)
+				add("removed-statefulset", "removed StatefulSet; its PersistentVolumeClaims and data may be deleted"+pruneSuffix(c, parents), c)
 			case "PersistentVolumeClaim":
-				add("removed-pvc", "removed PersistentVolumeClaim — the bound volume's data may be reclaimed"+pruneSuffix(c, parents), c)
+				add("removed-pvc", "removed PersistentVolumeClaim; the bound volume's data may be reclaimed"+pruneSuffix(c, parents), c)
 			case "Namespace":
-				add("removed-namespace", "removed Namespace — deletes every resource inside it"+pruneSuffix(c, parents), c)
+				add("removed-namespace", "removed Namespace; deletes every resource inside it"+pruneSuffix(c, parents), c)
 			case "CustomResourceDefinition":
-				add("removed-crd", "removed CustomResourceDefinition — deletes all of its custom resources"+pruneSuffix(c, parents), c)
+				add("removed-crd", "removed CustomResourceDefinition; deletes all of its custom resources"+pruneSuffix(c, parents), c)
 			case "NetworkPolicy":
-				add("removed-networkpolicy", "removed NetworkPolicy — traffic it previously denied may now be allowed"+pruneSuffix(c, parents), c)
+				add("removed-networkpolicy", "removed NetworkPolicy; traffic it previously denied may now be allowed"+pruneSuffix(c, parents), c)
 			}
 		}
 
@@ -84,13 +84,13 @@ func Lint(changes []Change, images []api.ImageChange, parents map[string]ParentI
 			}
 			if isWorkload(c.Kind) {
 				if r, ok := intField(c.New, "spec", "replicas"); ok && r == 0 {
-					add("replicas-zero", "spec.replicas is 0 — the workload will be scaled to no pods", c)
+					add("replicas-zero", "spec.replicas is 0; the workload will be scaled to no pods", c)
 				}
 			}
 		}
 
 		if c.Status == statusAdded && c.Kind == "ClusterRoleBinding" {
-			add("rbac-widened", "new ClusterRoleBinding — grants cluster-wide permissions", c)
+			add("rbac-widened", "new ClusterRoleBinding; grants cluster-wide permissions", c)
 		}
 
 		// Immutable-field rules: a changed resource whose diff touches a field
@@ -143,7 +143,7 @@ func largeChangeSet(changes []Change) (api.Warning, bool) {
 		Level:    api.LevelCaution,
 		Rule:     "large-changeset",
 		Resource: fmt.Sprintf("%d resources · %d apps", n, p),
-		Detail:   "large change set — more ground to cover than a typical PR; review with extra care",
+		Detail:   "large change set; more ground to cover than a typical PR; review with extra care",
 	}, true
 }
 
@@ -157,9 +157,9 @@ type refBump struct {
 }
 
 func (b refBump) warning() api.Warning {
-	detail := "major version bump %s → %s of the OCI source — check the upstream release notes for breaking changes"
+	detail := "major version bump %s → %s of the OCI source; check the upstream release notes for breaking changes"
 	if b.rule == ruleMajorChartBump {
-		detail = "major chart version bump %s → %s — check the chart's upgrade notes for breaking changes"
+		detail = "major chart version bump %s → %s; check the chart's upgrade notes for breaking changes"
 	}
 	return api.Warning{
 		Level:    api.LevelCaution,
@@ -250,7 +250,7 @@ func chartBumpWarnings(changes []Change, refBumps []refBump) []api.Warning {
 			Level:    api.LevelCaution,
 			Rule:     ruleMajorChartBump,
 			Resource: name,
-			Detail: fmt.Sprintf("major chart version bump %s → %s — check the chart's upgrade notes for breaking changes",
+			Detail: fmt.Sprintf("major chart version bump %s → %s; check the chart's upgrade notes for breaking changes",
 				b.from, b.to),
 		})
 	}
@@ -267,7 +267,7 @@ func imageBumpWarnings(images []api.ImageChange) []api.Warning {
 				Level:    api.LevelCaution,
 				Rule:     "major-image-bump",
 				Resource: img.Name,
-				Detail:   fmt.Sprintf("major image version bump %s → %s — likely breaking changes", tagOf(img.From), tagOf(img.To)),
+				Detail:   fmt.Sprintf("major image version bump %s → %s; likely breaking changes", tagOf(img.From), tagOf(img.To)),
 			})
 		}
 	}
