@@ -188,9 +188,10 @@ type Config struct {
 	MCP bool `env:"KONFLATE_MCP" envDefault:"false"`
 
 	// VerifyImages, when true, checks each container image a PR's rendered manifests
-	// newly reference against its registry (a HEAD on the tag/digest) and raises a
-	// caution for any that is definitively absent — catching a typo'd or not-yet-pushed
-	// image before it ImagePullBackOffs in-cluster (see VerifyImagesEnabled). Off by
+	// newly reference against its registry (a HEAD on the tag/digest), records the
+	// verdict on each image change, and raises a blocker (a failing check) for any
+	// that is definitively absent — catching a typo'd or not-yet-pushed image before
+	// it ImagePullBackOffs in-cluster (see VerifyImagesEnabled). Off by
 	// default. Only TRUSTED (non-fork) PRs are verified: a fork's manifests are
 	// attacker-controlled, so dialing a registry named there is an SSRF vector — fork
 	// verification (behind an egress allowlist) is a deliberate follow-up. Private

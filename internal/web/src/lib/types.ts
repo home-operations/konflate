@@ -29,7 +29,7 @@ export interface PR {
 export interface Signals {
   resources: number;
   caution: number; // caution-tier warnings (advisory → neutral check)
-  blocking: number; // blocking-tier warnings (fail the check); 0 today
+  blocking: number; // blocking-tier warnings (fail the check), e.g. image-not-found
   images: number;
   failures: number;
   routine: boolean; // only image/chart-version changed, nothing flagged
@@ -76,6 +76,9 @@ export interface ImageChange {
   from: string;
   to: string;
   refs: string[] | null;
+  // Registry verdict on `to` from image verification; absent = unverified
+  // (verification off, a fork PR, a removal, or the registry didn't answer).
+  upstream?: 'found' | 'missing';
 }
 
 export interface RenderFailure {

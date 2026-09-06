@@ -7,6 +7,7 @@
     openPR,
     ensurePreview,
     type StatusFilter,
+    blockersFirst,
   } from './store.svelte';
   import { router, navigate, replace } from './router.svelte';
   import { paging, setPageSize, parsePageSize, PAGE_SIZES, DEFAULT_PAGE_SIZE, type PageSize } from './paging.svelte';
@@ -22,6 +23,7 @@
   import Check from './Check.svelte';
   import {
     mdiAlert,
+    mdiAlertOctagonOutline,
     mdiPackageVariantClosed,
     mdiAlertCircleOutline,
     mdiFileDocumentOutline,
@@ -106,6 +108,7 @@
   // of the default open view); hidden = excluded by the PR filter, not rendered.
   const summary = $derived.by(() => ({
     open: openPrs.length,
+    blocking: openPrs.filter((p) => (p.signals?.blocking ?? 0) > 0).length,
     caution: openPrs.filter((p) => (p.signals?.caution ?? 0) > 0).length,
     failure: openPrs.filter((p) => (p.signals?.failures ?? 0) > 0).length,
     routine: openPrs.filter((p) => !!p.signals?.routine).length,
@@ -320,8 +323,8 @@
       <div class="pv-group">
         <span class="pv-label">Cautions</span>
         <ul class="pv-list">
-          {#each pv.warnings.slice(0, 8) as w}
-            <li class="pv-caution"><Icon path={mdiAlert} size={13} /> <span class="pv-res">{w.resource}</span> <span class="pv-detail">{w.detail}</span></li>
+          {#each blockersFirst(pv.warnings).slice(0, 8) as w}
+            <li class="pv-caution" class:blocking={w.level === 'blocking'}><Icon path={w.level === 'blocking' ? mdiAlertOctagonOutline : mdiAlert} size={13} /> <span class="pv-res">{w.resource}</span> <span class="pv-detail">{w.detail}</span></li>
           {/each}
           {#if pv.warnings.length > 8}<li class="pv-more">+{pv.warnings.length - 8} more cautions</li>{/if}
         </ul>
@@ -367,6 +370,7 @@
       data-pr={pr.number}
       class:merged={!pr.open}
       class:caution={pr.open && (pr.signals?.caution ?? 0) > 0}
+      class:blocking={pr.open && (pr.signals?.blocking ?? 0) > 0}
       class:failure={pr.open && (pr.signals?.failures ?? 0) > 0}
     >
       <button class="card" onclick={() => openPR(pr.number)}>
@@ -403,6 +407,9 @@
             {/if}
             {#if pr.signals.failures}
               <span class="badge danger" title="render failures"><Icon path={mdiAlertCircleOutline} size={13} /> {pr.signals.failures}</span>
+            {/if}
+            {#if pr.signals.blocking}
+              <span class="badge blocking" title="blocking findings"><Icon path={mdiAlertOctagonOutline} size={13} /> {pr.signals.blocking}</span>
             {/if}
             {#if pr.signals.caution}
               <span class="badge caution" title="cautions"><Icon path={mdiAlert} size={13} /> {pr.signals.caution}</span>
@@ -510,6 +517,9 @@
       {@render pill('open', summary.open, '', 'Show open pull requests')}
       {#if showPill(summary.failure, 'failure')}
         {@render pill('failure', summary.failure, 'failure', 'Only PRs that failed to render')}
+      {/if}
+      {#if showPill(summary.blocking, 'blocking')}
+        {@render pill('blocking', summary.blocking, 'blocking', 'Only PRs with a blocking finding — the change would not deploy (e.g. an image its registry lacks)')}
       {/if}
       {#if showPill(summary.caution, 'caution')}
         {@render pill('caution', summary.caution, 'caution', 'Only PRs with cautions')}

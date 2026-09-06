@@ -20,7 +20,7 @@ import { router, navigate } from './router.svelte';
 
 // The status facets a summary pill can filter the list down to ('' = unfiltered;
 // 'open' narrows to just the open set, hiding the merged shelf).
-export type StatusFilter = '' | 'open' | 'caution' | 'failure' | 'routine' | 'merged' | 'hidden';
+export type StatusFilter = '' | 'open' | 'blocking' | 'caution' | 'failure' | 'routine' | 'merged' | 'hidden';
 // List sort: the field to order by, and the direction. The comparator is
 // defined ascending (name A→Z, time oldest-first); 'desc' reverses it.
 export type SortKey = 'created' | 'refreshed' | 'name';
@@ -91,21 +91,36 @@ export const store: Store = $state({
 // exporting a derived directly, so callers read it through diffIndex().
 const diffIndexState = $derived.by(() => {
   const warningsByResource = new Map<string, Warning[]>();
-  const cautionResources = new Set<string>(); // resource titles carrying a caution
-  let cautionCount = 0; // total cautions (a resource may have several)
+  const cautionResources = new Set<string>(); // resource titles carrying any warning
+  const blockingResources = new Set<string>(); // the subset carrying a blocker
+  let cautionCount = 0; // total warnings (a resource may have several)
+  let blockingCount = 0;
   for (const w of store.diff?.warnings ?? []) {
     let list = warningsByResource.get(w.resource);
     if (!list) warningsByResource.set(w.resource, (list = []));
     list.push(w);
     cautionResources.add(w.resource);
     cautionCount++;
+    if (w.level === 'blocking') {
+      blockingResources.add(w.resource);
+      blockingCount++;
+    }
   }
   // Resource id keyed by its "Kind ns/name" title, so a warning can deep-link to
   // the diff it flags without a linear find.
   const idByTitle = new Map<string, string>();
   for (const r of store.diff?.resources ?? []) idByTitle.set(r.title, r.id);
-  return { warningsByResource, cautionResources, cautionCount, idByTitle };
+  return { warningsByResource, cautionResources, blockingResources, cautionCount, blockingCount, idByTitle };
 });
+
+// blockersFirst orders warnings by tier — blockers (they fail the check) ahead
+// of cautions — keeping the server's order within each tier. Every list that
+// shows warnings, and especially one that truncates them, goes through this so
+// a blocker appended after a pile of cautions is never the one cut off.
+export function blockersFirst<T extends { level: Warning['level'] }>(ws: readonly T[]): T[] {
+  const rank = (l: Warning['level']) => (l === 'blocking' ? 0 : 1);
+  return [...ws].sort((a, b) => rank(a.level) - rank(b.level));
+}
 
 // diffIndex exposes the shared diff lookups (see diffIndexState). Read it inside
 // a component's reactive context ($derived/template) to stay live.
@@ -130,7 +145,7 @@ const FACETS = ['status', 'author', 'base', 'label'];
 // with matchesStatus again. ('hidden' was missing here, so `status:hidden` typed
 // in the filter or palette matched nothing — the pill worked only because it sets
 // statusFilter directly, bypassing this grammar.)
-const STATUS_VALUES = ['open', 'caution', 'failure', 'routine', 'merged', 'hidden'] as const satisfies readonly StatusFilter[];
+const STATUS_VALUES = ['open', 'blocking', 'caution', 'failure', 'routine', 'merged', 'hidden'] as const satisfies readonly StatusFilter[];
 
 export function parseQuery(raw: string): ParsedQuery {
   const tokens: ParsedQuery['tokens'] = [];
@@ -208,6 +223,8 @@ export function statusFromQuery(raw: string): StatusFilter | null {
 // matchesStatus is the per-PR predicate for a summary-pill filter.
 export function matchesStatus(p: PRStatus, f: StatusFilter): boolean {
   switch (f) {
+    case 'blocking':
+      return p.open && !p.hidden && (p.signals?.blocking ?? 0) > 0;
     case 'caution':
       return p.open && !p.hidden && (p.signals?.caution ?? 0) > 0;
     case 'failure':

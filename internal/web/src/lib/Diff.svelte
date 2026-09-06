@@ -39,7 +39,7 @@
   import { diffIndex } from './store.svelte';
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  import { mdiAlert, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
+  import { mdiAlert, mdiAlertOctagonOutline, mdiUnfoldMoreHorizontal, mdiUnfoldLessHorizontal } from './icons';
 
   // `active` gates the heavy diff table: when false (the section is parked
   // off-screen — see Diffs.svelte's lazy-mount) the sticky header still renders
@@ -51,7 +51,13 @@
   // This resource's lint cautions, shown in its sticky header — in the stacked
   // scroll the global caution strip scrolls away, so the warning rides along
   // with the diff it belongs to. Matched the way Overview deep-links them.
-  const cautions = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
+  const warnings = $derived(diffIndex().warningsByResource.get(resource.title) ?? []);
+  // Each tier gets its own badge with its own count: a blocker (image-not-found:
+  // this workload would fail to pull) reads "blocking" in red, the advisory
+  // cautions "caution" in amber, so one blocker plus two cautions never reads
+  // as three blockers.
+  const blockers = $derived(warnings.filter((w) => w.level === 'blocking'));
+  const cautions = $derived(warnings.filter((w) => w.level !== 'blocking'));
   const detail = (list: { detail: string }[]) => list.map((w) => w.detail).join('\n');
 
   // Folded-context expanders. Keyed by resource id + fold id so the same gap id
@@ -84,6 +90,11 @@
        server's structured fields (title is exactly "kind name"). -->
   <span class="res-title"><span class="res-kind">{resource.kind}</span> {resource.name}</span>
   <Copy text={resource.title} label="Copy resource identifier" />
+  {#if blockers.length}
+    <span class="badge blocking" title={detail(blockers)}>
+      <Icon path={mdiAlertOctagonOutline} size={13} /> blocking{blockers.length > 1 ? ` ${blockers.length}` : ''}
+    </span>
+  {/if}
   {#if cautions.length}
     <span class="badge caution" title={detail(cautions)}>
       <Icon path={mdiAlert} size={13} /> caution{cautions.length > 1 ? ` ${cautions.length}` : ''}

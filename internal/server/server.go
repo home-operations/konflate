@@ -153,9 +153,10 @@ func New(cfg *config.Config, prov provider.Provider, eng Engine, ui fs.FS, log *
 
 // renderFunc is the diff producer wired into the queue: the engine's Diff, plus —
 // when KONFLATE_VERIFY_IMAGES is on — a registry existence check over the head's
-// newly-referenced images for TRUSTED PRs, appending an image-not-found caution for
-// any that's absent. A fork's images are attacker-chosen, so they are never dialed
-// (SSRF); see verifyImages and Config.VerifyImages.
+// newly-referenced images for TRUSTED PRs, stamping each ImageChange.Upstream and
+// appending an image-not-found blocker for any that's absent. A fork's images are
+// attacker-chosen, so they are never dialed (SSRF); see verifyImages and
+// Config.VerifyImages.
 func (s *Server) renderFunc() diffFunc {
 	if s.imageCheck == nil {
 		return s.engine.Diff
@@ -167,6 +168,9 @@ func (s *Server) renderFunc() diffFunc {
 		}
 		if w := verifyImages(ctx, s.imageCheck, res.Images, s.cfg.ImageVerifyTimeout, s.log); len(w) > 0 {
 			res.Warnings = append(res.Warnings, w...)
+			// The engine decided Routine before these blockers existed; a bump to a
+			// tag that isn't published is the opposite of the easy pile.
+			res.Routine = false
 		}
 		return res, err
 	}

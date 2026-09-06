@@ -48,7 +48,7 @@ type PRStatus struct {
 type Signals struct {
 	Resources int  `json:"resources"` // changed/added/removed resources
 	Caution   int  `json:"caution"`   // caution-tier warnings (advisory → neutral check)
-	Blocking  int  `json:"blocking"`  // blocking-tier warnings (fail the check); 0 today
+	Blocking  int  `json:"blocking"`  // blocking-tier warnings (fail the check), e.g. image-not-found
 	Images    int  `json:"images"`    // container-image changes
 	Failures  int  `json:"failures"`  // resources flate could not render
 	Routine   bool `json:"routine"`   // only image/chart-version changed, nothing flagged

@@ -6,6 +6,7 @@ export {
   mdiWeatherNight,
   mdiWhiteBalanceSunny,
   mdiAlert,
+  mdiAlertOctagonOutline,
   mdiPackageVariantClosed,
   mdiAlertCircleOutline,
   mdiSitemapOutline,
