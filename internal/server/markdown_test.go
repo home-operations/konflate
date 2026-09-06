@@ -48,26 +48,35 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 			},
 		},
 	}
-	// Blocking → red [!CAUTION] "Blocker"; caution → amber [!WARNING], its own block.
+	// Blocking → red [!CAUTION]; caution → amber [!WARNING], its own block. The
+	// alert box supplies the titled icon, so the items follow the marker directly
+	// with no repeated "Blocker"/"Caution" headline.
 	md := summaryMarkdown(env, "", true)
 	for _, want := range []string{
-		"> [!CAUTION]\n> **⛔ Blocker**",
-		"> - `Deployment web/api` — image ghcr.io/x:9.9.9 not found upstream",
-		"> [!WARNING]\n> **⚠ Caution**",
-		"> - `Deployment web/api` — replicas set to 0",
+		"> [!CAUTION]\n> - `Deployment web/api` — image ghcr.io/x:9.9.9 not found upstream",
+		"> [!WARNING]\n> - `Deployment web/api` — replicas set to 0",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("blocking markdown missing %q\n---\n%s", want, md)
 		}
 	}
-	// The blocking finding must not be double-counted into the caution block — with
-	// one caution the header stays singular ("Caution", never plural "Cautions").
-	if strings.Contains(md, "**⚠ Cautions**") {
-		t.Errorf("blocking warning leaked into the caution count:\n%s", md)
+	if strings.Contains(md, "Blocker") || strings.Contains(md, "⚠") {
+		t.Errorf("github flavour must not repeat the box's title inside it:\n%s", md)
 	}
 	// Blocking (higher severity) renders before the caution block.
-	if bi, ci := strings.Index(md, "⛔ Blocker"), strings.Index(md, "⚠ Caution"); bi < 0 || ci < 0 || bi > ci {
+	if bi, ci := strings.Index(md, "[!CAUTION]"), strings.Index(md, "[!WARNING]"); bi < 0 || ci < 0 || bi > ci {
 		t.Errorf("blocking block should render before caution (blocking=%d caution=%d)\n%s", bi, ci, md)
+	}
+	// The plain flavour has no box, so it keeps the glyph + title — singular with
+	// one finding each (the blocker must not be double-counted into the cautions).
+	plain := summaryMarkdown(env, "", false)
+	for _, want := range []string{"**⛔ Blocker**", "**⚠ Caution**"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("plain markdown missing %q\n---\n%s", want, plain)
+		}
+	}
+	if strings.Contains(plain, "Cautions") {
+		t.Errorf("blocking warning leaked into the caution count:\n%s", plain)
 	}
 }
 
@@ -80,8 +89,7 @@ func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 		"> [!NOTE]",
 		"**+2 added · 3 changed · −1 removed** — 6 resources across 2 apps · 1 CRD",
 		// Alert colours match the list pills: caution = amber [!WARNING], failure = red [!CAUTION].
-		"> [!WARNING]\n> **⚠ Caution**",
-		"> - `Deployment web/api` — replicas set to 0",
+		"> [!WARNING]\n> - `Deployment web/api` — replicas set to 0",
 		"> [!CAUTION]\n> **1 render failure**",
 		"> - `HelmRelease media/plex` — values don't meet the schema",
 		"**Blast radius**",

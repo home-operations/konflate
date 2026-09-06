@@ -234,11 +234,13 @@ func sectionRoutine(d *api.DiffResult, admonitions bool) string {
 // mdItem is one "- `code` — detail" line in a summary block.
 type mdItem struct{ code, detail string }
 
-// mdBlock renders a summary block: a header — a GitHub admonition (> [!ALERT] +
-// bold line) when admonitions, else a plain bold line — then one "- `code` —
-// detail" item per entry (mdCode/mdInline escape the forge-controlled halves).
-// The admonition and plain headers can differ: the plain form carries the
-// severity glyph the admonition box would otherwise supply. Empty when no items.
+// mdBlock renders a summary block: a header — a GitHub admonition (> [!ALERT],
+// plus a bold line when admonitionHeader is non-empty) when admonitions, else a
+// plain bold line — then one "- `code` — detail" item per entry (mdCode/mdInline
+// escape the forge-controlled halves). The admonition and plain headers differ:
+// the alert box already shows a titled severity icon, so a block whose items
+// speak for themselves passes "" and lists them directly, while the plain form
+// always carries a glyph + title because it has no box. Empty when no items.
 func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, items []mdItem) string {
 	if len(items) == 0 {
 		return ""
@@ -246,7 +248,10 @@ func mdBlock(admonitions bool, alert, admonitionHeader, plainHeader string, item
 	var b strings.Builder
 	prefix := "- "
 	if admonitions {
-		fmt.Fprintf(&b, "> [!%s]\n> **%s**\n", alert, admonitionHeader)
+		fmt.Fprintf(&b, "> [!%s]\n", alert)
+		if admonitionHeader != "" {
+			fmt.Fprintf(&b, "> **%s**\n", admonitionHeader)
+		}
 		prefix = "> - "
 	} else {
 		fmt.Fprintf(&b, "**%s**\n", plainHeader)
@@ -268,17 +273,19 @@ func warningItems(ws []api.Warning) []mdItem {
 
 func sectionBlocking(d *api.DiffResult, admonitions bool) string {
 	ws := api.WarningsByLevel(d.Warnings, api.LevelBlocking)
-	// Red [!CAUTION] — a blocker is the top of the severity ramp.
+	// Red [!CAUTION] — a blocker is the top of the severity ramp. The box's own
+	// title does the labelling; only the plain form spells "Blocker(s)" out.
 	h := fmt.Sprintf("⛔ %s", plural(len(ws), "Blocker", "Blockers"))
-	return mdBlock(admonitions, "CAUTION", h, h, warningItems(ws))
+	return mdBlock(admonitions, "CAUTION", "", h, warningItems(ws))
 }
 
 func sectionCautions(d *api.DiffResult, admonitions bool) string {
 	ws := api.WarningsByLevel(d.Warnings, api.LevelCaution)
 	// Amber [!WARNING] to match the caution list pill's colour (a notch below the
-	// red of a blocker or render failure); the alert header reads "Warning".
+	// red of a blocker or render failure); the box's own "Warning" title does the
+	// labelling, so only the plain form spells "Caution(s)" out.
 	h := fmt.Sprintf("⚠ %s", plural(len(ws), "Caution", "Cautions"))
-	return mdBlock(admonitions, "WARNING", h, h, warningItems(ws))
+	return mdBlock(admonitions, "WARNING", "", h, warningItems(ws))
 }
 
 func sectionFailures(d *api.DiffResult, admonitions bool) string {
