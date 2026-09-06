@@ -296,7 +296,8 @@ func sectionImages(d *api.DiffResult) string {
 	}
 	b.WriteString("\n")
 	for _, im := range d.Images {
-		fmt.Fprintf(&b, "| `%s` | %s | %s |", mdCode(im.Name), mdVersion(im.From), mdVersion(im.To))
+		from, to := mdVersions(im.From, im.To)
+		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` |", mdCode(im.Name), from, to)
 		if verified {
 			fmt.Fprintf(&b, " %s |", upstreamCell(im))
 		}
@@ -305,16 +306,23 @@ func sectionImages(d *api.DiffResult) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// mdVersion renders one image version cell: a tag or digest in a code span
-// (digests shortened), or — for a digest-pinned tag, "1.2.3@sha256:…" — the tag
-// in the code span with the shortened digest trailing in small print, so a
-// Renovate bump reads by its tag while a digest-only re-pin still shows what moved.
-func mdVersion(v string) string {
-	tag, digest, pinned := strings.Cut(v, "@")
-	if !pinned {
-		return "`" + mdCode(shortVer(v)) + "`"
+// mdVersions renders an image transition's two cells. A digest-pinned tag
+// ("1.2.3@sha256:…") is shown as its tag alone when the tag itself moved — the
+// digest adds nothing a reviewer reads — and only when the tags are equal (a
+// digest-only re-pin) does the shortened digest stay, so the row still shows
+// what changed. Bare tags and bare digests pass through shortVer as before.
+func mdVersions(from, to string) (string, string) {
+	if tagOf(from) != tagOf(to) {
+		from, to = tagOf(from), tagOf(to)
 	}
-	return fmt.Sprintf("`%s` <sub>%s</sub>", mdCode(tag), mdInline(shortVer(digest)))
+	return mdCode(shortVer(from)), mdCode(shortVer(to))
+}
+
+// tagOf strips the digest from a digest-pinned version ("1.2.3@sha256:…" →
+// "1.2.3"); a bare tag or bare digest passes through unchanged.
+func tagOf(v string) string {
+	tag, _, _ := strings.Cut(v, "@")
+	return tag
 }
 
 // upstreamCell renders an image's registry verdict for the image table: found,

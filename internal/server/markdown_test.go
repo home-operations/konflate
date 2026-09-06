@@ -297,19 +297,23 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	}
 }
 
-func TestMdVersion(t *testing.T) {
+func TestMdVersions(t *testing.T) {
 	t.Parallel()
-	digest := "sha256:" + strings.Repeat("a", 64)
-	cases := []struct{ in, want string }{
-		{"v1.15.0", "`v1.15.0`"},
-		{"", "`∅`"},
-		{digest, "`sha256:aaaaaaaaaaaa…`"},
-		// A digest-pinned tag reads by its tag, the digest trailing small.
-		{"4.0.19.3011@" + digest, "`4.0.19.3011` <sub>sha256:aaaaaaaaaaaa…</sub>"},
+	d1 := "sha256:" + strings.Repeat("a", 64)
+	d2 := "sha256:" + strings.Repeat("b", 64)
+	cases := []struct{ from, to, wantFrom, wantTo string }{
+		{"v1.14.9", "v1.15.0", "v1.14.9", "v1.15.0"},
+		{"", "v1.15.0", "∅", "v1.15.0"},
+		// A digest-pinned bump reads by its tags alone.
+		{"4.0.19.3009@" + d1, "4.0.19.3011@" + d2, "4.0.19.3009", "4.0.19.3011"},
+		// A digest-only re-pin keeps the (shortened) digest, or the row would show no change.
+		{"4.0.19.3011@" + d1, "4.0.19.3011@" + d2, "4.0.19.3011@sha256:aaaaaaaaaaaa…", "4.0.19.3011@sha256:bbbbbbbbbbbb…"},
+		{d1, d2, "sha256:aaaaaaaaaaaa…", "sha256:bbbbbbbbbbbb…"},
 	}
 	for _, c := range cases {
-		if got := mdVersion(c.in); got != c.want {
-			t.Errorf("mdVersion(%q) = %q, want %q", c.in, got, c.want)
+		gotFrom, gotTo := mdVersions(c.from, c.to)
+		if gotFrom != c.wantFrom || gotTo != c.wantTo {
+			t.Errorf("mdVersions(%q, %q) = (%q, %q), want (%q, %q)", c.from, c.to, gotFrom, gotTo, c.wantFrom, c.wantTo)
 		}
 	}
 }
