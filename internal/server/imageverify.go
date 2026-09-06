@@ -110,7 +110,7 @@ func imageNotFound(name, ref string, refs []string) []api.Warning {
 			Level:    api.LevelBlocking,
 			Rule:     "image-not-found",
 			Resource: r,
-			Detail:   fmt.Sprintf("image %s not found in its registry — it would fail to pull", ref),
+			Detail:   fmt.Sprintf("image %s not found in upstream registry", ref),
 		})
 	}
 	return out

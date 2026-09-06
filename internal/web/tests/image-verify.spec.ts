@@ -49,7 +49,7 @@ const envelope: DiffEnvelope = {
         level: 'blocking',
         rule: 'image-not-found',
         resource: 'Deployment rook-ceph/rook-ceph-operator',
-        detail: 'image ghcr.io/rook/ceph:v1.15.0 not found in its registry — it would fail to pull',
+        detail: 'image ghcr.io/rook/ceph:v1.15.0 not found in upstream registry',
       },
     ],
   },
