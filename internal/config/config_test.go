@@ -145,6 +145,66 @@ func TestLoad_RestrictEgress(t *testing.T) {
 	}
 }
 
+// TestForceGenericProviderEnabled covers the tri-state ForceGenericProvider
+// override: unset defaults to the opposite of fork rendering (safe to enable
+// when the instance never renders forks, off when it does); an explicit value
+// overrides either way.
+func TestForceGenericProviderEnabled(t *testing.T) {
+	t.Parallel()
+	bptr := func(b bool) *bool { return &b }
+	tests := []struct {
+		name     string
+		fork     bool
+		override *bool
+		want     bool
+	}{
+		{"default: on when not rendering forks", false, nil, true},
+		{"default: off while rendering forks", true, nil, false},
+		{"override on even in fork mode", true, bptr(true), true},
+		{"override off without fork rendering", false, bptr(false), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Config{RenderForkPRs: tt.fork, ForceGenericProvider: tt.override}
+			if got := c.ForceGenericProviderEnabled(); got != tt.want {
+				t.Errorf("ForceGenericProviderEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLoad_ForceGenericProvider checks the tri-state env parses through Load:
+// unset leaves the override nil (so it follows fork rendering), and an
+// explicit value is honored over fork mode.
+func TestLoad_ForceGenericProvider(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+	t.Setenv("KONFLATE_RENDER_FORK_PRS", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.ForceGenericProvider != nil {
+		t.Errorf("ForceGenericProvider = %v, want nil (env unset)", *cfg.ForceGenericProvider)
+	}
+	if cfg.ForceGenericProviderEnabled() {
+		t.Error("ForceGenericProviderEnabled() = true, want false (unset follows KONFLATE_RENDER_FORK_PRS=true)")
+	}
+
+	t.Setenv("KONFLATE_FORCE_GENERIC_PROVIDER", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with override: %v", err)
+	}
+	if cfg.ForceGenericProvider == nil || !*cfg.ForceGenericProvider {
+		t.Errorf("ForceGenericProvider = %v, want explicit true", cfg.ForceGenericProvider)
+	}
+	if !cfg.ForceGenericProviderEnabled() {
+		t.Error("ForceGenericProviderEnabled() = false, want true (explicit override beats fork mode)")
+	}
+}
+
 // TestAuthenticatedSources verifies forge read auth is recognized from either a
 // read token or a complete GitHub App (whose installation token authenticates
 // reads). A write-only PAT or a partial App config does not count.

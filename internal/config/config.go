@@ -175,6 +175,19 @@ type Config struct {
 	// rendering forks, "true" guards every render. See EgressRestricted.
 	RestrictEgress *bool `env:"KONFLATE_RESTRICT_EGRESS"`
 
+	// ForceGenericProvider routes a non-generic spec.provider source
+	// (GitRepository/OCIRepository/Bucket — provider: gcp/aws/azure, meant for
+	// cloud IAM auth on the live cluster) through flate's generic
+	// SecretRef/--registry-config path instead of failing outright: flate can't
+	// perform cloud IAM auth offline. Unset (nil, the default) ties it to
+	// RenderForkPRs the same way RestrictEgress does, but inverted — turning
+	// this on makes flate authenticate with whatever static credential konflate
+	// has configured against a registry/repo host a PR's manifest names, which
+	// is an SSRF-adjacent credential-use surface for an attacker-chosen fork
+	// source. So it defaults on only when the instance never renders forks;
+	// set it to override either way. See ForceGenericProviderEnabled.
+	ForceGenericProvider *bool `env:"KONFLATE_FORCE_GENERIC_PROVIDER"`
+
 	// PRFilter is the compiled filter — PRFilterExpr, or [DefaultPRFilter] when
 	// that is empty — built in [Load]. A derived field, like Forge; never set it
 	// directly.
@@ -422,6 +435,20 @@ func (c *Config) EgressRestricted() bool {
 		return *c.RestrictEgress
 	}
 	return c.RenderForkPRs
+}
+
+// ForceGenericProviderEnabled reports whether flate should route a
+// non-generic spec.provider source through its generic credential path (see
+// ForceGenericProvider). Defaults to the opposite of RenderForkPRs — safe
+// to enable by default when the instance never renders forks, off when it
+// does, since a fork's manifests are attacker-chosen and this makes flate
+// authenticate with a real, operator-supplied credential against whatever
+// host they name.
+func (c *Config) ForceGenericProviderEnabled() bool {
+	if c.ForceGenericProvider != nil {
+		return *c.ForceGenericProvider
+	}
+	return !c.RenderForkPRs
 }
 
 // WriteEnabled reports whether konflate has a write-back credential — a write
