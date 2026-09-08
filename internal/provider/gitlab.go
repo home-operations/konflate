@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
