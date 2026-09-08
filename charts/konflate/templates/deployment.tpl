@@ -104,6 +104,10 @@ spec:
             - name: KONFLATE_RESTRICT_EGRESS
               value: {{ .Values.config.restrictEgress | quote }}
             {{- end }}
+            {{- if ne (toString .Values.config.forceGenericProvider) "" }}
+            - name: KONFLATE_FORCE_GENERIC_PROVIDER
+              value: {{ .Values.config.forceGenericProvider | quote }}
+            {{- end }}
             {{- if .Values.config.mcp }}
             - name: KONFLATE_MCP
               value: "true"

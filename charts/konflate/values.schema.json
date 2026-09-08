@@ -66,6 +66,12 @@
           "title": "fetchTimeout",
           "type": "string"
         },
+        "forceGenericProvider": {
+          "default": "",
+          "description": "Route a `spec.provider` source (GitRepository/OCIRepository/Bucket set to `gcp`/`aws`/`azure` for cloud IAM auth in the live cluster) through flate's generic SecretRef/`--registry-config` credential path instead of failing — flate can't perform cloud IAM auth offline. Empty = the opposite of `renderForkPrs` (on unless rendering untrusted forks, since this makes flate authenticate with a real credential against whatever host a PR's manifest names). `\"true\"` enables it outright; `\"false\"` disables it even when not rendering forks.",
+          "title": "forceGenericProvider",
+          "type": "string"
+        },
         "helmRenderCacheMb": {
           "default": "",
           "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",

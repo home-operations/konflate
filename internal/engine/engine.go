@@ -77,6 +77,10 @@ type flateEngine struct {
 	// restrictEgress turns on flate's SSRF egress guard for source fetches (see
 	// config.EgressRestricted): on by default while rendering untrusted fork PRs.
 	restrictEgress bool
+	// forceGenericProvider routes a non-generic spec.provider source through
+	// flate's generic credential path (see config.ForceGenericProviderEnabled):
+	// on by default only while the instance never renders fork PRs.
+	forceGenericProvider bool
 }
 
 // New builds the production Engine from config. gitToken authenticates the
@@ -109,10 +113,11 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 			MaxWait:  3 * time.Second,
 			Jitter:   0.1,
 		},
-		diffTimeout:      cfg.DiffTimeout,
-		maxDiffResources: cfg.MaxDiffResources,
-		kubeVersion:      cfg.KubeVersion,
-		restrictEgress:   cfg.EgressRestricted(),
+		diffTimeout:          cfg.DiffTimeout,
+		maxDiffResources:     cfg.MaxDiffResources,
+		kubeVersion:          cfg.KubeVersion,
+		restrictEgress:       cfg.EgressRestricted(),
+		forceGenericProvider: cfg.ForceGenericProviderEnabled(),
 	}
 }
 
@@ -259,6 +264,7 @@ func (e *flateEngine) renderCfg() orchestrator.Config {
 		Concurrency:            e.concurrency,
 		SourceRetry:            e.sourceRetry,
 		RestrictEgress:         e.restrictEgress,
+		ForceGenericProvider:   e.forceGenericProvider,
 	}
 }
 
