@@ -9,19 +9,30 @@ import (
 	"github.com/home-operations/konflate/internal/api"
 )
 
-// konflateMarker is the hidden HTML comment tagging konflate's own PR comment,
-// so comment write-back can find and edit it in place instead of posting a new
-// one on each render. summaryMarkdown embeds it at the top; the forge Writer
-// matches a comment body against it.
-func konflateMarker(number int) string {
-	return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
+// commentTagRe matches characters unsafe to embed in konflateMarker's hidden HTML
+// comment; tag is operator config (config.CommentMarkerTag), not PR content, but
+// stripping "-->" and friends here keeps the comment closed even if a
+// StatusCheckName ever contains it — matching the forge-controlled-field escaping
+// this file already does elsewhere for the same reason.
+var commentTagRe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+// konflateMarker is the hidden HTML comment tagging konflate's own PR comment, so
+// comment write-back can find and edit it in place instead of posting a new one on
+// each render. tag disambiguates this konflate instance's comment from another
+// instance's on the same PR (see config.CommentMarkerTag); empty reproduces the
+// untagged marker every prior release used.
+func konflateMarker(number int, tag string) string {
+	if tag = strings.Trim(commentTagRe.ReplaceAllString(tag, "-"), "-"); tag == "" {
+		return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
+	}
+	return fmt.Sprintf("<!-- konflate:pr-%d:%s -->", number, tag)
 }
 
 // summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block for
 // posting back onto the pull request, prefixed with the konflate marker (a hidden
 // HTML comment) so a poster can find and edit its own comment in place.
-func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool, version string) string {
-	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions, version)
+func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool, version, tag string) string {
+	return konflateMarker(env.PR.Number, tag) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions, version)
 }
 
 // summaryMarkdownBody is the marker-less summary body. It carries no heading —

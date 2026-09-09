@@ -181,6 +181,8 @@ config:
   statusCheckName: ""
   # -- Opt-in: post (and update in place) a PR comment with the rendered summary on each successful render. Needs a write credential and stays off until both are set; independent of `statusChecks`.
   prComments: false
+  # -- Disambiguates this instance's hidden comment marker from another konflate deployment's when multiple instances (sharing one bot identity, a folder-per-cluster monorepo's normal shape) render the same PR — otherwise the second to post finds and overwrites the first's comment instead of creating its own. Empty falls back to `statusCheckName` (already commonly set to a distinct per-instance name), then to no tag at all — a single-instance setup with neither set is unaffected.
+  commentTag: ""
   # -- Optional Go text/template for the PR-comment body, replacing the built-in summary. When set, the chart mounts it (a ConfigMap) and points `KONFLATE_PR_COMMENT_TEMPLATE_FILE` at it. The konflate marker is injected automatically. Context: `.PR`, `.Diff`, `.ReviewURL`, `.Summary` (the default body). Passed verbatim (NOT tpl'd) — it's konflate's own template. See the README.
   prCommentTemplate: ""
   # -- konflate's externally-reachable base URL (e.g. https://konflate.example.com); a posted status/comment links back to it. Empty = posted without a link. `basePath` is appended automatically when it is set and not already present.

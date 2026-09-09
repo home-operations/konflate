@@ -191,6 +191,10 @@ spec:
             - name: KONFLATE_PR_COMMENTS
               value: "true"
             {{- end }}
+            {{- with .Values.config.commentTag }}
+            - name: KONFLATE_COMMENT_TAG
+              value: {{ tpl . $ | quote }}
+            {{- end }}
             {{- if .Values.config.prCommentTemplate }}
             # A custom comment template — mounted from the chart-managed ConfigMap below.
             - name: KONFLATE_PR_COMMENT_TEMPLATE_FILE

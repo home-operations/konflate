@@ -412,7 +412,7 @@ func (s *Server) postComment(pr api.PR, st api.JobStatus) {
 		return
 	}
 	body := s.commentBody(env)
-	marker := konflateMarker(pr.Number)
+	marker := konflateMarker(pr.Number, s.cfg.CommentMarkerTag())
 	s.writeBack("comment", pr.Number, func(ctx context.Context) error {
 		return s.writer.UpsertComment(ctx, pr, marker, body)
 	})

@@ -205,6 +205,33 @@ func TestLoad_ForceGenericProvider(t *testing.T) {
 	}
 }
 
+// TestCommentMarkerTag covers the fallback chain: an explicit CommentTag wins,
+// otherwise StatusCheckName is reused, otherwise "" — reproducing the untagged
+// marker every prior release used when an operator has set neither.
+func TestCommentMarkerTag(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name            string
+		commentTag      string
+		statusCheckName string
+		want            string
+	}{
+		{"neither set: no tag", "", "", ""},
+		{"falls back to StatusCheckName", "", "Konflate (dev-app)", "Konflate (dev-app)"},
+		{"explicit CommentTag wins over StatusCheckName", "dev-app", "Konflate (prod-app)", "dev-app"},
+		{"explicit CommentTag alone", "dev-app", "", "dev-app"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Config{CommentTag: tt.commentTag, StatusCheckName: tt.statusCheckName}
+			if got := c.CommentMarkerTag(); got != tt.want {
+				t.Errorf("CommentMarkerTag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestAuthenticatedSources verifies forge read auth is recognized from either a
 // read token or a complete GitHub App (whose installation token authenticates
 // reads). A write-only PAT or a partial App config does not count.
