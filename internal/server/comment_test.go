@@ -165,6 +165,28 @@ func TestEnsureMarker(t *testing.T) {
 	}
 }
 
+// TestEnsureMarker_StripsStaleMarkerFromCustomTemplate covers a mixed-rollout
+// gap: a custom PR-comment template written before this feature existed could
+// easily embed the old literal "<!-- konflate:pr-{{ .PR.Number }} -->" form
+// verbatim (the contract says a template needn't include the marker, not that
+// it mustn't). Once this instance has a tag, that stale untagged marker must
+// not survive alongside the new tagged one — left in place, an older or
+// differently-tagged instance could still Contains-match and overwrite this
+// comment.
+func TestEnsureMarker_StripsStaleMarkerFromCustomTemplate(t *testing.T) {
+	t.Parallel()
+	stale := konflateMarker(7, "") // the pre-feature literal a hand-written template might embed
+	body := stale + "\ncustom template body"
+	got := ensureMarker(7, "dev-app", body)
+	want := konflateMarker(7, "dev-app")
+	if !strings.Contains(got, want) {
+		t.Fatalf("result missing the current tagged marker: %q", got)
+	}
+	if strings.Contains(got, stale) {
+		t.Errorf("stale untagged marker survived alongside the tagged one, still matchable by an older instance: %q", got)
+	}
+}
+
 func TestNewCommentTemplate(t *testing.T) {
 	t.Parallel()
 	t.Run("nil when unset", func(t *testing.T) {

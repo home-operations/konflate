@@ -122,11 +122,14 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 
 // ensureMarker guarantees the konflate marker is in body so comment write-back can
 // find and edit the comment; a custom template needn't include it. The marker is a
-// hidden HTML comment, so prepending it is invisible in the rendered comment.
+// hidden HTML comment, so prepending it is invisible in the rendered comment. Any
+// other konflate marker already in body (a custom template that embeds one
+// verbatim) is stripped first — see stripAnyMarker — so exactly one, correct
+// marker survives.
 func ensureMarker(number int, tag, body string) string {
 	marker := konflateMarker(number, tag)
 	if strings.Contains(body, marker) {
 		return body
 	}
-	return marker + "\n" + body
+	return marker + "\n" + stripAnyMarker(number, body)
 }

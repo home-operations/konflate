@@ -540,33 +540,68 @@ func TestKonflateMarker_TagDisambiguatesInstances(t *testing.T) {
 	}
 }
 
-// TestKonflateMarker_SanitizesTag guards the HTML-comment-injection surface:
-// CommentTag/StatusCheckName are operator config, not PR content, but a tag
-// containing "-->" would otherwise close the hidden comment early and leak
-// content into the rendered summary — the same class of issue #314 hardened
-// elsewhere in this file for forge-controlled text.
-func TestKonflateMarker_SanitizesTag(t *testing.T) {
+// TestKonflateMarker_VisuallySimilarTagsDoNotCollide is the exact scenario a
+// lossy sanitizer (collapsing any disallowed run to one dash) would get wrong:
+// "dev/app", "dev app", and "dev-app" all look like distinct operator-chosen
+// tags but would sanitize down to the identical "dev-app" — silently
+// reintroducing the cross-instance collision this feature exists to prevent.
+// Hashing the raw tag instead sidesteps that: distinct inputs must produce
+// distinct markers regardless of how visually similar they are once sanitized.
+func TestKonflateMarker_VisuallySimilarTagsDoNotCollide(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name string
-		tag  string
-		want string
-	}{
-		{"strips an embedded comment close", "prod --> <script>alert(1)</script>", "<!-- konflate:pr-1:prod----script-alert-1-script -->"},
-		{"collapses disallowed runs to one dash", "Konflate (dev/app)", "<!-- konflate:pr-1:Konflate-dev-app -->"},
-		{"trims leading and trailing dashes", "--dev--", "<!-- konflate:pr-1:dev -->"},
-		{"all-disallowed collapses to untagged", "-->", "<!-- konflate:pr-1 -->"},
+	tags := []string{"dev/app", "dev app", "dev-app"}
+	seen := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		m := konflateMarker(142, tag)
+		if prior, ok := seen[m]; ok {
+			t.Errorf("tags %q and %q collided on the same marker %q", prior, tag, m)
+		}
+		seen[m] = tag
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := konflateMarker(1, tt.tag)
-			if got != tt.want {
-				t.Errorf("konflateMarker(1, %q) = %q, want %q", tt.tag, got, tt.want)
-			}
-			if strings.Contains(got, "-->") && !strings.HasSuffix(got, " -->") {
-				t.Errorf("marker closes its HTML comment early: %q", got)
-			}
-		})
+}
+
+// TestKonflateMarker_TagIsDeterministic guards the other half of the hash
+// approach: the same tag must always produce the same marker (it's how
+// write-back finds its own comment to edit on a later render), and the hash
+// must actually vary with the input rather than e.g. always truncating to a
+// fixed string.
+func TestKonflateMarker_TagIsDeterministic(t *testing.T) {
+	t.Parallel()
+	if a, b := konflateMarker(142, "dev-app"), konflateMarker(142, "dev-app"); a != b {
+		t.Errorf("konflateMarker is not deterministic for the same tag: %q vs %q", a, b)
 	}
+	if a, b := konflateMarker(142, "dev-app"), konflateMarker(7, "dev-app"); a == b {
+		t.Errorf("markers for different PR numbers must differ even with the same tag: %q", a)
+	}
+}
+
+// TestKonflateMarker_TagNeverBreaksTheHTMLComment guards the injection surface
+// a lossy sanitizer previously had to handle explicitly: CommentTag/
+// StatusCheckName are operator config, not PR content, but a tag containing
+// "-->" could otherwise close the hidden comment early and leak content into
+// the rendered summary — the same class of issue #314 hardened elsewhere in
+// this file for forge-controlled text. Hashing the tag makes this
+// structurally impossible (hex digits can't produce "-->"), which this pins.
+func TestKonflateMarker_TagNeverBreaksTheHTMLComment(t *testing.T) {
+	t.Parallel()
+	got := konflateMarker(1, "prod --> <script>alert(1)</script>")
+	want := "<!-- konflate:pr-1:"
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " -->") {
+		t.Fatalf("konflateMarker = %q, want a marker shaped %q...%q", got, want, " -->")
+	}
+	if body := strings.TrimSuffix(strings.TrimPrefix(got, want), " -->"); !hexOnly(body) {
+		t.Errorf("embedded tag is not hex-only, HTML-comment-breakout is possible: %q", body)
+	}
+}
+
+func hexOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }

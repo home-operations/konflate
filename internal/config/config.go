@@ -475,13 +475,21 @@ func (c *Config) PRCommentsEnabled() bool { return c.PRComments && c.WriteEnable
 
 // CommentMarkerTag returns the string embedded in konflate's PR-comment marker to
 // disambiguate this instance's comment from another konflate deployment's on the
-// same PR (see CommentTag). Falls back to StatusCheckName; "" when neither is set
+// same PR (see CommentTag). Falls back to StatusCheckName, but only when it was
+// set to something other than DefaultStatusCheckName: Load fills a blank
+// StatusCheckName in with that constant before this ever runs, so falling back to
+// it unconditionally would tag every single-instance install identically and
+// change its marker on upgrade — the exact untagged-by-default behavior this is
+// supposed to preserve. "" (neither set, or StatusCheckName still the default)
 // reproduces the untagged marker every prior release used.
 func (c *Config) CommentMarkerTag() string {
 	if c.CommentTag != "" {
 		return c.CommentTag
 	}
-	return c.StatusCheckName
+	if c.StatusCheckName != "" && c.StatusCheckName != DefaultStatusCheckName {
+		return c.StatusCheckName
+	}
+	return ""
 }
 
 // AppConfigured reports whether GitHub App write credentials are set (a client id

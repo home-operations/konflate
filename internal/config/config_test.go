@@ -206,8 +206,11 @@ func TestLoad_ForceGenericProvider(t *testing.T) {
 }
 
 // TestCommentMarkerTag covers the fallback chain: an explicit CommentTag wins,
-// otherwise StatusCheckName is reused, otherwise "" — reproducing the untagged
-// marker every prior release used when an operator has set neither.
+// otherwise a genuinely custom StatusCheckName is reused, otherwise "" —
+// reproducing the untagged marker every prior release used. StatusCheckName
+// still holding DefaultStatusCheckName does NOT count as "custom" — Load fills
+// a blank one in with that constant (see TestLoad_CommentMarkerTag), so treating
+// it as a real tag would identically tag every single-instance install.
 func TestCommentMarkerTag(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -217,7 +220,8 @@ func TestCommentMarkerTag(t *testing.T) {
 		want            string
 	}{
 		{"neither set: no tag", "", "", ""},
-		{"falls back to StatusCheckName", "", "Konflate (dev-app)", "Konflate (dev-app)"},
+		{"StatusCheckName still the default: no tag", "", DefaultStatusCheckName, ""},
+		{"falls back to a custom StatusCheckName", "", "Konflate (dev-app)", "Konflate (dev-app)"},
 		{"explicit CommentTag wins over StatusCheckName", "dev-app", "Konflate (prod-app)", "dev-app"},
 		{"explicit CommentTag alone", "dev-app", "", "dev-app"},
 	}
@@ -229,6 +233,36 @@ func TestCommentMarkerTag(t *testing.T) {
 				t.Errorf("CommentMarkerTag() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestLoad_CommentMarkerTag is the regression Greptile caught: Load fills a
+// blank StatusCheckName in with DefaultStatusCheckName before any caller sees
+// it, so a naive "fall back to StatusCheckName" would tag a bare single-instance
+// install's marker on every render — the compatibility break this whole feature
+// is supposed to avoid. Constructing Config directly (as TestCommentMarkerTag
+// does) can't catch this; only the real Load path can.
+func TestLoad_CommentMarkerTag(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.StatusCheckName != DefaultStatusCheckName {
+		t.Fatalf("StatusCheckName = %q, want Load to fill it with %q", cfg.StatusCheckName, DefaultStatusCheckName)
+	}
+	if got := cfg.CommentMarkerTag(); got != "" {
+		t.Errorf("CommentMarkerTag() = %q, want \"\" for a bare install (Load-filled default StatusCheckName must not count as a tag)", got)
+	}
+
+	t.Setenv("KONFLATE_STATUS_CHECK_NAME", "Konflate (dev-app)")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with a custom status check name: %v", err)
+	}
+	if got := cfg.CommentMarkerTag(); got != "Konflate (dev-app)" {
+		t.Errorf("CommentMarkerTag() = %q, want the explicitly configured status check name", got)
 	}
 }
 
