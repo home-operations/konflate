@@ -51,7 +51,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	// Blocking → red [!CAUTION]; caution → amber [!WARNING], its own block. The
 	// alert box supplies the titled icon, so the items follow the marker directly
 	// with no repeated "Blocker"/"Caution" headline.
-	md := summaryMarkdown(env, "", true, "")
+	md := summaryMarkdown(env, "", true, "", "")
 	for _, want := range []string{
 		"> [!CAUTION]\n> - `Deployment web/api`: image ghcr.io/x:9.9.9 not found upstream",
 		"> [!WARNING]\n> - `Deployment web/api`: replicas set to 0",
@@ -66,7 +66,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	// A render failure joins the blocker in the same red box (both fail the
 	// check) — blockers first — rather than opening a second [!CAUTION].
 	env.Diff.Failures = []api.RenderFailure{{Parent: "HelmRelease media/plex", Message: "values don't meet the schema"}}
-	merged := summaryMarkdown(env, "", true, "")
+	merged := summaryMarkdown(env, "", true, "", "")
 	if n := strings.Count(merged, "[!CAUTION]"); n != 1 {
 		t.Errorf("blocker + render failure should share one [!CAUTION] box, got %d:\n%s", n, merged)
 	}
@@ -82,7 +82,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 	}
 	// The plain flavour has no box, so it keeps the glyph + title — singular with
 	// one finding each (the blocker must not be double-counted into the cautions).
-	plain := summaryMarkdown(env, "", false, "")
+	plain := summaryMarkdown(env, "", false, "", "")
 	for _, want := range []string{"**⛔ Blocker**", "**⚠ Caution**"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("plain markdown missing %q\n---\n%s", want, plain)
@@ -95,7 +95,7 @@ func TestSummaryMarkdown_BlockingTierSeparateFromCaution(t *testing.T) {
 
 func TestSummaryMarkdown_GitHubAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true, "")
+	md := summaryMarkdown(sampleSummaryEnv(), "https://k.example/#/pr/142", true, "", "")
 	for _, want := range []string{
 		"<!-- konflate:pr-142 -->",
 		"> [!NOTE]",
@@ -180,11 +180,11 @@ func TestSummarySections_Failing(t *testing.T) {
 func TestSummaryMarkdown_FooterVersion(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
-	if md := summaryMarkdown(env, "", true, "v9.9.9"); !strings.Contains(md, "<sub>konflate v9.9.9 · rendered `1a2b3c4`</sub>") {
+	if md := summaryMarkdown(env, "", true, "v9.9.9", ""); !strings.Contains(md, "<sub>konflate v9.9.9 · rendered `1a2b3c4`</sub>") {
 		t.Errorf("footer should carry the build version:\n%s", md)
 	}
 	// Unset (a local build before main stamps it) → just "konflate", no dangling space.
-	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "<sub>konflate · rendered `1a2b3c4`</sub>") {
+	if md := summaryMarkdown(env, "", true, "", ""); !strings.Contains(md, "<sub>konflate · rendered `1a2b3c4`</sub>") {
 		t.Errorf("footer without a version:\n%s", md)
 	}
 }
@@ -226,7 +226,7 @@ func TestImpactPhrase(t *testing.T) {
 
 func TestSummaryMarkdown_PlainHasNoAdmonitions(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(sampleSummaryEnv(), "", false, "")
+	md := summaryMarkdown(sampleSummaryEnv(), "", false, "", "")
 	if strings.Contains(md, "[!NOTE]") || strings.Contains(md, "[!CAUTION]") || strings.Contains(md, "[!WARNING]") {
 		t.Errorf("plain markdown must not use GitHub admonitions:\n%s", md)
 	}
@@ -257,7 +257,7 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	// GitHub flavour: a green [!TIP] naming itself and carrying the headline
 	// counts — so the separate [!NOTE] impact line is dropped — and, being
 	// routine, no caution/failure blocks.
-	md := summaryMarkdown(env, "", true, "")
+	md := summaryMarkdown(env, "", true, "", "")
 	for _, want := range []string{"> [!TIP]", "**Routine**: only container-image and chart-version changes; 2 resources across 1 app"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("routine PR github markdown missing %q\n---\n%s", want, md)
@@ -270,12 +270,12 @@ func TestSummaryMarkdown_Routine(t *testing.T) {
 	// count, since the impact line is dropped for a routine PR.
 	env.Diff.Impact.CRDs = 3
 	env.Diff.Truncated = 40
-	if md := summaryMarkdown(env, "", true, ""); !strings.Contains(md, "2 resources across 1 app · 3 CRDs · 40 not shown") {
+	if md := summaryMarkdown(env, "", true, "", ""); !strings.Contains(md, "2 resources across 1 app · 3 CRDs · 40 not shown") {
 		t.Errorf("routine tip must keep the CRD count and the truncation cue:\n%s", md)
 	}
 	env.Diff.Impact.CRDs, env.Diff.Truncated = 0, 0
 	// Plain flavour: the bold line, no admonition syntax.
-	plain := summaryMarkdown(env, "", false, "")
+	plain := summaryMarkdown(env, "", false, "", "")
 	if strings.Contains(plain, "[!TIP]") {
 		t.Errorf("plain markdown must not use admonitions:\n%s", plain)
 	}
@@ -296,7 +296,7 @@ func TestSummaryMarkdown_EscapesForgeText(t *testing.T) {
 		// and a code span into konflate's own comment/check-run.
 		Message: "boom | <script>alert(1)</script>\nsecond line [click](https://evil.example) ![x](https://evil.example/p.png) `code`",
 	}}
-	md := summaryMarkdown(env, "", true, "")
+	md := summaryMarkdown(env, "", true, "", "")
 	if strings.Contains(md, "<script>") {
 		t.Errorf("raw HTML must be escaped:\n%s", md)
 	}
@@ -345,7 +345,7 @@ func TestMdInline_DefangsMarkdown(t *testing.T) {
 
 func TestSummaryMarkdown_NotReady(t *testing.T) {
 	t.Parallel()
-	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true, "")
+	md := summaryMarkdown(api.DiffEnvelope{Status: api.JobRunning, PR: api.PR{Number: 9}}, "https://k/#/pr/9", true, "", "")
 	if !strings.Contains(md, "Still rendering") {
 		t.Errorf("a running PR should say it's still rendering:\n%s", md)
 	}
@@ -362,7 +362,7 @@ func TestSummaryMarkdown_NoChanges(t *testing.T) {
 		Diff:   &api.DiffResult{HeadSHA: "deadbeefcafef00d"},
 	}
 	for _, admonitions := range []bool{true, false} {
-		md := summaryMarkdown(env, "", admonitions, "")
+		md := summaryMarkdown(env, "", admonitions, "", "")
 		if !strings.Contains(md, "No rendered changes") {
 			t.Errorf("admonitions=%v: expected a no-changes message:\n%s", admonitions, md)
 		}
@@ -379,7 +379,7 @@ func TestSummaryMarkdown_RefreshError(t *testing.T) {
 	t.Parallel()
 	env := sampleSummaryEnv()
 	env.RefreshError = "forge timeout"
-	md := summaryMarkdown(env, "", true, "")
+	md := summaryMarkdown(env, "", true, "", "")
 	if !strings.Contains(md, "showing the last good render") {
 		t.Errorf("a refresh failure should be flagged:\n%s", md)
 	}
@@ -496,7 +496,7 @@ func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 			},
 		},
 	}
-	md := summaryMarkdown(env, "", true, "")
+	md := summaryMarkdown(env, "", true, "", "")
 	for _, want := range []string{
 		"| image | from | to | upstream |",
 		"| `ghcr.io/ok` | `1.0` | `1.1` | ✅ |",
@@ -507,5 +507,86 @@ func TestSummaryMarkdown_ImageUpstreamColumn(t *testing.T) {
 		if !strings.Contains(md, want) {
 			t.Errorf("image table missing %q\n---\n%s", want, md)
 		}
+	}
+}
+
+// TestKonflateMarker_Untagged reproduces the exact marker every prior konflate
+// release wrote for a single-instance setup, so upgrading with no CommentTag/
+// StatusCheckName set changes nothing for an already-open PR's existing comment.
+func TestKonflateMarker_Untagged(t *testing.T) {
+	t.Parallel()
+	if got, want := konflateMarker(142, ""), "<!-- konflate:pr-142 -->"; got != want {
+		t.Errorf("konflateMarker(142, \"\") = %q, want %q", got, want)
+	}
+}
+
+// TestKonflateMarker_TagDisambiguatesInstances is the actual bug this exists to
+// fix: two konflate deployments sharing one bot identity (dev/app and
+// production/app both authenticating as the same GitHub App, say) render the
+// same PR in a folder-per-cluster monorepo. Before CommentMarkerTag, both wrote
+// the identical <!-- konflate:pr-N --> marker, so the second one to post found
+// and overwrote the first's comment instead of creating its own. Distinct tags
+// must produce markers where neither is a substring of the other — Contains is
+// exactly the match UpsertComment runs against an existing comment body.
+func TestKonflateMarker_TagDisambiguatesInstances(t *testing.T) {
+	t.Parallel()
+	devApp := konflateMarker(142, "dev-app")
+	prodApp := konflateMarker(142, "production-app")
+	if devApp == prodApp {
+		t.Fatalf("dev-app and production-app produced the same marker: %q", devApp)
+	}
+	if strings.Contains(devApp, prodApp) || strings.Contains(prodApp, devApp) {
+		t.Errorf("markers must not be substrings of each other (that's how UpsertComment matches): %q vs %q", devApp, prodApp)
+	}
+}
+
+// TestKonflateMarker_VisuallySimilarTagsDoNotCollide is the exact scenario a
+// lossy sanitizer (collapsing any disallowed run to one dash) would get wrong:
+// "dev/app", "dev app", and "dev-app" all look like distinct operator-chosen
+// tags but would sanitize down to the identical "dev-app" — silently
+// reintroducing the cross-instance collision this feature exists to prevent.
+// Hashing the raw tag instead sidesteps that: distinct inputs must produce
+// distinct markers regardless of how visually similar they are once sanitized.
+func TestKonflateMarker_VisuallySimilarTagsDoNotCollide(t *testing.T) {
+	t.Parallel()
+	tags := []string{"dev/app", "dev app", "dev-app"}
+	seen := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		m := konflateMarker(142, tag)
+		if prior, ok := seen[m]; ok {
+			t.Errorf("tags %q and %q collided on the same marker %q", prior, tag, m)
+		}
+		seen[m] = tag
+	}
+}
+
+// TestKonflateMarker_TagIsDeterministic guards the other half of the hash
+// approach: the same tag must always produce the same marker (it's how
+// write-back finds its own comment to edit on a later render), and the hash
+// must actually vary with the input rather than e.g. always truncating to a
+// fixed string.
+func TestKonflateMarker_TagIsDeterministic(t *testing.T) {
+	t.Parallel()
+	if a, b := konflateMarker(142, "dev-app"), konflateMarker(142, "dev-app"); a != b {
+		t.Errorf("konflateMarker is not deterministic for the same tag: %q vs %q", a, b)
+	}
+	if a, b := konflateMarker(142, "dev-app"), konflateMarker(7, "dev-app"); a == b {
+		t.Errorf("markers for different PR numbers must differ even with the same tag: %q", a)
+	}
+}
+
+// TestKonflateMarker_TagNeverBreaksTheHTMLComment: CommentTag/StatusCheckName
+// are operator config, not PR content, but a tag containing "-->" would close
+// the hidden comment early and leak into the rendered summary. Hashing the tag
+// makes that structurally impossible (hex digits can't produce "-->").
+func TestKonflateMarker_TagNeverBreaksTheHTMLComment(t *testing.T) {
+	t.Parallel()
+	got := konflateMarker(1, "prod --> <script>alert(1)</script>")
+	want := "<!-- konflate:pr-1:"
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " -->") {
+		t.Fatalf("konflateMarker = %q, want a marker shaped %q...%q", got, want, " -->")
+	}
+	if body := strings.TrimSuffix(strings.TrimPrefix(got, want), " -->"); body == "" || !isHex(body) {
+		t.Errorf("embedded tag is not hex-only, HTML-comment-breakout is possible: %q", body)
 	}
 }

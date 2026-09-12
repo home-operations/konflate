@@ -53,6 +53,7 @@ Kubernetes: `>=1.25.0-0`
 | config.closedPrMax | int | `25` | Cap on retained merged PRs (most-recent win); bounds disk + memory. 0 disables the cap (with `closedPrTtl: "0"`, merged diffs are kept forever). |
 | config.closedPrTtl | string | `"336h"` | How long a merged PR is kept (Go duration); 0 disables the age cap. |
 | config.clusterPath | string | `""` | Directory flate renders from; empty = repo root (correct for the standard root-relative layout). |
+| config.commentTag | string | `""` | Disambiguates this instance's hidden comment marker from another konflate deployment's when multiple instances (sharing one bot identity, a folder-per-cluster monorepo's normal shape) render the same PR — otherwise the second to post finds and overwrites the first's comment instead of creating its own. Empty falls back to `statusCheckName` (already commonly set to a distinct per-instance name), then to no tag at all — a single-instance setup with neither set is unaffected. |
 | config.diffTimeout | string | `""` | Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); "0" disables. Lower on untrusted instances. |
 | config.extraEnv | list | `[]` | Extra raw env vars merged into the container (advanced). |
 | config.fetchTimeout | string | `""` | Advanced: cap on just the git fetch within a render (Go duration); a short bound stops one slow forge fetch from stalling every render. Empty = default (2m); "0" disables. |

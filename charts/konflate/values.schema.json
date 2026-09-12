@@ -46,6 +46,12 @@
           "title": "clusterPath",
           "type": "string"
         },
+        "commentTag": {
+          "default": "",
+          "description": "Disambiguates this instance's hidden comment marker from another konflate deployment's when multiple instances (sharing one bot identity, a folder-per-cluster monorepo's normal shape) render the same PR — otherwise the second to post finds and overwrites the first's comment instead of creating its own. Empty falls back to `statusCheckName` (already commonly set to a distinct per-instance name), then to no tag at all — a single-instance setup with neither set is unaffected.",
+          "title": "commentTag",
+          "type": "string"
+        },
         "diffTimeout": {
           "default": "",
           "description": "Hard cap on a single PR render end-to-end (Go duration). Empty = default (10m); \"0\" disables. Lower on untrusted instances.",

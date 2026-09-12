@@ -77,7 +77,8 @@ func newCommentTemplate(cfg *config.Config, log *slog.Logger) *template.Template
 func (s *Server) commentBody(env api.DiffEnvelope) string {
 	reviewURL := s.reviewURL(env.PR.Number)
 	admonitions := s.cfg.Forge.Kind == config.ForgeGitHub
-	defaultBody := func() string { return summaryMarkdown(env, reviewURL, admonitions, s.Version) }
+	tag := s.cfg.CommentMarkerTag()
+	defaultBody := func() string { return summaryMarkdown(env, reviewURL, admonitions, s.Version, tag) }
 	if s.commentTmpl == nil {
 		return defaultBody()
 	}
@@ -116,16 +117,19 @@ func (s *Server) commentBody(env api.DiffEnvelope) string {
 			"pr", env.PR.Number, "error", err)
 		return defaultBody()
 	}
-	return ensureMarker(env.PR.Number, b.String())
+	return ensureMarker(env.PR.Number, tag, b.String())
 }
 
 // ensureMarker guarantees the konflate marker is in body so comment write-back can
 // find and edit the comment; a custom template needn't include it. The marker is a
-// hidden HTML comment, so prepending it is invisible in the rendered comment.
-func ensureMarker(number int, body string) string {
-	marker := konflateMarker(number)
+// hidden HTML comment, so prepending it is invisible in the rendered comment. Any
+// other konflate marker already in body (a custom template that embeds one
+// verbatim) is stripped first — see stripAnyMarker — so exactly one, correct
+// marker survives.
+func ensureMarker(number int, tag, body string) string {
+	marker := konflateMarker(number, tag)
 	if strings.Contains(body, marker) {
 		return body
 	}
-	return marker + "\n" + body
+	return marker + "\n" + stripAnyMarker(body)
 }

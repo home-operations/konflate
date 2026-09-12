@@ -205,6 +205,66 @@ func TestLoad_ForceGenericProvider(t *testing.T) {
 	}
 }
 
+// TestCommentMarkerTag covers the fallback chain: an explicit CommentTag wins,
+// otherwise a genuinely custom StatusCheckName is reused, otherwise "" —
+// reproducing the untagged marker every prior release used. StatusCheckName
+// still holding DefaultStatusCheckName does NOT count as "custom" — Load fills
+// a blank one in with that constant (see TestLoad_CommentMarkerTag), so treating
+// it as a real tag would identically tag every single-instance install.
+func TestCommentMarkerTag(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name            string
+		commentTag      string
+		statusCheckName string
+		want            string
+	}{
+		{"neither set: no tag", "", "", ""},
+		{"StatusCheckName still the default: no tag", "", DefaultStatusCheckName, ""},
+		{"falls back to a custom StatusCheckName", "", "Konflate (dev-app)", "Konflate (dev-app)"},
+		{"explicit CommentTag wins over StatusCheckName", "dev-app", "Konflate (prod-app)", "dev-app"},
+		{"explicit CommentTag alone", "dev-app", "", "dev-app"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Config{CommentTag: tt.commentTag, StatusCheckName: tt.statusCheckName}
+			if got := c.CommentMarkerTag(); got != tt.want {
+				t.Errorf("CommentMarkerTag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLoad_CommentMarkerTag goes through Load because Load fills a blank
+// StatusCheckName in with DefaultStatusCheckName before any caller sees it: a
+// fallback that counted that value as a tag would change a bare single-instance
+// install's marker on upgrade. Constructing Config directly (as
+// TestCommentMarkerTag does) can't catch that.
+func TestLoad_CommentMarkerTag(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.StatusCheckName != DefaultStatusCheckName {
+		t.Fatalf("StatusCheckName = %q, want Load to fill it with %q", cfg.StatusCheckName, DefaultStatusCheckName)
+	}
+	if got := cfg.CommentMarkerTag(); got != "" {
+		t.Errorf("CommentMarkerTag() = %q, want \"\" for a bare install (Load-filled default StatusCheckName must not count as a tag)", got)
+	}
+
+	t.Setenv("KONFLATE_STATUS_CHECK_NAME", "Konflate (dev-app)")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with a custom status check name: %v", err)
+	}
+	if got := cfg.CommentMarkerTag(); got != "Konflate (dev-app)" {
+		t.Errorf("CommentMarkerTag() = %q, want the explicitly configured status check name", got)
+	}
+}
+
 // TestAuthenticatedSources verifies forge read auth is recognized from either a
 // read token or a complete GitHub App (whose installation token authenticates
 // reads). A write-only PAT or a partial App config does not count.

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -9,19 +11,51 @@ import (
 	"github.com/home-operations/konflate/internal/api"
 )
 
-// konflateMarker is the hidden HTML comment tagging konflate's own PR comment,
-// so comment write-back can find and edit it in place instead of posting a new
-// one on each render. summaryMarkdown embeds it at the top; the forge Writer
-// matches a comment body against it.
-func konflateMarker(number int) string {
-	return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
+// commentTagHashLen is the number of hex characters of the tag's sha256 kept in
+// the marker — short enough to stay unobtrusive in a hidden HTML comment, long
+// enough (48 bits) that two distinct operator-chosen tags colliding is not a
+// realistic concern at any real fleet size.
+const commentTagHashLen = 12
+
+// konflateMarker is the hidden HTML comment tagging konflate's own PR comment, so
+// comment write-back can find and edit it in place instead of posting a new one on
+// each render. tag disambiguates this konflate instance's comment from another
+// instance's on the same PR (see config.CommentMarkerTag); empty reproduces the
+// untagged marker every prior release used.
+//
+// tag is hashed rather than embedded verbatim: it's operator config (a
+// StatusCheckName or CommentTag), not PR content, but two visually distinct tags
+// (e.g. "dev/app" and "dev app") could otherwise sanitize down to the identical
+// safe-charset string and silently reintroduce the exact cross-instance collision
+// this exists to prevent. A hash sidesteps both that and the HTML-comment-breakout
+// concern (an embedded "-->") in one step — the marker is hidden, so it never
+// needs to be human-readable.
+func konflateMarker(number int, tag string) string {
+	if tag == "" {
+		return fmt.Sprintf("<!-- konflate:pr-%d -->", number)
+	}
+	sum := sha256.Sum256([]byte(tag))
+	return fmt.Sprintf("<!-- konflate:pr-%d:%s -->", number, hex.EncodeToString(sum[:])[:commentTagHashLen])
+}
+
+// anyMarkerRe matches a konflate marker for any PR number, tagged or not.
+var anyMarkerRe = regexp.MustCompile(`<!-- konflate:pr-\d+(?::[0-9a-f]+)? -->\n?`)
+
+// stripAnyMarker removes every konflate marker from body, whatever its tag.
+// ensureMarker calls it before prepending the current marker so a custom
+// template that embeds a marker verbatim (the contract says a template needn't
+// include one, not that it mustn't) ends up with exactly one. Left in place, a
+// stale untagged marker would let a differently-configured instance
+// Contains-match and overwrite this comment.
+func stripAnyMarker(body string) string {
+	return anyMarkerRe.ReplaceAllString(body, "")
 }
 
 // summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block for
 // posting back onto the pull request, prefixed with the konflate marker (a hidden
 // HTML comment) so a poster can find and edit its own comment in place.
-func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool, version string) string {
-	return konflateMarker(env.PR.Number) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions, version)
+func summaryMarkdown(env api.DiffEnvelope, reviewURL string, admonitions bool, version, tag string) string {
+	return konflateMarker(env.PR.Number, tag) + "\n" + summaryMarkdownBody(env, reviewURL, admonitions, version)
 }
 
 // summaryMarkdownBody is the marker-less summary body. It carries no heading —
@@ -495,8 +529,8 @@ func shortVer(v string) string {
 	if i < 0 {
 		return v
 	}
-	if hex := v[i+1:]; len(hex) > 6 && isHex(hex) {
-		return v[:i+1] + hex[:6] + "…"
+	if digest := v[i+1:]; len(digest) > 6 && isHex(digest) {
+		return v[:i+1] + digest[:6] + "…"
 	}
 	return v
 }

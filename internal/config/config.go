@@ -88,6 +88,15 @@ type Config struct {
 	// write credential with StatusChecks; the two are independent toggles.
 	PRComments bool `env:"KONFLATE_PR_COMMENTS" envDefault:"false"`
 
+	// CommentTag disambiguates this konflate instance's PR comment (and its hidden
+	// marker) from another konflate deployment's on the same PR — a folder-per-cluster
+	// monorepo's normal shape, where multiple instances sharing one bot identity can
+	// render the same PR. Empty falls back to StatusCheckName (already commonly set to
+	// a distinct per-instance name for branch protection), then to no tag at all —
+	// unset with StatusCheckName also unset reproduces every prior release's marker.
+	// See CommentMarkerTag.
+	CommentTag string `env:"KONFLATE_COMMENT_TAG"`
+
 	// PRCommentTemplateFile is an optional path to a Go text/template that renders
 	// the PR-comment body, replacing the built-in summary. It's parsed once at
 	// startup; the konflate marker is injected automatically, so the template need
@@ -463,6 +472,25 @@ func (c *Config) StatusChecksEnabled() bool { return c.StatusChecks && c.WriteEn
 // PRCommentsEnabled reports whether konflate should post/update a PR comment with
 // the rendered summary: the toggle is on and a write credential is configured.
 func (c *Config) PRCommentsEnabled() bool { return c.PRComments && c.WriteEnabled() }
+
+// CommentMarkerTag returns the string embedded in konflate's PR-comment marker to
+// disambiguate this instance's comment from another konflate deployment's on the
+// same PR (see CommentTag). Falls back to StatusCheckName, but only when it was
+// set to something other than DefaultStatusCheckName: Load fills a blank
+// StatusCheckName in with that constant before this ever runs, so falling back to
+// it unconditionally would tag every single-instance install identically and
+// change its marker on upgrade — the exact untagged-by-default behavior this is
+// supposed to preserve. "" (neither set, or StatusCheckName still the default)
+// reproduces the untagged marker every prior release used.
+func (c *Config) CommentMarkerTag() string {
+	if c.CommentTag != "" {
+		return c.CommentTag
+	}
+	if c.StatusCheckName != "" && c.StatusCheckName != DefaultStatusCheckName {
+		return c.StatusCheckName
+	}
+	return ""
+}
 
 // AppConfigured reports whether GitHub App write credentials are set (a client id
 // and a private key). The installation is auto-resolved from the repo, so it's not

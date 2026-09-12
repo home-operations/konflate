@@ -41,7 +41,7 @@ func newCommentServer(t *testing.T, src string) *Server {
 func TestCommentBody_DefaultSummary(t *testing.T) {
 	t.Parallel()
 	body := newCommentServer(t, "").commentBody(readyEnvelope())
-	if !strings.HasPrefix(body, konflateMarker(7)) {
+	if !strings.HasPrefix(body, konflateMarker(7, "")) {
 		t.Errorf("default body should start with the marker: %q", body)
 	}
 	if !strings.Contains(body, "<sub>konflate · rendered") {
@@ -53,14 +53,14 @@ func TestCommentBody_CustomTemplate(t *testing.T) {
 	t.Parallel()
 	body := newCommentServer(t, "## {{ .PR.Title }} (#{{ .PR.Number }})\n{{ .Summary }}").commentBody(readyEnvelope())
 	// The marker is injected even though the template never mentions it.
-	if !strings.HasPrefix(body, konflateMarker(7)) {
+	if !strings.HasPrefix(body, konflateMarker(7, "")) {
 		t.Errorf("custom body should be prefixed with the marker: %q", body)
 	}
 	if !strings.Contains(body, "## bump nginx (#7)") {
 		t.Errorf("custom body missing the rendered header: %q", body)
 	}
 	// {{ .Summary }} embeds the marker-less default, so exactly one marker total.
-	if n := strings.Count(body, konflateMarker(7)); n != 1 {
+	if n := strings.Count(body, konflateMarker(7, "")); n != 1 {
 		t.Errorf("expected exactly one marker, got %d: %q", n, body)
 	}
 	if !strings.Contains(body, "<sub>konflate · rendered") {
@@ -109,7 +109,7 @@ func TestCommentBody_TemplateMdFuncEscapesRawDiffText(t *testing.T) {
 func TestCommentBody_CustomTemplateWithoutSummary(t *testing.T) {
 	t.Parallel()
 	body := newCommentServer(t, "a custom note for #{{ .PR.Number }}").commentBody(readyEnvelope())
-	if !strings.HasPrefix(body, konflateMarker(7)+"\n") {
+	if !strings.HasPrefix(body, konflateMarker(7, "")+"\n") {
 		t.Errorf("marker should be prepended: %q", body)
 	}
 	if !strings.Contains(body, "a custom note for #7") {
@@ -123,7 +123,7 @@ func TestCommentBody_SectionsPlacedIndividually(t *testing.T) {
 	body := newCommentServer(t, "## Cautions\n{{ .Sections.Cautions }}\n\n## Images\n{{ .Sections.Images }}").
 		commentBody(sampleSummaryEnv())
 
-	if !strings.HasPrefix(body, konflateMarker(142)) {
+	if !strings.HasPrefix(body, konflateMarker(142, "")) {
 		t.Errorf("marker should be injected: %q", body)
 	}
 	if !strings.Contains(body, "[!WARNING]") || !strings.Contains(body, "Deployment web/api") {
@@ -148,20 +148,42 @@ func TestCommentBody_ExecuteErrorFallsBackToDefault(t *testing.T) {
 	if !strings.Contains(body, "<sub>konflate · rendered") {
 		t.Errorf("a failing template should fall back to the default summary: %q", body)
 	}
-	if !strings.Contains(body, konflateMarker(7)) {
+	if !strings.Contains(body, konflateMarker(7, "")) {
 		t.Errorf("fallback body missing the marker: %q", body)
 	}
 }
 
 func TestEnsureMarker(t *testing.T) {
 	t.Parallel()
-	m := konflateMarker(7)
-	if got := ensureMarker(7, "hello"); got != m+"\nhello" {
+	m := konflateMarker(7, "")
+	if got := ensureMarker(7, "", "hello"); got != m+"\nhello" {
 		t.Errorf("ensureMarker should prepend the marker: %q", got)
 	}
 	already := "lead\n" + m + "\nbody"
-	if got := ensureMarker(7, already); got != already {
+	if got := ensureMarker(7, "", already); got != already {
 		t.Errorf("ensureMarker should not duplicate an existing marker: %q", got)
+	}
+}
+
+// TestEnsureMarker_StripsStaleMarkerFromCustomTemplate covers a mixed-rollout
+// gap: a custom PR-comment template written before this feature existed could
+// easily embed the old literal "<!-- konflate:pr-{{ .PR.Number }} -->" form
+// verbatim (the contract says a template needn't include the marker, not that
+// it mustn't). Once this instance has a tag, that stale untagged marker must
+// not survive alongside the new tagged one — left in place, an older or
+// differently-tagged instance could still Contains-match and overwrite this
+// comment.
+func TestEnsureMarker_StripsStaleMarkerFromCustomTemplate(t *testing.T) {
+	t.Parallel()
+	stale := konflateMarker(7, "") // the pre-feature literal a hand-written template might embed
+	body := stale + "\ncustom template body"
+	got := ensureMarker(7, "dev-app", body)
+	want := konflateMarker(7, "dev-app")
+	if !strings.Contains(got, want) {
+		t.Fatalf("result missing the current tagged marker: %q", got)
+	}
+	if strings.Contains(got, stale) {
+		t.Errorf("stale untagged marker survived alongside the tagged one, still matchable by an older instance: %q", got)
 	}
 }
 

@@ -400,6 +400,16 @@ tests:
             name: KONFLATE_STATUS_CHECK_NAME
             value: Konflate
 
+  - it: emits KONFLATE_COMMENT_TAG when commentTag is set
+    set:
+      config.commentTag: dev-app
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_COMMENT_TAG
+            value: dev-app
+
   - it: mounts the comment template and points its env at the mount when prCommentTemplate is set
     set:
       config.prCommentTemplate: "hi #{{ .PR.Number }}"
