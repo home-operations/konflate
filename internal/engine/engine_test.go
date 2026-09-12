@@ -28,20 +28,29 @@ func res(kind, ns, name string, extra map[string]any) map[string]any {
 	return m
 }
 
-// The kube version is the one HelmOption konflate sets, and it reaches flate
-// only through renderCfg — an empty config must leave it unset so helm's own
-// bundled capabilities apply.
-func TestRenderCfg_KubeVersion(t *testing.T) {
+// The capability overrides are the only HelmOptions konflate sets, and they
+// reach flate only through renderCfg — an empty config must leave them unset
+// so helm's own bundled capabilities apply.
+func TestRenderCfg_HelmCapabilities(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{Repo: "github://owner/repo"}
-	if got := New(cfg, nil).(*flateEngine).renderCfg().HelmOptions.KubeVersion; got != "" {
-		t.Errorf("unset KubeVersion = %q, want empty", got)
+	opts := New(cfg, nil).(*flateEngine).renderCfg().HelmOptions
+	if opts.KubeVersion != "" {
+		t.Errorf("unset KubeVersion = %q, want empty", opts.KubeVersion)
+	}
+	if opts.APIVersions != "" {
+		t.Errorf("unset APIVersions = %q, want empty", opts.APIVersions)
 	}
 
 	cfg.KubeVersion = "v1.33.4"
-	if got := New(cfg, nil).(*flateEngine).renderCfg().HelmOptions.KubeVersion; got != "v1.33.4" {
-		t.Errorf("KubeVersion = %q, want v1.33.4", got)
+	cfg.HelmAPIVersions = "resource.k8s.io/v1/DeviceClass"
+	opts = New(cfg, nil).(*flateEngine).renderCfg().HelmOptions
+	if opts.KubeVersion != "v1.33.4" {
+		t.Errorf("KubeVersion = %q, want v1.33.4", opts.KubeVersion)
+	}
+	if opts.APIVersions != "resource.k8s.io/v1/DeviceClass" {
+		t.Errorf("APIVersions = %q, want resource.k8s.io/v1/DeviceClass", opts.APIVersions)
 	}
 }
 

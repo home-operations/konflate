@@ -279,6 +279,37 @@ tests:
             name: KONFLATE_KUBE_VERSION
             value: "v1.33.0"
 
+  - it: omits KONFLATE_HELM_API_VERSIONS when helmApiVersions is empty (helm's built-in set)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: KONFLATE_HELM_API_VERSIONS
+
+  - it: emits a literal KONFLATE_HELM_API_VERSIONS when helmApiVersions is set
+    set:
+      config.helmApiVersions: "resource.k8s.io/v1/DeviceClass"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_HELM_API_VERSIONS
+            value: "resource.k8s.io/v1/DeviceClass"
+
+  - it: resolves a templated helmApiVersions against the release's capabilities
+    capabilities:
+      apiVersions:
+        - resource.k8s.io/v1/DeviceClass
+    set:
+      config.helmApiVersions: '{{ join "," .Capabilities.APIVersions }}'
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KONFLATE_HELM_API_VERSIONS
+            value: "resource.k8s.io/v1/DeviceClass"
+
   - it: emits KONFLATE_CACHE_TTL when cacheTtl is set
     set:
       config.cacheTtl: 24h
