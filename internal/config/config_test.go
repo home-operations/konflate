@@ -489,6 +489,31 @@ func TestLoad_KubeVersion(t *testing.T) {
 	}
 }
 
+func TestLoad_HelmAPIVersions(t *testing.T) {
+	t.Setenv("KONFLATE_REPO", "github://owner/repo")
+
+	// Unset: empty, so flate leaves helm's built-in API version set alone.
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.HelmAPIVersions != "" {
+		t.Errorf("unset HelmAPIVersions = %q, want empty", cfg.HelmAPIVersions)
+	}
+
+	// Passed through verbatim: flate splits the list, and helm treats the
+	// entries as opaque strings, so there is nothing to validate here.
+	const v = "resource.k8s.io/v1/DeviceClass,monitoring.coreos.com/v1"
+	t.Setenv("KONFLATE_HELM_API_VERSIONS", v)
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load with KONFLATE_HELM_API_VERSIONS=%q: %v", v, err)
+	}
+	if cfg.HelmAPIVersions != v {
+		t.Errorf("HelmAPIVersions = %q, want %q", cfg.HelmAPIVersions, v)
+	}
+}
+
 func TestLoad_UnsetsSecrets(t *testing.T) {
 	// Secrets load into the Config, then are removed from the process
 	// environment (the `,unset` tag) so a later in-process env dump can't leak

@@ -307,6 +307,16 @@ type Config struct {
 	// ("v1.33.4", suffixes and all) straight through; validated at startup.
 	KubeVersion string `env:"KONFLATE_KUBE_VERSION"`
 
+	// HelmAPIVersions adds API versions to .Capabilities.APIVersions for every
+	// Helm chart a render templates, comma-separated (e.g.
+	// "resource.k8s.io/v1/DeviceClass"). helm appends these to its built-in
+	// set, so list only what the target cluster serves beyond the core APIs. A
+	// chart gated on a CRD or feature-gated API (.Capabilities.APIVersions.Has)
+	// otherwise fails or renders differently here than in-cluster, since
+	// konflate templates offline with no API server to discover them from.
+	// Empty (the default) leaves helm's built-in set alone.
+	HelmAPIVersions string `env:"KONFLATE_HELM_API_VERSIONS"`
+
 	// HelmTemplateCacheMB caps flate's in-memory Helm template-output cache —
 	// repeat HelmReleases with identical inputs skip re-templating, the single
 	// largest CPU/allocation cost of a render. In MiB. 0 disables it; a negative
