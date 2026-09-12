@@ -131,5 +131,5 @@ func ensureMarker(number int, tag, body string) string {
 	if strings.Contains(body, marker) {
 		return body
 	}
-	return marker + "\n" + stripAnyMarker(number, body)
+	return marker + "\n" + stripAnyMarker(body)
 }

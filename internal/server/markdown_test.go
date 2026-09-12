@@ -575,13 +575,10 @@ func TestKonflateMarker_TagIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestKonflateMarker_TagNeverBreaksTheHTMLComment guards the injection surface
-// a lossy sanitizer previously had to handle explicitly: CommentTag/
-// StatusCheckName are operator config, not PR content, but a tag containing
-// "-->" could otherwise close the hidden comment early and leak content into
-// the rendered summary — the same class of issue #314 hardened elsewhere in
-// this file for forge-controlled text. Hashing the tag makes this
-// structurally impossible (hex digits can't produce "-->"), which this pins.
+// TestKonflateMarker_TagNeverBreaksTheHTMLComment: CommentTag/StatusCheckName
+// are operator config, not PR content, but a tag containing "-->" would close
+// the hidden comment early and leak into the rendered summary. Hashing the tag
+// makes that structurally impossible (hex digits can't produce "-->").
 func TestKonflateMarker_TagNeverBreaksTheHTMLComment(t *testing.T) {
 	t.Parallel()
 	got := konflateMarker(1, "prod --> <script>alert(1)</script>")
@@ -589,19 +586,7 @@ func TestKonflateMarker_TagNeverBreaksTheHTMLComment(t *testing.T) {
 	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " -->") {
 		t.Fatalf("konflateMarker = %q, want a marker shaped %q...%q", got, want, " -->")
 	}
-	if body := strings.TrimSuffix(strings.TrimPrefix(got, want), " -->"); !hexOnly(body) {
+	if body := strings.TrimSuffix(strings.TrimPrefix(got, want), " -->"); body == "" || !isHex(body) {
 		t.Errorf("embedded tag is not hex-only, HTML-comment-breakout is possible: %q", body)
 	}
-}
-
-func hexOnly(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
-			return false
-		}
-	}
-	return true
 }

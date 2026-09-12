@@ -38,18 +38,17 @@ func konflateMarker(number int, tag string) string {
 	return fmt.Sprintf("<!-- konflate:pr-%d:%s -->", number, hex.EncodeToString(sum[:])[:commentTagHashLen])
 }
 
-// stripAnyMarker removes any konflate marker for number from body — tagged or
-// not, and regardless of which tag. ensureMarker calls this before prepending
-// the current marker so a custom template that already embeds a marker
-// verbatim (the documented contract says a template needn't include one, not
-// that it mustn't — an operator could easily have copied the old
-// "<!-- konflate:pr-{{ .PR.Number }} -->" form from before this feature
-// existed) ends up with exactly one marker: the current, correct one. Left
-// in place, a stale marker would let an older or differently-tagged instance
-// still Contains-match and overwrite this comment during a mixed rollout.
-func stripAnyMarker(number int, body string) string {
-	re := regexp.MustCompile(fmt.Sprintf(`<!-- konflate:pr-%d(?::[0-9a-f]+)? -->\n?`, number))
-	return re.ReplaceAllString(body, "")
+// anyMarkerRe matches a konflate marker for any PR number, tagged or not.
+var anyMarkerRe = regexp.MustCompile(`<!-- konflate:pr-\d+(?::[0-9a-f]+)? -->\n?`)
+
+// stripAnyMarker removes every konflate marker from body, whatever its tag.
+// ensureMarker calls it before prepending the current marker so a custom
+// template that embeds a marker verbatim (the contract says a template needn't
+// include one, not that it mustn't) ends up with exactly one. Left in place, a
+// stale untagged marker would let a differently-configured instance
+// Contains-match and overwrite this comment.
+func stripAnyMarker(body string) string {
+	return anyMarkerRe.ReplaceAllString(body, "")
 }
 
 // summaryMarkdown renders a PR's diff summary as a paste-ready Markdown block for

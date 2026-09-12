@@ -236,12 +236,11 @@ func TestCommentMarkerTag(t *testing.T) {
 	}
 }
 
-// TestLoad_CommentMarkerTag is the regression Greptile caught: Load fills a
-// blank StatusCheckName in with DefaultStatusCheckName before any caller sees
-// it, so a naive "fall back to StatusCheckName" would tag a bare single-instance
-// install's marker on every render — the compatibility break this whole feature
-// is supposed to avoid. Constructing Config directly (as TestCommentMarkerTag
-// does) can't catch this; only the real Load path can.
+// TestLoad_CommentMarkerTag goes through Load because Load fills a blank
+// StatusCheckName in with DefaultStatusCheckName before any caller sees it: a
+// fallback that counted that value as a tag would change a bare single-instance
+// install's marker on upgrade. Constructing Config directly (as
+// TestCommentMarkerTag does) can't catch that.
 func TestLoad_CommentMarkerTag(t *testing.T) {
 	t.Setenv("KONFLATE_REPO", "github://owner/repo")
 
