@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.4](https://github.com/home-operations/konflate/compare/0.6.3...0.6.4) (2026-09-12)
+
+
+### Features
+
+* **config:** add --force-generic-provider fallback for cloud-IAM-provider sources ([#506](https://github.com/home-operations/konflate/issues/506)) ([c315b3b](https://github.com/home-operations/konflate/commit/c315b3b2174655fafc44efed443b4fccc58d77af))
+* **config:** support helm .Capabilities.APIVersions via KONFLATE_HELM_API_VERSIONS ([#519](https://github.com/home-operations/konflate/issues/519)) ([51a91c9](https://github.com/home-operations/konflate/commit/51a91c9933fd51568010e136eae0d60fe40c7744))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v2 (v2.64.0 → v3.0.0) ([#505](https://github.com/home-operations/konflate/issues/505)) ([9b5e3f5](https://github.com/home-operations/konflate/commit/9b5e3f535728d096e5850de2ebc0f729501dcb13))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.0.0 → v3.4.0) ([#512](https://github.com/home-operations/konflate/issues/512)) ([521b3da](https://github.com/home-operations/konflate/commit/521b3daf17747c36777e60f5b0dca27991b1ab62))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.4.0 → v3.6.0) ([#517](https://github.com/home-operations/konflate/issues/517)) ([24e506f](https://github.com/home-operations/konflate/commit/24e506f76e4bdd34a4e2160dc2e180f492137bd6))
+* **go:** update module golang.org/x/sync (v0.22.0 → v0.23.0) ([#508](https://github.com/home-operations/konflate/issues/508)) ([f22847a](https://github.com/home-operations/konflate/commit/f22847aa6182769c1065327a0c4821246d7fe3a2))
+* **go:** update module helm.sh/helm/v4 (v4.2.4 → v4.3.0) ([#514](https://github.com/home-operations/konflate/issues/514)) ([21d6773](https://github.com/home-operations/konflate/commit/21d67734384775553e9de917cfe9bee8169a0122))
+* **npm:** update dependency vite (8.2.2 → 8.3.0) ([#516](https://github.com/home-operations/konflate/issues/516)) ([19f2a9c](https://github.com/home-operations/konflate/commit/19f2a9cf49f21087728c4d13b37a49ecf32862e1))
+
+
+### Bug Fixes
+
+* **config:** disambiguate PR comment markers across konflate instances ([#511](https://github.com/home-operations/konflate/issues/511)) ([e2669bc](https://github.com/home-operations/konflate/commit/e2669bc1b7409de8d35ad6a3ac6ce0c4a3a05f1b))
+
+
+### Miscellaneous Chores
+
+* **mise:** update tool go:golang.org/x/vuln/cmd/govulncheck (1.7.0 → v1.8.0) ([#509](https://github.com/home-operations/konflate/issues/509)) ([f72943a](https://github.com/home-operations/konflate/commit/f72943a09abc9a7a34aaf922c64f764f0f8b1c63))
+* **mise:** update tool node (24.20.0 → v24.21.0) ([#513](https://github.com/home-operations/konflate/issues/513)) ([15418e0](https://github.com/home-operations/konflate/commit/15418e0f3974686295a29575031a97329b99e438))
+* **mise:** update tool oxfmt (0.66.0 → 0.67.0) ([#515](https://github.com/home-operations/konflate/issues/515)) ([7668c70](https://github.com/home-operations/konflate/commit/7668c7005c513da60ba46c04254262a5c9206401))
+* **mise:** update tool zizmor (1.30.0 → 1.30.1) ([#518](https://github.com/home-operations/konflate/issues/518)) ([89071db](https://github.com/home-operations/konflate/commit/89071db81dc1a9f22da1647a20597fd64d7fb943))
+
 ## [0.6.3](https://github.com/home-operations/konflate/compare/0.6.2...0.6.3) (2026-09-06)
 
 
