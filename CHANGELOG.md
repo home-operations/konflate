@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.5](https://github.com/home-operations/konflate/compare/0.6.4...0.6.5) (2026-09-15)
+
+
+### Features
+
+* **go:** update module github.com/google/go-github/v91 (v91.0.0 → v92.0.0) ([#526](https://github.com/home-operations/konflate/issues/526)) ([1b0bb2c](https://github.com/home-operations/konflate/commit/1b0bb2c345d13b70787bee1288e9216845f78a9b))
+* **go:** update module github.com/modelcontextprotocol/go-sdk (v1.7.0 → v1.8.0) ([#525](https://github.com/home-operations/konflate/issues/525)) ([d9226de](https://github.com/home-operations/konflate/commit/d9226de647b51a6471123ac36009006d695e6829))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.6.0 → v3.8.0) ([#520](https://github.com/home-operations/konflate/issues/520)) ([a3066f8](https://github.com/home-operations/konflate/commit/a3066f8d0a32c6dea34730798e49037f068b86e6))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.8.0 → v3.10.0) ([#524](https://github.com/home-operations/konflate/issues/524)) ([e513225](https://github.com/home-operations/konflate/commit/e5132255e8a777a9adf6533a95e778c3c57b9dd2))
+* **npm:** update dependency simple-icons (16.30.0 → 16.31.0) ([#522](https://github.com/home-operations/konflate/issues/522)) ([b06d96e](https://github.com/home-operations/konflate/commit/b06d96e49af6ab16967c06cdab311bdc507dac41))
+
+
+### Miscellaneous Chores
+
+* **mise:** update tool helm (4.2.4 → 4.3.0) ([#521](https://github.com/home-operations/konflate/issues/521)) ([5b199c1](https://github.com/home-operations/konflate/commit/5b199c194463d449961eedccb7a62e5c87bb1b23))
+
 ## [0.6.4](https://github.com/home-operations/konflate/compare/0.6.3...0.6.4) (2026-09-12)
 
 
