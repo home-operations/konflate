@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.6](https://github.com/home-operations/konflate/compare/0.6.5...0.6.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **go:** update module helm.sh/helm/v4 (v4.3.0 → v4.3.1) ([#582](https://github.com/home-operations/konflate/issues/582)) ([61fad94](https://github.com/home-operations/konflate/commit/61fad94ab0b1a657ba8cd7921a01e3c6df5dd52f))
+* **npm:** update dependency svelte-check (4.7.6 → 4.7.7) ([#584](https://github.com/home-operations/konflate/issues/584)) ([8e06c47](https://github.com/home-operations/konflate/commit/8e06c471e26c3605c10c7e86aa2113bdc98556b3))
+
+
+### Miscellaneous Chores
+
+* **github-action:** update action jdx/mise-action (v5.1.2 → v5.2.0) ([#585](https://github.com/home-operations/konflate/issues/585)) ([920f86a](https://github.com/home-operations/konflate/commit/920f86ac28c32bfbf76bd8f3965e613e9075ba66))
+* **mise:** update mise tools ([#581](https://github.com/home-operations/konflate/issues/581)) ([827a98b](https://github.com/home-operations/konflate/commit/827a98b51b900512328e5052040670466f584385))
+* **mise:** update tool go (1.27.2 → 1.27.3) ([#587](https://github.com/home-operations/konflate/issues/587)) ([f1a582b](https://github.com/home-operations/konflate/commit/f1a582bb46e5b3a8ecd07e892becda2db66064ef))
+* **mise:** update tool golangci-lint (2.14.0 → 2.15.0) ([#586](https://github.com/home-operations/konflate/issues/586)) ([47af9b2](https://github.com/home-operations/konflate/commit/47af9b2543c9935ccee8ed65c1410044b957fd5d))
+* **mise:** update tool node (24.21.0 → v24.22.0) ([#588](https://github.com/home-operations/konflate/issues/588)) ([b693af8](https://github.com/home-operations/konflate/commit/b693af880ac54aec1fcf72a84e9e25acc6070995))
+* **mise:** update tool oxfmt (0.72.0 → 0.73.0) ([#589](https://github.com/home-operations/konflate/issues/589)) ([73d81f4](https://github.com/home-operations/konflate/commit/73d81f4c4f3401c33bb3e2b1e87c665ee226a6ba))
+
 ## [0.6.5](https://github.com/home-operations/konflate/compare/0.6.4...0.6.5) (2026-10-18)
 
 
