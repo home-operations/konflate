@@ -157,7 +157,7 @@ Kubernetes: `>=1.25.0-0`
 | terminationGracePeriodSeconds | int | `30` | Grace period for a clean shutdown. konflate drains in-flight renders and closes the HTTP/websocket servers on SIGTERM (it caps its own shutdown near 15s), so the default is ample; raise it only if you expect longer drains. |
 | tests.image.pullPolicy | string | `"IfNotPresent"` | `helm test` image pull policy. |
 | tests.image.repository | string | `"mirror.gcr.io/curlimages/curl"` | `helm test` connection-pod image; a gcr-mirrored curl, so the test never pulls from Docker Hub. |
-| tests.image.tag | string | `"8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
+| tests.image.tag | string | `"8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac"` | `helm test` image, pinned as `tag@sha256:digest` so Renovate bumps the tag and its digest together. |
 | tls.extraCaCertsConfigMap | string | `""` | ConfigMap whose entries are extra PEM CA certificates to trust. |
 | tls.extraCaCertsSecret | string | `""` | Secret whose entries are extra PEM CA certificates to trust (e.g. a cert-manager CA secret). Combines with the ConfigMap when both are set. |
 | tolerations | list | `[]` | Tolerations for pod scheduling. |
