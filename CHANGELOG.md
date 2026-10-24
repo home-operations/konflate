@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.7](https://github.com/home-operations/konflate/compare/0.6.6...0.6.7) (2026-10-24)
+
+
+### Features
+
+* **container:** update image mirror.gcr.io/curlimages/curl (8.22.0 → 8.23.0) ([#592](https://github.com/home-operations/konflate/issues/592)) ([eb0d38e](https://github.com/home-operations/konflate/commit/eb0d38ec2835e777c62c0585f3b082612c75a842))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.15.0 → v3.29.0) ([#593](https://github.com/home-operations/konflate/issues/593)) ([f59a5a6](https://github.com/home-operations/konflate/commit/f59a5a64e7a61dd8b56fa237c0a24a199ff48e20))
+* **go:** update module gitlab.com/gitlab-org/api/client-go/v3 (v3.29.0 → v3.30.0) ([#601](https://github.com/home-operations/konflate/issues/601)) ([2569aa8](https://github.com/home-operations/konflate/commit/2569aa88f5caa70caf5a39e608822e2eb09dc511))
+* **npm:** update dependency @playwright/test (1.63.0 → 1.64.1) ([#594](https://github.com/home-operations/konflate/issues/594)) ([ff206fe](https://github.com/home-operations/konflate/commit/ff206fe7343c98fde3f57d2a281c7567753c0441))
+* **npm:** update dependency simple-icons (16.34.0 → 16.35.0) ([#598](https://github.com/home-operations/konflate/issues/598)) ([d709df9](https://github.com/home-operations/konflate/commit/d709df943a84663437fd49987a7155d699c7a384))
+
+
+### Miscellaneous Chores
+
+* **github-action:** update action jdx/mise-action (v5.2.1 → v5.2.2) ([#602](https://github.com/home-operations/konflate/issues/602)) ([a87c2bc](https://github.com/home-operations/konflate/commit/a87c2bc2c419ccb4f1e6485e2b21bd303a152c0c))
+* **github-action:** update github-actions ([#595](https://github.com/home-operations/konflate/issues/595)) ([1c46037](https://github.com/home-operations/konflate/commit/1c460377b8451aaa3f31ffd18cb2f8d5254c6e03))
+* **mise:** update tool aqua:dadav/helm-schema (0.23.5 → 0.24.0) ([#590](https://github.com/home-operations/konflate/issues/590)) ([13b5ec0](https://github.com/home-operations/konflate/commit/13b5ec0d9ff2f0388f783160165a348d3932c9c6))
+* **mise:** update tool cosign (3.1.3 → 3.1.4) ([#599](https://github.com/home-operations/konflate/issues/599)) ([74bc61e](https://github.com/home-operations/konflate/commit/74bc61ebba358712dea53892ea667dc7ac6bcc74))
+* **mise:** update tool node (24.22.0 → v24.22.1) ([#597](https://github.com/home-operations/konflate/issues/597)) ([6ce6a79](https://github.com/home-operations/konflate/commit/6ce6a794be0893ee5b115e8ed874750dda520407))
+* **mise:** update tool oxfmt (0.73.0 → 0.74.0) ([#596](https://github.com/home-operations/konflate/issues/596)) ([1cd679a](https://github.com/home-operations/konflate/commit/1cd679a0efcece1ee9ed0aa7964cc98c3b942cad))
+
 ## [0.6.6](https://github.com/home-operations/konflate/compare/0.6.5...0.6.6) (2026-10-21)
 
 
