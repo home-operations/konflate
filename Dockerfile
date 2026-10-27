@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ARGs used in a FROM must live in the global scope (before the first FROM).
-# Both versions are supplied by the release workflow from mise — the single
+# All versions are supplied by the release workflow from mise — the single
 # source of truth for the toolchain (see docs/adr/0001 and .mise/config.toml).
 ARG NODE_VERSION
 ARG GO_VERSION
@@ -10,12 +10,19 @@ ARG GO_VERSION
 # Build the frontend bundles so the Go stage can go:embed them. The runtime
 # image does not include node.
 FROM node:${NODE_VERSION}-alpine AS ui
+# The Node image ships no pnpm, and its npm package's install script only
+# swaps the wrappers that run it through Node for its native binary, so it is
+# installed without scripts.
+ARG PNPM_VERSION
+RUN npm install --global --ignore-scripts "pnpm@${PNPM_VERSION:?PNPM_VERSION is required}"
 WORKDIR /ui
-# Install deps against the lockfile first for layer caching.
-COPY internal/web/package.json internal/web/package-lock.json ./
-RUN npm ci
+# Install deps against the lockfile first for layer caching. The wildcard
+# takes pnpm-workspace.yaml too once it exists: its allowBuilds and
+# minimumReleaseAgeExclude decide whether the install passes.
+COPY internal/web/package.json internal/web/pnpm-*.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY internal/web/ ./
-RUN npm run build
+RUN pnpm run build
 
 # ---- Go build -------------------------------------------------------------
 FROM golang:${GO_VERSION}-alpine AS builder
