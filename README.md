@@ -617,14 +617,14 @@ Plus the standard Go runtime and process collectors.
 ## Development
 
 [mise](https://mise.jdx.dev) is the single source of truth for the toolchain —
-both the `go` and `node` versions are pinned in `.mise/config.toml`, shared with
-`go.mod` and the container build, and grouped (non-automerged) in Renovate — and
+the `go`, `node`, and `pnpm` versions are pinned in `.mise/config.toml`, shared
+with `go.mod` and the container build, and grouped (non-automerged) in Renovate — and
 it is the task runner. The UI is [Svelte 5](https://svelte.dev) + Vite +
 Tailwind v4 (all latest), built into `internal/web/dist` and embedded via
 `go:embed`. All UI dependencies are declared in `internal/web/package.json`.
 
 ```bash
-mise run ui-install     # install UI deps (npm ci)
+mise run ui-install     # install UI deps (pnpm install --frozen-lockfile)
 mise run ui-typecheck   # svelte-check
 mise run ui-build       # build the UI bundles into internal/web/dist
 mise run ui-test        # Playwright headless-Chromium UI tests

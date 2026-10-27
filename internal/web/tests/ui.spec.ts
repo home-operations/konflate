@@ -1506,6 +1506,9 @@ test('] review navigation walks the on-screen sorted list, not raw server order'
   // *visible* PR (131), never 138 (which is next only in the raw server order).
   await page.locator('.card-shell[data-pr="142"]').click();
   await expect(page).toHaveURL(/#\/pr\/142$/);
+  // The URL flips before the hashchange event updates the route, and ] is a
+  // no-op on the list route; the Summary panel proves the review is mounted.
+  await expect(page.locator('.impact')).toBeVisible();
   await page.keyboard.press(']');
   await expect(page).toHaveURL(/#\/pr\/131$/);
 });
