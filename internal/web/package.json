@@ -21,7 +21,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "simple-icons": "^16.36.0",
-    "svelte": "^5.57.2",
+    "svelte": "^5.57.3",
     "svelte-check": "^4.7.7",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
