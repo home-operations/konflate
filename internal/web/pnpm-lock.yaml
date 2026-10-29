@@ -28,7 +28,7 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.5(jiti@2.7.0))
       simple-icons:
-        specifier: ^16.35.0
+        specifier: ^16.36.0
         version: 16.36.0
       svelte:
         specifier: ^5.57.2
