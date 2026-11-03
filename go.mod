@@ -8,7 +8,7 @@ require (
 	github.com/KimMachineGun/automemlimit v1.0.1
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/caarlos0/env/v11 v11.4.1
+	github.com/caarlos0/env/v11 v11.4.2
 	github.com/coder/websocket v1.8.15
 	github.com/distribution/reference v0.6.0
 	github.com/go-git/go-git/v5 v5.19.3
