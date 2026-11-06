@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
