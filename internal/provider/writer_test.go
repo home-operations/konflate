@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 	"github.com/golang-jwt/jwt/v5"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 

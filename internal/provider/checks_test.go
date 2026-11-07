@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/home-operations/konflate/internal/api"
