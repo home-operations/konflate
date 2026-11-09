@@ -28,8 +28,8 @@ importers:
         specifier: ^4.3.5
         version: 4.3.5(vite@8.3.6(jiti@2.7.0))
       simple-icons:
-        specifier: ^16.36.0
-        version: 16.36.0
+        specifier: ^16.37.0
+        version: 16.37.0
       svelte:
         specifier: ^5.57.3
         version: 5.57.3
@@ -493,8 +493,8 @@ packages:
     resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
     engines: {node: '>=6'}
 
-  simple-icons@16.36.0:
-    resolution: {integrity: sha512-+VNPPkqSOLidFeSgBKUWX4n50WPpDC09hav+BgS26anIF1oQOlGBb8LvwGR+6fYRjo+B6CiKzNBceMPkSVXANQ==}
+  simple-icons@16.37.0:
+    resolution: {integrity: sha512-8mCJIhpMYOL9g13GW59EiL3sVXJnTEKGCTZFaekl9UQ3Qo0SwVjnLaJ82QiaH8BKBdouEDzrHMXIWh8cBIy48A==}
     engines: {node: '>=0.12.18'}
 
   source-map-js@1.2.2:
@@ -900,7 +900,7 @@ snapshots:
     dependencies:
       mri: 1.2.0
 
-  simple-icons@16.36.0: {}
+  simple-icons@16.37.0: {}
 
   source-map-js@1.2.2: {}
 
