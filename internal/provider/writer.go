@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-github/v93/github"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
@@ -634,31 +634,26 @@ func (w *forgejoWriter) UpsertComment(ctx context.Context, pr api.PR, marker, bo
 	if err != nil {
 		return fmt.Errorf("forgejo: %w", err)
 	}
-	// The Forgejo SDK can't take a context (see provider ListPRs).
+	// The Forgejo SDK methods take no per-call context (see provider ListPRs).
+	// Forgejo's per-issue comment endpoint is not paginated — it returns every
+	// comment on the issue in one response — so the SDK takes no page options.
 	idx := int64(pr.Number)
-	opts := forgejo.ListIssueCommentOptions{PageSize: 50}
-	for {
-		comments, resp, err := w.client.ListIssueComments(w.owner, w.repo, idx, opts)
-		if err != nil {
-			return fmt.Errorf("forgejo: list comments #%d: %w", pr.Number, err)
-		}
-		for _, c := range comments {
-			// Match konflate's own comment (author + marker), not just the public marker.
-			if c.Poster != nil && c.Poster.UserName == self && strings.Contains(c.Body, marker) {
-				if strings.TrimSpace(c.Body) == strings.TrimSpace(body) {
-					return nil // unchanged — skip the no-op edit
-				}
-				_, _, err = w.client.EditIssueComment(w.owner, w.repo, c.ID, forgejo.EditIssueCommentOption{Body: body})
-				if err != nil {
-					return fmt.Errorf("forgejo: edit comment #%d: %w", pr.Number, err)
-				}
-				return nil
+	comments, _, err := w.client.ListIssueComments(w.owner, w.repo, idx, forgejo.ListIssueCommentOptions{})
+	if err != nil {
+		return fmt.Errorf("forgejo: list comments #%d: %w", pr.Number, err)
+	}
+	for _, c := range comments {
+		// Match konflate's own comment (author + marker), not just the public marker.
+		if c.Poster != nil && c.Poster.UserName == self && strings.Contains(c.Body, marker) {
+			if strings.TrimSpace(c.Body) == strings.TrimSpace(body) {
+				return nil // unchanged — skip the no-op edit
 			}
+			_, _, err = w.client.EditIssueComment(w.owner, w.repo, c.ID, forgejo.EditIssueCommentOption{Body: body})
+			if err != nil {
+				return fmt.Errorf("forgejo: edit comment #%d: %w", pr.Number, err)
+			}
+			return nil
 		}
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
 	}
 	if _, _, err := w.client.CreateIssueComment(w.owner, w.repo, idx, forgejo.CreateIssueCommentOption{Body: body}); err != nil {
 		return fmt.Errorf("forgejo: create comment #%d: %w", pr.Number, err)

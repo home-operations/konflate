@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
@@ -155,6 +155,7 @@ func forgejoToPR(pr *forgejo.PullRequest) api.PR {
 		State:        string(pr.State),
 		Open:         string(pr.State) == stateOpen,
 		Merged:       pr.HasMerged,
+		Draft:        pr.Draft,
 		Labels:       labels,
 		URL:          pr.HTMLURL,
 	}

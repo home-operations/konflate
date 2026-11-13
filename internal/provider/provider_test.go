@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/home-operations/konflate/internal/api"
@@ -258,5 +260,37 @@ func TestRateLimit(t *testing.T) {
 
 	if _, ok := RateLimit(errors.New("connection refused")); ok {
 		t.Error("RateLimit(plain error) ok = true; want false")
+	}
+}
+
+// TestForgejoToPR covers the Forgejo mapping, including the draft flag the v4
+// SDK exposes (the v3 SDK had no field for it, so Forgejo PRs never read as
+// drafts) and the cross-repo detection by repository id.
+func TestForgejoToPR(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	got := forgejoToPR(&forgejo.PullRequest{
+		Index:     7,
+		Title:     "feat: add widget",
+		State:     forgejo.StateOpen,
+		Draft:     true,
+		HTMLURL:   "https://codeberg.org/acme/web/pulls/7",
+		Created:   &created,
+		Poster:    &forgejo.User{UserName: "octocat", AvatarURL: "https://avatars.example/u/octocat.png"},
+		Labels:    []*forgejo.Label{{Name: "enhancement", Color: "a2eeef"}},
+		Head:      &forgejo.PRBranchInfo{Ref: "feat/widget", Sha: "deadbeefcafe", RepoID: 2},
+		Base:      &forgejo.PRBranchInfo{Ref: "main", RepoID: 1},
+		HasMerged: false,
+	})
+	want := api.PR{
+		Number: 7, Title: "feat: add widget", Author: "octocat",
+		AuthorAvatar: "https://avatars.example/u/octocat.png", CreatedAt: created,
+		State: "open", Open: true, Draft: true, Fork: true,
+		Labels:  []api.Label{{Name: "enhancement", Color: "a2eeef"}},
+		URL:     "https://codeberg.org/acme/web/pulls/7",
+		HeadRef: "feat/widget", HeadSHA: "deadbeefcafe", BaseRef: "main",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("forgejoToPR mismatch:\n got %+v\nwant %+v", got, want)
 	}
 }
