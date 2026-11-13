@@ -198,7 +198,11 @@ Above the PR list, a row of pills summarises the open set and doubles as a one-c
 
 A konflate instance tracks **one repository and renders one cluster** — the Flux
 entry point at `KONFLATE_CLUSTER_PATH` (the repo root by default). It has no
-built-in notion of several clusters living in one repo.
+built-in notion of several clusters living in one repo. When the entry point
+holds more than one cluster (a repo root with several `clusters/<name>`
+entrypoints), every render fails with an error that lists the clusters flate
+found and asks for `KONFLATE_CLUSTER_PATH` to name one of them. Same-named
+Flux objects from different clusters are never merged into one diff.
 
 So for a monorepo that holds more than one cluster, run **one konflate per
 cluster** and scope each with the PR filter (and, for a folder-per-cluster
