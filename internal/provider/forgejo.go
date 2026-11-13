@@ -155,6 +155,7 @@ func forgejoToPR(pr *forgejo.PullRequest) api.PR {
 		State:        string(pr.State),
 		Open:         string(pr.State) == stateOpen,
 		Merged:       pr.HasMerged,
+		Draft:        pr.Draft,
 		Labels:       labels,
 		URL:          pr.HTMLURL,
 	}
