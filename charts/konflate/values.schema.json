@@ -24,7 +24,7 @@
         },
         "cacheTtl": {
           "default": "",
-          "description": "Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); \"0\" disables the sweep.",
+          "description": "Advanced: prune source-cache entries unused longer than this (Go duration). Empty = default (168h/7d); \"0\" disables the sweep.",
           "title": "cacheTtl",
           "type": "string"
         },
@@ -72,28 +72,10 @@
           "title": "fetchTimeout",
           "type": "string"
         },
-        "forceGenericProvider": {
-          "default": "",
-          "description": "Route a `spec.provider` source (GitRepository/OCIRepository/Bucket set to `gcp`/`aws`/`azure` for cloud IAM auth in the live cluster) through flate's generic SecretRef/`--registry-config` credential path instead of failing — flate can't perform cloud IAM auth offline. Empty = the opposite of `renderForkPrs` (on unless rendering untrusted forks, since this makes flate authenticate with a real credential against whatever host a PR's manifest names). `\"true\"` enables it outright; `\"false\"` disables it even when not rendering forks.",
-          "title": "forceGenericProvider",
-          "type": "string"
-        },
         "helmApiVersions": {
           "default": "",
           "description": "Extra API versions charts see in `.Capabilities.APIVersions`, comma-separated (e.g. `\"resource.k8s.io/v1/DeviceClass\"`). Appended to helm's built-in set, so list only what the target cluster serves beyond the core APIs: a chart gated on a CRD or feature-gated API (`.Capabilities.APIVersions.Has`) otherwise fails or renders differently than in-cluster, since konflate templates offline. Set `\"{{ join \\\",\\\" .Capabilities.APIVersions }}\"` to track the cluster this release installs into (only correct when it is also the deploy target).",
           "title": "helmApiVersions",
-          "type": "string"
-        },
-        "helmRenderCacheMb": {
-          "default": "",
-          "description": "Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); \"0\" disables.",
-          "title": "helmRenderCacheMb",
-          "type": "string"
-        },
-        "helmTemplateCacheMb": {
-          "default": "",
-          "description": "Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); \"0\" disables.",
-          "title": "helmTemplateCacheMb",
           "type": "string"
         },
         "imageVerifyTimeout": {

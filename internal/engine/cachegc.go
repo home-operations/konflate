@@ -8,23 +8,22 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/home-operations/flate/pkg/source"
-	"github.com/home-operations/flate/pkg/source/cacheroot"
+	sourcecache "github.com/home-operations/flate/pkg/source/cache"
 )
 
-// RunCacheGC prunes flate's on-disk source cache under cacheDir, removing entries
-// (fetched Helm charts, OCI layers, git sources) whose mtime is older than ttl.
-// Without it the cache only grows — every distinct source any PR ever rendered
-// persists on the operator-mounted volume. Bare git mirrors are preserved
-// (re-hydrating one is an expensive full clone). It sweeps once immediately and
-// then on a cadence, blocking until ctx is cancelled; ttl <= 0 disables the
-// recurring GC (an empty cacheDir disables everything). Independent of ttl, a
-// one-time pass removes the legacy stage cache flate <= 0.3.3 left behind —
-// see removeLegacyStageCache.
+// RunCacheGC prunes flate's on-disk source cache under cacheDir, retiring
+// entries (fetched Helm charts, OCI layers, git sources) unused for longer than
+// ttl and collecting the blobs nothing references any more. Without it the
+// cache only grows — every distinct source any PR ever rendered persists on the
+// operator-mounted volume. It sweeps once immediately and then on a cadence,
+// blocking until ctx is cancelled; ttl <= 0 disables the recurring GC (an empty
+// cacheDir disables everything). Independent of ttl, a one-time pass removes the
+// cache layouts earlier flate versions left behind — see removeLegacyCacheLayout.
 //
-// The sweep is safe to run alongside live renders: flate's source.Sweep holds an
-// exclusive GC lock that the cache's writers cooperate with, so a freshly
-// referenced blob is never purged mid-fetch.
+// A sweep needs the store's exclusive lock, which a diff in flight holds for
+// the duration of its render (see renderCfg). A sweep that finds the store busy
+// fails fast with "store is busy" and is retried on the next tick; a render
+// that starts mid-sweep waits for the lock instead.
 func RunCacheGC(ctx context.Context, cacheDir string, ttl time.Duration, log *slog.Logger) {
 	if log == nil {
 		log = slog.Default()
@@ -33,44 +32,52 @@ func RunCacheGC(ctx context.Context, cacheDir string, ttl time.Duration, log *sl
 		return
 	}
 	// One-time migration, independent of the GC ttl: even with GC disabled the
-	// legacy stage tree is dead weight nothing else will ever reclaim.
-	removeLegacyStageCache(cacheDir, log)
+	// retired trees are dead weight nothing else will ever reclaim.
+	removeLegacyCacheLayout(cacheDir, log)
 	if ttl <= 0 {
 		return
 	}
-	layout := cacheroot.New(cacheDir)
 	sweepCacheGC(ctx, func() {
-		res, err := source.Sweep(layout, source.SweepOpts{MaxAge: ttl})
+		res, err := sourcecache.Sweep(ctx, cacheDir, sourcecache.SweepOpts{MaxAge: ttl})
 		logSweep(log, res, err)
 	}, cacheGCInterval(ttl))
 }
 
-// removeLegacyStageCache deletes the on-disk kustomize stage cache that flate
-// <= 0.3.3 kept at <cacheDir>/stage. flate 0.3.4 renders stages in memory and
-// its Sweep no longer knows the directory exists, so on a persistent cache
-// volume the pre-upgrade tree (up to the old size cap, 2 GiB by default) would
-// otherwise sit there forever. Size accounting is best-effort — the log line
-// is informational; removal proceeds regardless.
-func removeLegacyStageCache(cacheDir string, log *slog.Logger) {
-	stageDir := filepath.Join(cacheDir, "stage")
-	if _, err := os.Stat(stageDir); err != nil {
-		return // absent (the common case after the first run) or unreadable
-	}
-	var bytes int64
-	_ = filepath.WalkDir(stageDir, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil //nolint:nilerr // best-effort accounting
+// legacyCacheDirs are the top-level trees earlier flate versions kept under the
+// cache root and the current Sweep no longer knows about: the kustomize stage
+// cache of flate <= 0.3.3, and the per-kind layout of flate <= 0.6 (fetched
+// sources, baselines, content-addressed blobs and refs, bare git mirrors, Helm
+// scratch space, and the persisted Helm render cache). flate >= 0.7 keeps
+// everything under one `oci` store, so on a persistent cache volume these
+// trees would otherwise sit beside it forever. konflate's own `repos` subtree
+// (mirrors and diff state) is not flate's and stays.
+var legacyCacheDirs = [...]string{"stage", "sources", "baselines", "blobs", "refs", "git-mirrors", "helm-tmp", "render"}
+
+// removeLegacyCacheLayout deletes the legacyCacheDirs present under cacheDir.
+// Size accounting is best-effort — the log line is informational; removal
+// proceeds regardless.
+func removeLegacyCacheLayout(cacheDir string, log *slog.Logger) {
+	for _, name := range legacyCacheDirs {
+		dir := filepath.Join(cacheDir, name)
+		if _, err := os.Stat(dir); err != nil {
+			continue // absent (the common case after the first run) or unreadable
 		}
-		if info, ierr := d.Info(); ierr == nil {
-			bytes += info.Size()
+		var bytes int64
+		_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil //nolint:nilerr // best-effort accounting
+			}
+			if info, ierr := d.Info(); ierr == nil {
+				bytes += info.Size()
+			}
+			return nil
+		})
+		if err := os.RemoveAll(dir); err != nil {
+			log.Warn("removing legacy cache tree failed", "dir", dir, "error", err)
+			continue
 		}
-		return nil
-	})
-	if err := os.RemoveAll(stageDir); err != nil {
-		log.Warn("removing legacy stage cache failed", "dir", stageDir, "error", err)
-		return
+		log.Info("removed legacy cache tree left by an earlier flate", "dir", dir, "bytes", bytes)
 	}
-	log.Info("removed legacy stage cache left by flate <= 0.3.3", "dir", stageDir, "bytes", bytes)
 }
 
 // sweepCacheGC is the testable core of RunCacheGC. It runs sweep once immediately
@@ -95,7 +102,7 @@ func sweepCacheGC(ctx context.Context, sweep func(), interval time.Duration) {
 // surfaced even when nothing was removed — otherwise a chronically failing GC
 // (e.g. a permissions error on the cache volume) stays silent while the cache
 // grows toward a full disk.
-func logSweep(log *slog.Logger, res source.SweepResult, err error) {
+func logSweep(log *slog.Logger, res sourcecache.SweepResult, err error) {
 	switch {
 	case err != nil:
 		log.Warn("source cache gc failed", "error", err)

@@ -105,8 +105,6 @@ config:
   renderForkPrs: false
   # -- Override flate's SSRF egress guard on source fetches (it blocks dials to private / loopback / link-local / cloud-metadata addresses and rejects non-https/ssh git schemes). Empty = follow `renderForkPrs` (on while rendering untrusted forks, off otherwise). `"true"` guards every render; `"false"` permits private-network sources (e.g. an internal Gitea / OCI registry) even while rendering forks.
   restrictEgress: ""
-  # -- Route a `spec.provider` source (GitRepository/OCIRepository/Bucket set to `gcp`/`aws`/`azure` for cloud IAM auth in the live cluster) through flate's generic SecretRef/`--registry-config` credential path instead of failing — flate can't perform cloud IAM auth offline. Empty = the opposite of `renderForkPrs` (on unless rendering untrusted forks, since this makes flate authenticate with a real credential against whatever host a PR's manifest names). `"true"` enables it outright; `"false"` disables it even when not rendering forks.
-  forceGenericProvider: ""
   # -- Serve a read-only [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` so an AI agent can query konflate's rendered-diff analysis (open PRs + their summaries). Read-only — the same data as the API, triggering no render or write. Off by default (it's a new surface); secure it at your ingress if you expose it.
   mcp: false
   # -- Verify that each container image a PR newly references exists in its registry (a HEAD on the tag/digest), raising a caution for any that is absent — catching a typo'd or not-yet-pushed image before it ImagePullBackOffs in-cluster. Off by default. Only trusted (non-fork) PRs are checked: a fork's images are attacker-chosen (an SSRF vector). For private registries, mount a dockerconfigjson and point `DOCKER_CONFIG` at it via `config.extraEnv` + `volumes`/`volumeMounts` (go-containerregistry's keychain, host-scoped); konflate never reads a manifest's `imagePullSecrets`.
@@ -120,17 +118,13 @@ config:
   # -- Extra API versions charts see in `.Capabilities.APIVersions`, comma-separated (e.g. `"resource.k8s.io/v1/DeviceClass"`). Appended to helm's built-in set, so list only what the target cluster serves beyond the core APIs: a chart gated on a CRD or feature-gated API (`.Capabilities.APIVersions.Has`) otherwise fails or renders differently than in-cluster, since konflate templates offline. Set `"{{ join \",\" .Capabilities.APIVersions }}"` to track the cluster this release installs into (only correct when it is also the deploy target).
   helmApiVersions: ""
   # --- flate render tuning (advanced) ---------------------------------------
-  # Caps for flate's caches plus its fetch behavior. The defaults (shown) match
-  # flate's own CLI and suit most setups — leave these empty to use them. The
-  # disk caches live under the persisted cache volume (see `persistence`), so
-  # sizing that volume matters as much as these caps. Quote values; use "0" to
-  # disable a cache.
+  # flate's source-cache retention plus its fetch behavior. The defaults (shown)
+  # match flate's own CLI and suit most setups — leave these empty to use them.
+  # The source cache lives under the persisted cache volume (see
+  # `persistence`), so sizing that volume matters as much as the retention.
+  # Quote values; use "0" to disable the sweep.
 
-  # -- Advanced: in-memory Helm template cache in MiB (the biggest CPU saver). Empty = auto (256 ÷ render concurrency, so it doesn't scale with the CPU limit); "0" disables.
-  helmTemplateCacheMb: ""
-  # -- Advanced: persistent on-disk Helm render cache in MiB, reused across renders/PRs/restarts. Empty = default (1024); "0" disables.
-  helmRenderCacheMb: ""
-  # -- Advanced: prune source-cache entries unused longer than this (Go duration); bare git mirrors are kept. Empty = default (168h/7d); "0" disables the sweep.
+  # -- Advanced: prune source-cache entries unused longer than this (Go duration). Empty = default (168h/7d); "0" disables the sweep.
   cacheTtl: ""
   # -- Advanced: tries per source fetch on transient network errors. Empty = default (3); "1" disables retry.
   sourceRetryAttempts: ""

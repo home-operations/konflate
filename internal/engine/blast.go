@@ -65,8 +65,42 @@ func blastSeeds(
 	return seeds
 }
 
+// dependsOnGraph rebuilds the declared spec.dependsOn graph (dependent → its
+// dependencies) from a rendered tree's store. flate's discovery admits every
+// Kustomization and HelmRelease declared in the tree's files into the store,
+// changed by this PR or not, so the graph covers the declared cluster even
+// though flate renders changed-only; a parent that only exists in another
+// producer's rendered output appears once that producer rendered, as with the
+// graph flate <= 0.6 exposed from the same store. flate resolves a
+// reference's omitted namespace to the dependent's own (Flux's default), and
+// dependsOn is same-kind only (KS→KS, HR→HR per the Flux spec); implicit
+// coupling (healthChecks, shared CRDs, service DNS) is not represented.
+// Nodes with no declared dependencies are omitted. The graph is the declared
+// one verbatim: cycle members and self-edges are retained (flate reports cycles
+// as render failures), so a consumer walking it must tolerate them.
+func dependsOnGraph(st *store.Store) map[manifest.NamedResource][]manifest.NamedResource {
+	out := map[manifest.NamedResource][]manifest.NamedResource{}
+	for _, kind := range [...]manifest.NamedResource{
+		{Group: manifest.FluxKustomizeDomain, Kind: manifest.KindKustomization},
+		{Group: manifest.HelmReleaseDomain, Kind: manifest.KindHelmRelease},
+	} {
+		for _, obj := range st.ListObjects(kind.Group, kind.Kind) {
+			var deps []manifest.NamedResource
+			for ref := range manifest.References(obj, manifest.ReferenceRelations) {
+				if ref.Use == "dependsOn" {
+					deps = append(deps, ref.NamedResource)
+				}
+			}
+			if len(deps) > 0 {
+				out[obj.Named()] = deps
+			}
+		}
+	}
+	return out
+}
+
 // blastRadius ranks seeds by their downstream dependents in the post-merge
-// (head) declared dependsOn graph. dependsOn is head.Result.DependsOn
+// (head) declared dependsOn graph. dependsOn is the head side's dependsOnGraph
 // (dependent → its dependencies, same-kind only). It inverts the graph into a
 // dependents adjacency list, then for each seed counts the direct dependents and
 // the full transitive closure (BFS over reverse edges, cycle-safe via a visited
@@ -134,7 +168,8 @@ func sortByResource(w []api.Warning) {
 // danglingDependsOn flags parents the PR REMOVES (a key in the base render's
 // parent set, absent from the head's) that surviving resources still declare a
 // spec.dependsOn on — a reconciliation those dependents will wedge on after
-// merge. headDependsOn is head.Result.DependsOn (dependent → its dependencies).
+// merge. headDependsOn is the head side's dependsOnGraph (dependent → its
+// dependencies).
 // A dependency that never rendered (a typo / always-missing target) is out of
 // scope — only genuine removals are flagged. One caution per removed-and-still-
 // referenced parent.
