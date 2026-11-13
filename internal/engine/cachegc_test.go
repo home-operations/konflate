@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -85,45 +86,53 @@ func TestLogSweep_SurfacesErrorsWithoutRemovals(t *testing.T) {
 	}
 }
 
-// TestRemoveLegacyStageCache covers the flate 0.3.4 migration: flate <= 0.3.3
-// kept a kustomize stage cache at <cacheDir>/stage that 0.3.4's in-memory
-// rendering (and its Sweep) no longer knows about, so konflate removes it
-// once at startup. The rest of the cache root must be untouched, and a root
-// without the legacy dir is a silent no-op.
-func TestRemoveLegacyStageCache(t *testing.T) {
+// TestRemoveLegacyCacheLayout covers the upgrade migration: the kustomize stage
+// cache of flate <= 0.3.3 and the per-kind layout of flate <= 0.6 are removed
+// once at startup, while flate's current `oci` store, its lock, and konflate's
+// own `repos` subtree are untouched. A root without any legacy tree is a
+// silent no-op.
+func TestRemoveLegacyCacheLayout(t *testing.T) {
 	t.Parallel()
 	log := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	t.Run("removes only the legacy dir", func(t *testing.T) {
+	t.Run("removes only the legacy trees", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		for _, p := range []string{"stage/ab/abcd", "sources/slug/hash", "git-mirrors/repo"} {
+		legacy := []string{"stage/ab/abcd", "sources/slug/hash", "baselines/rev", "blobs/sha256/ab", "refs/x", "git-mirrors/repo", "helm-tmp/t", "render/helm/ab/abcd"}
+		keep := []string{"oci/blobs/sha256", "oci/git/gen", "repos/key/mirror.git", "repos/key/state"}
+		for _, p := range slices.Concat(legacy, keep) {
 			if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.WriteFile(filepath.Join(dir, p, "f"), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err := os.WriteFile(filepath.Join(dir, "stage", "ab", "abcd", "f.yaml"), []byte("x"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "oci.lock"), nil, 0o644); err != nil {
 			t.Fatal(err)
 		}
 
-		removeLegacyStageCache(dir, log)
+		removeLegacyCacheLayout(dir, log)
 
-		if _, err := os.Stat(filepath.Join(dir, "stage")); !os.IsNotExist(err) {
-			t.Errorf("legacy stage dir still present (err=%v)", err)
+		for _, name := range legacyCacheDirs {
+			if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+				t.Errorf("legacy tree %s still present (err=%v)", name, err)
+			}
 		}
-		for _, keep := range []string{"sources/slug/hash", "git-mirrors/repo"} {
-			if _, err := os.Stat(filepath.Join(dir, keep)); err != nil {
-				t.Errorf("sibling cache entry %s was disturbed: %v", keep, err)
+		for _, p := range append(keep, "oci.lock") {
+			if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+				t.Errorf("current cache entry %s was disturbed: %v", p, err)
 			}
 		}
 	})
 
-	t.Run("no-op without the legacy dir", func(t *testing.T) {
+	t.Run("no-op without legacy trees", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		removeLegacyStageCache(dir, log) // must not create or fail anything
-		if _, err := os.Stat(filepath.Join(dir, "stage")); !os.IsNotExist(err) {
-			t.Errorf("no-op run materialized a stage dir (err=%v)", err)
+		removeLegacyCacheLayout(dir, log) // must not create or fail anything
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) != 0 {
+			t.Errorf("no-op run materialized entries %v (err=%v)", entries, err)
 		}
 	})
 }

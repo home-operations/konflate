@@ -254,11 +254,11 @@ type Config struct {
 	StateDir string `env:"-"`
 
 	// CacheTTL bounds how long an unused entry stays in the on-disk source cache
-	// (Helm charts, OCI layers, git sources) before a periodic sweep prunes it.
-	// Without it the cache only grows — every distinct source a PR ever rendered
-	// stays on the (operator-mounted) volume forever. Bare git mirrors are kept
-	// regardless (re-cloning them is expensive). <=0 disables the sweep (cache
-	// grows unbounded; an operator's explicit choice). In Go duration form.
+	// (Helm charts, OCI layers, git sources) before a periodic sweep retires it
+	// and collects the blobs nothing references any more. Without it the cache
+	// only grows — every distinct source a PR ever rendered stays on the
+	// (operator-mounted) volume forever. <=0 disables the sweep (cache grows
+	// unbounded; an operator's explicit choice). In Go duration form.
 	CacheTTL time.Duration `env:"KONFLATE_CACHE_TTL" envDefault:"168h"` // 7d
 
 	// CloneDir is the base directory for ephemeral per-diff PR head/base

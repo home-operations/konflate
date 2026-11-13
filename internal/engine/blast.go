@@ -66,9 +66,12 @@ func blastSeeds(
 }
 
 // dependsOnGraph rebuilds the declared spec.dependsOn graph (dependent → its
-// dependencies) from a rendered tree's store, which holds every Kustomization
-// and HelmRelease the cluster declares — changed by this PR or not, so the
-// graph is complete even though flate renders changed-only. flate resolves a
+// dependencies) from a rendered tree's store. flate's discovery admits every
+// Kustomization and HelmRelease declared in the tree's files into the store,
+// changed by this PR or not, so the graph covers the declared cluster even
+// though flate renders changed-only; a parent that only exists in another
+// producer's rendered output appears once that producer rendered, as with the
+// graph flate <= 0.6 exposed from the same store. flate resolves a
 // reference's omitted namespace to the dependent's own (Flux's default), and
 // dependsOn is same-kind only (KS→KS, HR→HR per the Flux spec); implicit
 // coupling (healthChecks, shared CRDs, service DNS) is not represented.
