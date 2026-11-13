@@ -104,10 +104,6 @@ spec:
             - name: KONFLATE_RESTRICT_EGRESS
               value: {{ .Values.config.restrictEgress | quote }}
             {{- end }}
-            {{- if ne (toString .Values.config.forceGenericProvider) "" }}
-            - name: KONFLATE_FORCE_GENERIC_PROVIDER
-              value: {{ .Values.config.forceGenericProvider | quote }}
-            {{- end }}
             {{- if .Values.config.mcp }}
             - name: KONFLATE_MCP
               value: "true"
@@ -135,19 +131,11 @@ spec:
             - name: KONFLATE_HELM_API_VERSIONS
               value: {{ tpl . $ | quote }}
             {{- end }}
-            {{- /* toString, not `with`: an explicit 0 (disable a cache) must
+            {{- /* toString, not `with`: an explicit 0 (disable the sweep) must
                    still emit — `with` would treat int 0 as empty and drop it,
                    silently reviving the default. Empty string = use the default.
                    toString also lets the value be a bare number or a template;
                    tpl then resolves any `{{ ... }}` against the release. */}}
-            {{- if ne (toString .Values.config.helmTemplateCacheMb) "" }}
-            - name: KONFLATE_HELM_TEMPLATE_CACHE_MB
-              value: {{ tpl (toString .Values.config.helmTemplateCacheMb) $ | quote }}
-            {{- end }}
-            {{- if ne (toString .Values.config.helmRenderCacheMb) "" }}
-            - name: KONFLATE_HELM_RENDER_CACHE_MB
-              value: {{ tpl (toString .Values.config.helmRenderCacheMb) $ | quote }}
-            {{- end }}
             {{- if ne (toString .Values.config.cacheTtl) "" }}
             - name: KONFLATE_CACHE_TTL
               value: {{ tpl (toString .Values.config.cacheTtl) $ | quote }}

@@ -98,12 +98,12 @@ tests:
 
   - it: emits a cache var explicitly set to "0" (disable) rather than dropping it
     set:
-      config.helmTemplateCacheMb: "0"
+      config.cacheTtl: "0"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KONFLATE_HELM_TEMPLATE_CACHE_MB
+            name: KONFLATE_CACHE_TTL
             value: "0"
 
   - it: does not automount the ServiceAccount token

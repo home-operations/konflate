@@ -54,6 +54,63 @@ func TestBlastRadius(t *testing.T) {
 	}
 }
 
+// TestDependsOnGraph covers the rebuild from a rendered tree's store: only
+// parents declaring a dependsOn appear, an omitted dependency namespace
+// resolves to the dependent's own, and the ids carry the Flux group so they
+// join against the parent-keyed render output.
+func TestDependsOnGraph(t *testing.T) {
+	t.Parallel()
+	ksDoc := func(name string, deps ...map[string]any) map[string]any {
+		spec := map[string]any{
+			"interval":  "1h",
+			"path":      "./" + name,
+			"sourceRef": map[string]any{"kind": "GitRepository", "name": "flux-system"},
+		}
+		if len(deps) > 0 {
+			list := make([]any, 0, len(deps))
+			for _, d := range deps {
+				list = append(list, d)
+			}
+			spec["dependsOn"] = list
+		}
+		return map[string]any{
+			"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+			"kind":       "Kustomization",
+			"metadata":   map[string]any{"name": name, "namespace": "flux-system"},
+			"spec":       spec,
+		}
+	}
+	st := store.New()
+	for _, doc := range []map[string]any{
+		ksDoc("infra"),
+		ksDoc("apps", map[string]any{"name": "infra"}),
+		ksDoc("web", map[string]any{"name": "apps"}, map[string]any{"name": "shared", "namespace": "platform"}),
+	} {
+		parsed, err := manifest.ParseDoc(doc, manifest.ParseDocOptions{})
+		if err != nil {
+			t.Fatalf("ParseDoc: %v", err)
+		}
+		st.AddObject(parsed.Object)
+	}
+
+	id := func(ns, name string) manifest.NamedResource {
+		return manifest.NamedResource{Group: manifest.FluxKustomizeDomain, Kind: manifest.KindKustomization, Namespace: ns, Name: name}
+	}
+	want := map[manifest.NamedResource][]manifest.NamedResource{
+		id("flux-system", "apps"): {id("flux-system", "infra")},
+		id("flux-system", "web"):  {id("flux-system", "apps"), id("platform", "shared")},
+	}
+	got := dependsOnGraph(st)
+	if len(got) != len(want) {
+		t.Fatalf("graph = %v, want %v", got, want)
+	}
+	for dependent, deps := range want {
+		if !slices.Equal(got[dependent], deps) {
+			t.Errorf("deps of %v = %v, want %v", dependent, got[dependent], deps)
+		}
+	}
+}
+
 func TestBlastSeeds(t *testing.T) {
 	a, b, f := ks("a"), ks("b"), ks("failed")
 	labelToParent := parentLabels(map[manifest.NamedResource][]map[string]any{a: nil, b: nil, f: nil})

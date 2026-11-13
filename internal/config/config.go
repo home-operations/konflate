@@ -184,19 +184,6 @@ type Config struct {
 	// rendering forks, "true" guards every render. See EgressRestricted.
 	RestrictEgress *bool `env:"KONFLATE_RESTRICT_EGRESS"`
 
-	// ForceGenericProvider routes a non-generic spec.provider source
-	// (GitRepository/OCIRepository/Bucket — provider: gcp/aws/azure, meant for
-	// cloud IAM auth on the live cluster) through flate's generic
-	// SecretRef/--registry-config path instead of failing outright: flate can't
-	// perform cloud IAM auth offline. Unset (nil, the default) ties it to
-	// RenderForkPRs the same way RestrictEgress does, but inverted — turning
-	// this on makes flate authenticate with whatever static credential konflate
-	// has configured against a registry/repo host a PR's manifest names, which
-	// is an SSRF-adjacent credential-use surface for an attacker-chosen fork
-	// source. So it defaults on only when the instance never renders forks;
-	// set it to override either way. See ForceGenericProviderEnabled.
-	ForceGenericProvider *bool `env:"KONFLATE_FORCE_GENERIC_PROVIDER"`
-
 	// PRFilter is the compiled filter — PRFilterExpr, or [DefaultPRFilter] when
 	// that is empty — built in [Load]. A derived field, like Forge; never set it
 	// directly.
@@ -316,20 +303,6 @@ type Config struct {
 	// konflate templates offline with no API server to discover them from.
 	// Empty (the default) leaves helm's built-in set alone.
 	HelmAPIVersions string `env:"KONFLATE_HELM_API_VERSIONS"`
-
-	// HelmTemplateCacheMB caps flate's in-memory Helm template-output cache —
-	// repeat HelmReleases with identical inputs skip re-templating, the single
-	// largest CPU/allocation cost of a render. In MiB. 0 disables it; a negative
-	// value (the default) derives the cap from the render concurrency in Load (see
-	// defaultHelmTemplateCacheMB) so this cache tracks the memory limit, not the
-	// CPU count.
-	HelmTemplateCacheMB int `env:"KONFLATE_HELM_TEMPLATE_CACHE_MB" envDefault:"-1"`
-
-	// HelmRenderCacheMB caps flate's persistent on-disk Helm render cache (under
-	// CacheDir). It is reused across renders, PRs, and restarts: a re-render
-	// whose charts/values are unchanged short-circuits the Helm work entirely.
-	// 0 disables it. In MiB.
-	HelmRenderCacheMB int `env:"KONFLATE_HELM_RENDER_CACHE_MB" envDefault:"1024"`
 
 	// SourceRetryAttempts is the total tries flate makes per source fetch
 	// (Git/OCI/Bucket) before giving up, retrying only transient network
@@ -456,20 +429,6 @@ func (c *Config) EgressRestricted() bool {
 	return c.RenderForkPRs
 }
 
-// ForceGenericProviderEnabled reports whether flate should route a
-// non-generic spec.provider source through its generic credential path (see
-// ForceGenericProvider). Defaults to the opposite of RenderForkPRs — safe
-// to enable by default when the instance never renders forks, off when it
-// does, since a fork's manifests are attacker-chosen and this makes flate
-// authenticate with a real, operator-supplied credential against whatever
-// host they name.
-func (c *Config) ForceGenericProviderEnabled() bool {
-	if c.ForceGenericProvider != nil {
-		return *c.ForceGenericProvider
-	}
-	return !c.RenderForkPRs
-}
-
 // WriteEnabled reports whether konflate has a write-back credential — a write
 // PAT or a GitHub App key. It is the master gate for any forge write: without
 // it konflate stays read-only regardless of the feature toggles.
@@ -587,9 +546,6 @@ func Load() (*Config, error) {
 	if cfg.MaxDiffConcurrency <= 0 {
 		cfg.MaxDiffConcurrency = defaultDiffConcurrency()
 	}
-	if cfg.HelmTemplateCacheMB < 0 {
-		cfg.HelmTemplateCacheMB = defaultHelmTemplateCacheMB(cfg.MaxDiffConcurrency)
-	}
 	// Floor a positive refresh interval so a tiny value can't hot-loop the forge
 	// API (re-listing and re-rendering the whole open set every tick). <=0 is left
 	// as-is: the refresh loop reads it as "disabled" (inbound triggers only).
@@ -654,22 +610,6 @@ const minRefreshInterval = time.Minute
 func defaultDiffConcurrency() int {
 	// clamp(GOMAXPROCS, 1, 4)
 	return max(min(runtime.GOMAXPROCS(0), 4), 1)
-}
-
-// defaultHelmTemplateCacheMB sizes flate's in-memory Helm template cache so its
-// aggregate footprint stays bounded regardless of the CPU limit. flate builds
-// one such cache per orchestrator and runs two per render (base + head), so up
-// to 2*concurrency are live at once; dividing a fixed budget by the concurrency
-// keeps the total near 2*256 MiB instead of letting it scale with GOMAXPROCS.
-// These entries are live LRU references the GC can't reclaim under GOMEMLIMIT,
-// so this is the one render pool that must track the memory limit rather than
-// the CPU count. flate's persistent on-disk render cache (HelmRenderCacheMB)
-// still carries cross-render reuse, so a smaller in-memory L1 costs little for
-// konflate's changed-only renders. concurrency<=1 keeps the original 256 MiB;
-// floored so a high operator-set concurrency can't shrink it to nothing.
-func defaultHelmTemplateCacheMB(concurrency int) int {
-	const baseMB = 256
-	return max(baseMB/max(concurrency, 1), 32)
 }
 
 // xdgCacheHome returns $XDG_CACHE_HOME if set, otherwise ~/.cache (the XDG

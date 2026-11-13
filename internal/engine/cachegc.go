@@ -8,23 +8,22 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/home-operations/flate/pkg/source"
-	"github.com/home-operations/flate/pkg/source/cacheroot"
+	sourcecache "github.com/home-operations/flate/pkg/source/cache"
 )
 
-// RunCacheGC prunes flate's on-disk source cache under cacheDir, removing entries
-// (fetched Helm charts, OCI layers, git sources) whose mtime is older than ttl.
-// Without it the cache only grows — every distinct source any PR ever rendered
-// persists on the operator-mounted volume. Bare git mirrors are preserved
-// (re-hydrating one is an expensive full clone). It sweeps once immediately and
-// then on a cadence, blocking until ctx is cancelled; ttl <= 0 disables the
-// recurring GC (an empty cacheDir disables everything). Independent of ttl, a
-// one-time pass removes the legacy stage cache flate <= 0.3.3 left behind —
-// see removeLegacyStageCache.
+// RunCacheGC prunes flate's on-disk source cache under cacheDir, retiring
+// entries (fetched Helm charts, OCI layers, git sources) unused for longer than
+// ttl and collecting the blobs nothing references any more. Without it the
+// cache only grows — every distinct source any PR ever rendered persists on the
+// operator-mounted volume. It sweeps once immediately and then on a cadence,
+// blocking until ctx is cancelled; ttl <= 0 disables the recurring GC (an empty
+// cacheDir disables everything). Independent of ttl, a one-time pass removes the
+// legacy stage cache flate <= 0.3.3 left behind — see removeLegacyStageCache.
 //
-// The sweep is safe to run alongside live renders: flate's source.Sweep holds an
-// exclusive GC lock that the cache's writers cooperate with, so a freshly
-// referenced blob is never purged mid-fetch.
+// A sweep needs the store's exclusive lock, which a diff in flight holds for
+// the duration of its render (see renderCfg). A sweep that finds the store busy
+// fails fast with "store is busy" and is retried on the next tick; a render
+// that starts mid-sweep waits for the lock instead.
 func RunCacheGC(ctx context.Context, cacheDir string, ttl time.Duration, log *slog.Logger) {
 	if log == nil {
 		log = slog.Default()
@@ -38,9 +37,8 @@ func RunCacheGC(ctx context.Context, cacheDir string, ttl time.Duration, log *sl
 	if ttl <= 0 {
 		return
 	}
-	layout := cacheroot.New(cacheDir)
 	sweepCacheGC(ctx, func() {
-		res, err := source.Sweep(layout, source.SweepOpts{MaxAge: ttl})
+		res, err := sourcecache.Sweep(ctx, cacheDir, sourcecache.SweepOpts{MaxAge: ttl})
 		logSweep(log, res, err)
 	}, cacheGCInterval(ttl))
 }
@@ -95,7 +93,7 @@ func sweepCacheGC(ctx context.Context, sweep func(), interval time.Duration) {
 // surfaced even when nothing was removed — otherwise a chronically failing GC
 // (e.g. a permissions error on the cache volume) stays silent while the cache
 // grows toward a full disk.
-func logSweep(log *slog.Logger, res source.SweepResult, err error) {
+func logSweep(log *slog.Logger, res sourcecache.SweepResult, err error) {
 	switch {
 	case err != nil:
 		log.Warn("source cache gc failed", "error", err)

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/home-operations/flate/pkg/source"
+	sourcecache "github.com/home-operations/flate/pkg/source/cache"
 )
 
 // TestCacheGCInterval pins the sweep cadence: a fraction of the TTL clamped to
@@ -79,7 +79,7 @@ func TestLogSweep_SurfacesErrorsWithoutRemovals(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logSweep(log, source.SweepResult{Errors: []error{errors.New("permission denied")}}, nil)
+	logSweep(log, sourcecache.SweepResult{Errors: []error{errors.New("permission denied")}}, nil)
 	if out := buf.String(); !strings.Contains(out, "completed with errors") {
 		t.Errorf("a sweep with errors but no removals must be logged; got %q", out)
 	}

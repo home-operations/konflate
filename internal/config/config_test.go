@@ -145,66 +145,6 @@ func TestLoad_RestrictEgress(t *testing.T) {
 	}
 }
 
-// TestForceGenericProviderEnabled covers the tri-state ForceGenericProvider
-// override: unset defaults to the opposite of fork rendering (safe to enable
-// when the instance never renders forks, off when it does); an explicit value
-// overrides either way.
-func TestForceGenericProviderEnabled(t *testing.T) {
-	t.Parallel()
-	bptr := func(b bool) *bool { return &b }
-	tests := []struct {
-		name     string
-		fork     bool
-		override *bool
-		want     bool
-	}{
-		{"default: on when not rendering forks", false, nil, true},
-		{"default: off while rendering forks", true, nil, false},
-		{"override on even in fork mode", true, bptr(true), true},
-		{"override off without fork rendering", false, bptr(false), false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			c := &Config{RenderForkPRs: tt.fork, ForceGenericProvider: tt.override}
-			if got := c.ForceGenericProviderEnabled(); got != tt.want {
-				t.Errorf("ForceGenericProviderEnabled() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestLoad_ForceGenericProvider checks the tri-state env parses through Load:
-// unset leaves the override nil (so it follows fork rendering), and an
-// explicit value is honored over fork mode.
-func TestLoad_ForceGenericProvider(t *testing.T) {
-	t.Setenv("KONFLATE_REPO", "github://owner/repo")
-	t.Setenv("KONFLATE_RENDER_FORK_PRS", "true")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load(): %v", err)
-	}
-	if cfg.ForceGenericProvider != nil {
-		t.Errorf("ForceGenericProvider = %v, want nil (env unset)", *cfg.ForceGenericProvider)
-	}
-	if cfg.ForceGenericProviderEnabled() {
-		t.Error("ForceGenericProviderEnabled() = true, want false (unset follows KONFLATE_RENDER_FORK_PRS=true)")
-	}
-
-	t.Setenv("KONFLATE_FORCE_GENERIC_PROVIDER", "true")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load() with override: %v", err)
-	}
-	if cfg.ForceGenericProvider == nil || !*cfg.ForceGenericProvider {
-		t.Errorf("ForceGenericProvider = %v, want explicit true", cfg.ForceGenericProvider)
-	}
-	if !cfg.ForceGenericProviderEnabled() {
-		t.Error("ForceGenericProviderEnabled() = false, want true (explicit override beats fork mode)")
-	}
-}
-
 // TestCommentMarkerTag covers the fallback chain: an explicit CommentTag wins,
 // otherwise a genuinely custom StatusCheckName is reused, otherwise "" —
 // reproducing the untagged marker every prior release used. StatusCheckName
@@ -341,8 +281,7 @@ func TestLoad_DiffConcurrency(t *testing.T) {
 
 func TestLoad_FlateTuningDefaults(t *testing.T) {
 	// Unset, the flate render knobs default to flate's own CLI values so the
-	// caching applies out of the box. (HelmTemplateCacheMB is the exception — it's
-	// concurrency-derived; see TestLoad_HelmTemplateCacheMB.)
+	// retry and caps apply out of the box.
 	t.Setenv("KONFLATE_REPO", "github://owner/repo")
 	cfg, err := Load()
 	if err != nil {
@@ -352,7 +291,6 @@ func TestLoad_FlateTuningDefaults(t *testing.T) {
 		name      string
 		got, want int
 	}{
-		{"HelmRenderCacheMB", cfg.HelmRenderCacheMB, 1024},
 		{"SourceRetryAttempts", cfg.SourceRetryAttempts, 3},
 		{"RenderConcurrency", cfg.RenderConcurrency, 0}, // 0 ⇒ engine derives NumCPU*4
 		{"MaxDiffResources", cfg.MaxDiffResources, 500},
@@ -405,55 +343,6 @@ func TestLoad_RefreshInterval(t *testing.T) {
 				t.Errorf("RefreshInterval = %v, want %v", cfg.RefreshInterval, tc.want)
 			}
 		})
-	}
-}
-
-func TestDefaultHelmTemplateCacheMB(t *testing.T) {
-	// flate builds one in-memory template cache per orchestrator and runs two per
-	// render, so the budget is divided by the render concurrency to keep the
-	// aggregate (~2*256 MiB) flat instead of scaling with the CPU limit; floored
-	// at 32 so a high operator-set concurrency can't shrink it to nothing.
-	for _, c := range []struct {
-		conc, want int
-	}{
-		{1, 256}, {2, 128}, {4, 64}, {8, 32}, {100, 32}, {0, 256},
-	} {
-		if got := defaultHelmTemplateCacheMB(c.conc); got != c.want {
-			t.Errorf("defaultHelmTemplateCacheMB(%d) = %d, want %d", c.conc, got, c.want)
-		}
-	}
-}
-
-func TestLoad_HelmTemplateCacheMB(t *testing.T) {
-	t.Setenv("KONFLATE_REPO", "github://owner/repo")
-
-	// Unset: auto — derived from the resolved render concurrency, always positive.
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if want := defaultHelmTemplateCacheMB(cfg.MaxDiffConcurrency); cfg.HelmTemplateCacheMB != want {
-		t.Errorf("auto HelmTemplateCacheMB = %d, want %d (256/concurrency)", cfg.HelmTemplateCacheMB, want)
-	}
-
-	// An explicit positive value is respected verbatim.
-	t.Setenv("KONFLATE_HELM_TEMPLATE_CACHE_MB", "128")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.HelmTemplateCacheMB != 128 {
-		t.Errorf("explicit HelmTemplateCacheMB = %d, want 128", cfg.HelmTemplateCacheMB)
-	}
-
-	// 0 disables the cache and is preserved (not mistaken for unset).
-	t.Setenv("KONFLATE_HELM_TEMPLATE_CACHE_MB", "0")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.HelmTemplateCacheMB != 0 {
-		t.Errorf("explicit 0 HelmTemplateCacheMB = %d, want 0 (disabled)", cfg.HelmTemplateCacheMB)
 	}
 }
 
