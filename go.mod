@@ -21,9 +21,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	gitlab.com/gitlab-org/api/client-go/v3 v3.46.0
-	golang.org/x/sync v0.24.0
-	helm.sh/helm/v4 v4.3.1
+	gitlab.com/gitlab-org/api/client-go/v3 v3.48.0
+	golang.org/x/sync v0.25.0
+	helm.sh/helm/v4 v4.3.2
 	k8s.io/apimachinery v0.37.2
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -223,7 +223,7 @@ require (
 	k8s.io/component-base v0.37.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
-	k8s.io/kubectl v0.37.1 // indirect
+	k8s.io/kubectl v0.37.2 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	oras.land/oras-go/v2 v2.7.0 // indirect
 	sigs.k8s.io/controller-runtime v0.25.2 // indirect
