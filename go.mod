@@ -3,7 +3,7 @@ module github.com/home-operations/konflate
 go 1.27.0
 
 require (
-	cel.dev/cel-go v0.33.2
+	cel.dev/cel-go v0.33.4
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v4 v4.0.0
 	github.com/KimMachineGun/automemlimit v1.0.2
 	github.com/Masterminds/semver/v3 v3.5.0
