@@ -21,7 +21,7 @@ node = "26.13.1"
 "github:oxc-project/oxc" = { version = "0.79.0", version_prefix = "oxfmt_v", matching_regex = "^oxfmt-", rename_exe = "oxfmt" }
 pnpm = "12.23.0"
 yq = "4.54.3"
-zizmor = "1.33.0"
+zizmor = "1.33.1"
 
 [tasks.build]
 description = "Compile the binary (and the whole module)"
