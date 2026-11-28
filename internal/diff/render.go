@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/alecthomas/chroma/v2"
-	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
-	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/alecthomas/chroma/v3"
+	chromahtml "github.com/alecthomas/chroma/v3/formatters/html"
+	"github.com/alecthomas/chroma/v3/lexers"
+	"github.com/alecthomas/chroma/v3/styles"
 	"github.com/pmezard/go-difflib/difflib"
 	"sigs.k8s.io/yaml"
 

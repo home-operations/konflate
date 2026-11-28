@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
-	"github.com/alecthomas/chroma/v2/styles"
+	chromahtml "github.com/alecthomas/chroma/v3/formatters/html"
+	"github.com/alecthomas/chroma/v3/styles"
 )
 
 // TestRender_ChromaCSSThemesAreScoped guards the dual-theme fix: the light and
