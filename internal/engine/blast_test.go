@@ -1,60 +1,20 @@
 package engine
 
 import (
-	"maps"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/home-operations/flate/pkg/manifest"
-	"github.com/home-operations/flate/pkg/store"
 
 	"github.com/home-operations/konflate/internal/api"
-	"github.com/home-operations/konflate/internal/diff"
 )
 
 func ks(name string) manifest.NamedResource {
 	return manifest.NamedResource{Kind: manifest.KindKustomization, Namespace: "flux-system", Name: name}
 }
 
-func TestBlastRadius(t *testing.T) {
-	base, app, web, db, cache, leaf := ks("base"), ks("app"), ks("web"), ks("db"), ks("cache"), ks("leaf")
-	// app, web, db → base; cache → db. So base has 3 direct + cache transitively
-	// (via db) = 4; db has 1 (cache); leaf has none.
-	dependsOn := map[manifest.NamedResource][]manifest.NamedResource{
-		app:   {base},
-		web:   {base},
-		db:    {base},
-		cache: {db},
-	}
-	seeds := map[manifest.NamedResource]struct{}{base: {}, db: {}, leaf: {}}
-
-	got := blastRadius(seeds, dependsOn)
-	if len(got) != 2 {
-		t.Fatalf("entries = %d, want 2 (leaf has no dependents, must be omitted): %+v", len(got), got)
-	}
-
-	// Sorted by transitive desc: base (4) before db (1).
-	if got[0].Parent != parentLabel(base) || got[0].Transitive != 4 {
-		t.Fatalf("entry[0] = %+v, want base with transitive 4", got[0])
-	}
-	wantDirect := []string{parentLabel(app), parentLabel(db), parentLabel(web)} // sorted labels
-	if !slices.Equal(got[0].Direct, wantDirect) {
-		t.Errorf("base direct = %v, want %v", got[0].Direct, wantDirect)
-	}
-	if got[1].Parent != parentLabel(db) || got[1].Transitive != 1 {
-		t.Errorf("entry[1] = %+v, want db with transitive 1", got[1])
-	}
-
-	if blastRadius(nil, dependsOn) != nil {
-		t.Error("no seeds → nil")
-	}
-	if blastRadius(map[manifest.NamedResource]struct{}{leaf: {}}, dependsOn) != nil {
-		t.Error("seed with no dependents → nil")
-	}
-}
-
-// TestDependsOnGraph covers the rebuild from a rendered tree's store: only
+// TestDependsOnGraph covers the rebuild from a rendered tree's parents: only
 // parents declaring a dependsOn appear, an omitted dependency namespace
 // resolves to the dependent's own, and the ids carry the Flux group so they
 // join against the parent-keyed render output.
@@ -80,17 +40,18 @@ func TestDependsOnGraph(t *testing.T) {
 			"spec":       spec,
 		}
 	}
-	st := store.New()
-	for _, doc := range []map[string]any{
+	docs := []map[string]any{
 		ksDoc("infra"),
 		ksDoc("apps", map[string]any{"name": "infra"}),
 		ksDoc("web", map[string]any{"name": "apps"}, map[string]any{"name": "shared", "namespace": "platform"}),
-	} {
+	}
+	objects := make([]manifest.BaseManifest, 0, len(docs))
+	for _, doc := range docs {
 		parsed, err := manifest.ParseDoc(doc, manifest.ParseDocOptions{})
 		if err != nil {
 			t.Fatalf("ParseDoc: %v", err)
 		}
-		st.AddObject(parsed.Object)
+		objects = append(objects, parsed.Object)
 	}
 
 	id := func(ns, name string) manifest.NamedResource {
@@ -100,7 +61,7 @@ func TestDependsOnGraph(t *testing.T) {
 		id("flux-system", "apps"): {id("flux-system", "infra")},
 		id("flux-system", "web"):  {id("flux-system", "apps"), id("platform", "shared")},
 	}
-	got := dependsOnGraph(st)
+	got := dependsOnGraph(objects)
 	if len(got) != len(want) {
 		t.Fatalf("graph = %v, want %v", got, want)
 	}
@@ -108,24 +69,6 @@ func TestDependsOnGraph(t *testing.T) {
 		if !slices.Equal(got[dependent], deps) {
 			t.Errorf("deps of %v = %v, want %v", dependent, got[dependent], deps)
 		}
-	}
-}
-
-func TestBlastSeeds(t *testing.T) {
-	a, b, f := ks("a"), ks("b"), ks("failed")
-	labelToParent := parentLabels(map[manifest.NamedResource][]map[string]any{a: nil, b: nil, f: nil})
-	changes := []diff.Change{
-		{Parent: parentLabel(a)},
-		{Parent: parentLabel(a)}, // duplicate parent — deduped by the set
-		{Parent: parentLabel(b)},
-		{Parent: "Kustomization other/unknown"}, // not a rendered parent — skipped
-	}
-	failed := map[manifest.NamedResource]store.StatusInfo{f: {}}
-
-	got := blastSeeds(changes, labelToParent, failed)
-	want := map[manifest.NamedResource]struct{}{a: {}, b: {}, f: {}}
-	if !maps.Equal(got, want) {
-		t.Errorf("seeds = %v, want %v", got, want)
 	}
 }
 

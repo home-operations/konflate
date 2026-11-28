@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/distribution/reference"
-	"github.com/home-operations/flate/pkg/image"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/diff"
@@ -213,14 +212,16 @@ func setDiff(a, b []string) []string {
 // than collapsed to a single (arbitrary, last-write-wins) value, which would let
 // imageChanges report a from→to transition no container actually underwent.
 //
-// The detection is flate's image.Extract — value-based, so it finds references
+// The detection is value-based (see collectRefs), so it finds references
 // anywhere in the tree (not just under containers[]/initContainers[]: CNPG
 // spec.imageName, a CRD default, a sidecar under an arbitrary field) — and
 // splitRef separates each into (repository, version) robustly (a registry port
 // is not mistaken for the version). nil manifest yields an empty map.
 func collectImages(m map[string]any) map[string][]string {
+	refs := map[string]struct{}{}
+	collectRefs(m, false, refs)
 	seen := map[string]map[string]struct{}{}
-	for _, ref := range image.Extract(m) {
+	for ref := range refs {
 		repo, ver := splitRef(ref)
 		if seen[repo] == nil {
 			seen[repo] = map[string]struct{}{}
@@ -239,13 +240,59 @@ func collectImages(m map[string]any) map[string][]string {
 	return out
 }
 
+// collectRefs walks v and adds every image reference it finds to refs. A
+// string under an image, imageName or *Image field is declared: any value
+// that parses as a reference counts, as does the string "reference" directly
+// under such a field. Any other string counts only when it is a full
+// reference: it names a repository path and carries a tag or a digest.
+func collectRefs(v any, declared bool, refs map[string]struct{}) {
+	switch t := v.(type) {
+	case map[string]any:
+		for key, child := range t {
+			childDeclared := key == "image" || key == "imageName" || strings.HasSuffix(key, "Image")
+			if declared && key == "reference" {
+				_, childDeclared = child.(string)
+			}
+			collectRefs(child, childDeclared, refs)
+		}
+	case []any:
+		for _, item := range t {
+			collectRefs(item, false, refs)
+		}
+	case string:
+		if isImageRef(t, declared) {
+			refs[t] = struct{}{}
+		}
+	}
+}
+
+func isImageRef(s string, declared bool) bool {
+	if !declared {
+		if len(s) < 5 || strings.Contains(s, "://") || strings.HasPrefix(s, "/") {
+			return false
+		}
+		if !strings.ContainsAny(s, ":@") || strings.Contains(s, "${") || !strings.Contains(s, "/") {
+			return false
+		}
+	}
+	ref, err := reference.ParseNormalizedNamed(s)
+	if err != nil {
+		return false
+	}
+	if declared {
+		return true
+	}
+	_, tagged := ref.(reference.Tagged)
+	_, digested := ref.(reference.Digested)
+	return tagged || digested
+}
+
 // splitRef separates an image reference into its repository name and version,
 // keeping BOTH the tag and the digest when a reference carries both
-// ("4.0.19.3011@sha256:…"). flate's image.Split keeps only the digest there — the
-// more specific half for pulling — but a digest-pinned bump (Renovate's default)
-// would then read as two opaque digests, and the semver major-bump check would
-// have nothing to parse. Otherwise mirrors Split: the name is verbatim (not
-// normalized), and a value that doesn't parse yields (ref, "").
+// ("4.0.19.3011@sha256:…"), so a digest-pinned bump (Renovate's default) does
+// not read as two opaque digests and the semver major-bump check has a tag to
+// parse. The name is verbatim (not normalized), and a value that doesn't parse
+// yields (ref, "").
 func splitRef(ref string) (name, version string) {
 	parsed, err := reference.Parse(ref)
 	if err != nil {

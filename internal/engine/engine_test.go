@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
-	"github.com/home-operations/flate/pkg/store"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
@@ -57,10 +58,10 @@ func TestRenderCfg_HelmCapabilities(t *testing.T) {
 
 func TestRenderUsable(t *testing.T) {
 	t.Parallel()
-	// A run that kept its Orchestrator rendered (per-resource failures included);
-	// one that lost it failed fatally in discovery/bootstrap; an Absent run
-	// stands in for a cluster the other side lacks.
-	ok := orchestrator.Rendered{Orchestrator: &orchestrator.Orchestrator{}, Result: &orchestrator.Result{}}
+	// A Complete run rendered (per-resource failures included); one that is
+	// not failed fatally in discovery/bootstrap; an Absent run stands in for a
+	// cluster the other side lacks.
+	ok := orchestrator.Rendered{Complete: true, Result: &orchestrator.Result{}}
 	fatal := orchestrator.Rendered{Result: &orchestrator.Result{}}
 	absent := orchestrator.Rendered{Absent: true, Result: &orchestrator.Result{}}
 	cases := []struct {
@@ -166,6 +167,132 @@ func TestPairChanges(t *testing.T) {
 	}
 	if got[1].Old["replicas"] != 3 || got[1].New["replicas"] != 5 {
 		t.Errorf("changed Deployment old/new replicas = %v/%v, want 3/5", got[1].Old["replicas"], got[1].New["replicas"])
+	}
+}
+
+// A resource pairs only with its counterpart under the same parent: the same
+// identity under another parent is a different resource, so a move between
+// parents reads as a removal plus an addition.
+func TestPairChanges_PairsWithinParent(t *testing.T) {
+	t.Parallel()
+	a := manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: "a"}
+	b := manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: "b"}
+	cm := func() map[string]any {
+		return res("ConfigMap", "apps", "shared", map[string]any{"data": map[string]any{"k": "v"}})
+	}
+
+	got := pairChanges(
+		map[manifest.NamedResource][]map[string]any{a: {cm()}},
+		map[manifest.NamedResource][]map[string]any{b: {cm()}},
+	)
+	if len(got) != 2 {
+		t.Fatalf("got %d changes, want a removal and an addition: %+v", len(got), got)
+	}
+	if got[0].Status != "removed" || got[0].Parent != "HelmRelease apps/a" {
+		t.Errorf("change[0] = {%s %s}, want removed under HelmRelease apps/a", got[0].Status, got[0].Parent)
+	}
+	if got[1].Status != "added" || got[1].Parent != "HelmRelease apps/b" {
+		t.Errorf("change[1] = {%s %s}, want added under HelmRelease apps/b", got[1].Status, got[1].Parent)
+	}
+}
+
+// Two documents of one identity under one parent are a render-authoring
+// mistake; the later one is the one compared.
+func TestPairChanges_LaterDocumentShadows(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "Kustomization", Namespace: "apps", Name: "app"}
+	cm := func(v string) map[string]any {
+		return res("ConfigMap", "apps", "cfg", map[string]any{"data": map[string]any{"k": v}})
+	}
+	got := pairChanges(
+		map[manifest.NamedResource][]map[string]any{parent: {cm("same")}},
+		map[manifest.NamedResource][]map[string]any{parent: {cm("other"), cm("same")}},
+	)
+	if len(got) != 0 {
+		t.Errorf("the later head document equals the base, got %+v", got)
+	}
+}
+
+// Identity includes the API group, so two kinds that share a name across
+// groups are separate resources and never pair with each other.
+func TestPairChanges_SeparatesAPIGroups(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "Kustomization", Namespace: "apps", Name: "app"}
+	cert := func(apiVersion string) map[string]any {
+		return res("Certificate", "apps", "tls", map[string]any{"apiVersion": apiVersion})
+	}
+	got := pairChanges(
+		map[manifest.NamedResource][]map[string]any{parent: {cert("cert-manager.io/v1")}},
+		map[manifest.NamedResource][]map[string]any{parent: {cert("networking.internal.knative.dev/v1alpha1")}},
+	)
+	if len(got) != 2 || got[0].Status == got[1].Status {
+		t.Fatalf("got %+v, want one removal and one addition", got)
+	}
+}
+
+// flate lends the rendered documents for the lifetime of the run, so pairing
+// must normalize copies and leave its inputs as they were.
+func TestPairChanges_LeavesInputsUntouched(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "HelmRelease", Namespace: "apps", Name: "app"}
+	secret := func(v string) map[string]any {
+		m := res("Secret", "apps", "creds", map[string]any{"data": map[string]any{"password": v}})
+		m["metadata"].(map[string]any)["labels"] = map[string]any{"helm.sh/chart": "app-1.0.0"}
+		return m
+	}
+	base, head := secret("b2xk"), secret("bmV3")
+	got := pairChanges(
+		map[manifest.NamedResource][]map[string]any{parent: {base}},
+		map[manifest.NamedResource][]map[string]any{parent: {head}},
+	)
+	if len(got) != 0 {
+		t.Errorf("a redacted Secret value should not surface, got %+v", got)
+	}
+	if !reflect.DeepEqual(base, secret("b2xk")) || !reflect.DeepEqual(head, secret("bmV3")) {
+		t.Errorf("pairChanges mutated its inputs: base=%v head=%v", base, head)
+	}
+}
+
+// ConfigMap binaryData is compared by a size-and-hash summary: a changed blob
+// still reads as a change, but the payload never reaches the diff.
+func TestPairChanges_SummarizesBinaryData(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "Kustomization", Namespace: "apps", Name: "app"}
+	cm := func(payload string) map[manifest.NamedResource][]map[string]any {
+		return map[manifest.NamedResource][]map[string]any{parent: {
+			res("ConfigMap", "apps", "blob", map[string]any{
+				"binaryData": map[string]any{"file.bin": base64.StdEncoding.EncodeToString([]byte(payload))},
+			}),
+		}}
+	}
+
+	if got := pairChanges(cm("same"), cm("same")); len(got) != 0 {
+		t.Errorf("identical binaryData should not surface, got %+v", got)
+	}
+	got := pairChanges(cm("old"), cm("new payload"))
+	if len(got) != 1 || got[0].Status != "changed" {
+		t.Fatalf("changed binaryData should surface as one changed resource, got %+v", got)
+	}
+	summary, _ := got[0].New["binaryData"].(map[string]any)["file.bin"].(string)
+	if !strings.HasPrefix(summary, "<redacted binary data: 11 bytes sha256:") {
+		t.Errorf("binaryData summary = %q, want the size and hash of the 11-byte payload", summary)
+	}
+}
+
+// The chart label is stripped from the compared documents, so its value is
+// carried on the change for the chart-version signal.
+func TestPairChanges_KeepsChartLabel(t *testing.T) {
+	t.Parallel()
+	parent := manifest.NamedResource{Kind: "HelmRelease", Namespace: "x", Name: "x"}
+	mk := func(m map[string]any) map[manifest.NamedResource][]map[string]any {
+		return map[manifest.NamedResource][]map[string]any{parent: {m}}
+	}
+	got := pairChanges(
+		mk(cmWith(map[string]any{"helm.sh/chart": "x-1.0.0"}, "old")),
+		mk(cmWith(map[string]any{"helm.sh/chart": "x-2.0.0"}, "new")),
+	)
+	if len(got) != 1 || got[0].OldChart != "x-1.0.0" || got[0].NewChart != "x-2.0.0" {
+		t.Fatalf("chart labels = %+v, want x-1.0.0 → x-2.0.0 on one change", got)
 	}
 }
 
@@ -304,14 +431,14 @@ func TestPairChanges_StripsVolatileChurn(t *testing.T) {
 	}
 
 	// Rotating checksum/* annotations stay duplicate noise (the hashed content
-	// change shows directly) — flate's DefaultStripAttrs still deletes them, so
+	// change shows directly) — stripAttrs still deletes them, so
 	// they alone must not surface a change.
 	if got := pairChanges(src("aaaa", "20240101000000"), src("bbbb", "20240101000000")); len(got) != 0 {
 		t.Errorf("rotating checksum/* should be stripped, got %d change(s): %+v", len(got), got)
 	}
 
 	// Since flate 0.3.4, spec.restic.unlock is NOT stripped: the deterministic
-	// render clock (pkg/helm/deterministic) pins `{{ now }}`, so both sides of a
+	// render clock pins `{{ now }}`, so both sides of a
 	// RenderTrees render the identical timestamp and a difference here is a
 	// genuine change (e.g. the chart altered its date format) that must surface.
 	if got := pairChanges(src("aaaa", "20240101000000"), src("aaaa", "20240102000000")); len(got) != 1 {
@@ -325,6 +452,72 @@ func deploy(ns, name, image string) map[string]any {
 			"containers": []any{map[string]any{"name": "c", "image": image}},
 		}}},
 	})
+}
+
+// TestCollectImages covers the reference detection: a value under an image
+// field counts with or without a version, while any other string counts only
+// when it is a full repository reference.
+func TestCollectImages(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		doc  map[string]any
+		want map[string][]string
+	}{
+		{"untagged container image", map[string]any{"image": "nginx"}, map[string][]string{"nginx": {""}}},
+		// The untagged values below count only because of the field they sit
+		// under: the same strings under any other field are not references.
+		{
+			"imageName field",
+			map[string]any{"spec": map[string]any{"imageName": "ghcr.io/cloudnative-pg/postgresql"}},
+			map[string][]string{"ghcr.io/cloudnative-pg/postgresql": {""}},
+		},
+		{
+			"Image-suffixed field",
+			map[string]any{"spec": map[string]any{"initImage": "busybox"}},
+			map[string][]string{"busybox": {""}},
+		},
+		{
+			"reference under an image object",
+			map[string]any{"image": map[string]any{"reference": "nginx", "pullPolicy": "IfNotPresent"}},
+			map[string][]string{"nginx": {""}},
+		},
+		{
+			"reference outside an image field",
+			map[string]any{"source": map[string]any{"reference": "nginx"}},
+			map[string][]string{},
+		},
+		{
+			"image field inside a list",
+			map[string]any{"containers": []any{map[string]any{"image": "busybox"}}},
+			map[string][]string{"busybox": {""}},
+		},
+		{
+			"full reference in an arbitrary field",
+			map[string]any{"env": []any{map[string]any{"name": "SIDECAR", "value": "ghcr.io/example/sidecar:2"}}},
+			map[string][]string{"ghcr.io/example/sidecar": {"2"}},
+		},
+		{
+			"non-references in arbitrary fields",
+			map[string]any{"data": map[string]any{
+				"url":      "https://example.com/path:8080",
+				"path":     "/usr/local/bin:/usr/bin",
+				"template": "${REGISTRY}/app:1",
+				"short":    "nginx:1.25",
+				"untagged": "ghcr.io/example/app",
+			}},
+			map[string][]string{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := collectImages(tc.doc)
+			if !maps.EqualFunc(got, tc.want, slices.Equal[[]string]) {
+				t.Errorf("collectImages() = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestImageChanges(t *testing.T) {
@@ -551,10 +744,10 @@ func TestDropFailedParents(t *testing.T) {
 
 func TestRenderFailures_UnionsBothSidesAndDedups(t *testing.T) {
 	t.Parallel()
-	base := map[manifest.NamedResource]store.StatusInfo{
+	base := map[manifest.NamedResource]orchestrator.StatusInfo{
 		{Kind: "HelmRelease", Namespace: "a", Name: "x"}: {Message: "base failed"},
 	}
-	head := map[manifest.NamedResource]store.StatusInfo{
+	head := map[manifest.NamedResource]orchestrator.StatusInfo{
 		{Kind: "HelmRelease", Namespace: "a", Name: "x"}: {Message: "also failed on head"}, // same parent → deduped
 		{Kind: "HelmRelease", Namespace: "b", Name: "y"}: {Message: "head only"},
 	}

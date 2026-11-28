@@ -250,15 +250,15 @@ type Config struct {
 	// JSON per PR) so the store survives restarts. Derived as <RepoCacheDir>/state
 	// in [Load] — it rides on the same volume as the source cache, so persistence
 	// is automatic once that volume is durable, and there is no separate knob. It
-	// sits beside flate's cache entries, which the cache GC leaves untouched.
+	// sits beside flate's cache entries.
 	StateDir string `env:"-"`
 
-	// CacheTTL bounds how long an unused entry stays in the on-disk source cache
-	// (Helm charts, OCI layers, git sources) before a periodic sweep retires it
-	// and collects the blobs nothing references any more. Without it the cache
-	// only grows — every distinct source a PR ever rendered stays on the
-	// (operator-mounted) volume forever. <=0 disables the sweep (cache grows
-	// unbounded; an operator's explicit choice). In Go duration form.
+	// CacheTTL is the age at which an unused entry of the on-disk source cache
+	// (Helm charts, OCI layers, git sources) is due for removal. It has no
+	// effect: flate's SDK has no cache sweep, so konflate does not prune the
+	// cache — every distinct source a PR ever rendered stays on the
+	// (operator-mounted) volume until an operator runs `flate cache gc`
+	// against it. In Go duration form.
 	CacheTTL time.Duration `env:"KONFLATE_CACHE_TTL" envDefault:"168h"` // 7d
 
 	// CloneDir is the base directory for ephemeral per-diff PR head/base

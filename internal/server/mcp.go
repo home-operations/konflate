@@ -18,8 +18,8 @@ import (
 // mcpHandler builds the read-only Model Context Protocol endpoint served at /mcp
 // when KONFLATE_MCP is set. It exposes konflate's rendered-diff analysis — the open
 // pull requests and their summaries — as MCP tools, so an AI agent reviewing a Flux
-// PR can see what the change actually does to the cluster (the blast radius,
-// cautions, image changes) that a raw git diff hides. The tools read the same
+// PR can see what the change actually does to the cluster (the cautions and
+// image changes) that a raw git diff hides. The tools read the same
 // in-memory store the JSON API serves and trigger no render and no forge write, so
 // /mcp is read-only exactly like /api.
 func (s *Server) mcpHandler() http.Handler {
@@ -55,7 +55,7 @@ func (s *Server) mcpServer() *mcp.Server {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "get_pr_summary",
 		Description: "konflate's rendered-diff summary for one pull request, by number: the " +
-			"blast radius, caution lint (data-loss, immutable-field, RBAC, suspend/prune), " +
+			"caution lint (data-loss, immutable-field, RBAC, suspend/prune), " +
 			"image changes, and render failures — the cluster impact a raw git diff doesn't " +
 			"show. Returns Markdown plus a link to the PR's full-diff resource.",
 	}, s.mcpPRSummary)

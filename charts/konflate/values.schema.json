@@ -24,7 +24,7 @@
         },
         "cacheTtl": {
           "default": "",
-          "description": "Advanced: prune source-cache entries unused longer than this (Go duration). Empty = default (168h/7d); \"0\" disables the sweep.",
+          "description": "Advanced: age at which an unused source-cache entry is due for removal (Go duration). Empty = default (168h/7d). No effect at present: konflate does not prune the source cache, so it grows until you run `flate cache gc` against the cache volume.",
           "title": "cacheTtl",
           "type": "string"
         },

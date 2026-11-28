@@ -128,8 +128,8 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 	// what fails the check is the first thing read: the failing block (blockers
 	// and render failures), the cautions, the stale-render warning, then the
 	// headline counts (or the routine tip, which already carries them, so the
-	// impact line is dropped there rather than said twice), blast radius and
-	// images. The refresh note and footer are konflate's own chrome and stay here.
+	// impact line is dropped there rather than said twice) and images. The
+	// refresh note and footer are konflate's own chrome and stay here.
 	sec := summarySectionsFor(d, admonitions)
 	appendSection := func(s string) {
 		if s != "" {
@@ -143,7 +143,6 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 		appendSection(sec.Impact)
 	}
 	appendSection(sec.Routine)
-	appendSection(sec.BlastRadius)
 	appendSection(sec.Images)
 	writeFooter(d.HeadSHA)
 	return b.String()
@@ -155,14 +154,13 @@ func summaryMarkdownBody(env api.DiffEnvelope, reviewURL string, admonitions boo
 // forge's flavour (GitHub admonitions vs plain), or empty when that block has
 // nothing to show. summaryMarkdownBody composes the same blocks for the default.
 type summarySections struct {
-	Impact      string // headline counts: +added · changed · −removed: N resources · …
-	Routine     string // image/chart-version-only bump, nothing flagged (green [!TIP])
-	BlastRadius string // downstream apps transitively depending on the changed ones
-	Failing     string // everything that fails the check: Blocking + Failures (one red [!CAUTION] on GitHub)
-	Blocking    string // blocking-tier warnings — fail the check (red [!CAUTION])
-	Cautions    string // caution-tier warnings — advisory (amber [!WARNING])
-	Failures    string // resources that failed to render (red [!CAUTION])
-	Images      string // container image changes (a Markdown table)
+	Impact   string // headline counts: +added · changed · −removed: N resources · …
+	Routine  string // image/chart-version-only bump, nothing flagged (green [!TIP])
+	Failing  string // everything that fails the check: Blocking + Failures (one red [!CAUTION] on GitHub)
+	Blocking string // blocking-tier warnings — fail the check (red [!CAUTION])
+	Cautions string // caution-tier warnings — advisory (amber [!WARNING])
+	Failures string // resources that failed to render (red [!CAUTION])
+	Images   string // container image changes (a Markdown table)
 }
 
 // summarySectionsFor renders each summary block for a ready diff (all-empty for a
@@ -172,14 +170,13 @@ func summarySectionsFor(d *api.DiffResult, admonitions bool) summarySections {
 		return summarySections{}
 	}
 	return summarySections{
-		Impact:      sectionImpact(d, admonitions),
-		Routine:     sectionRoutine(d, admonitions),
-		BlastRadius: sectionBlastRadius(d),
-		Failing:     sectionFailing(d, admonitions),
-		Blocking:    sectionBlocking(d, admonitions),
-		Cautions:    sectionCautions(d, admonitions),
-		Failures:    sectionFailures(d, admonitions),
-		Images:      sectionImages(d),
+		Impact:   sectionImpact(d, admonitions),
+		Routine:  sectionRoutine(d, admonitions),
+		Failing:  sectionFailing(d, admonitions),
+		Blocking: sectionBlocking(d, admonitions),
+		Cautions: sectionCautions(d, admonitions),
+		Failures: sectionFailures(d, admonitions),
+		Images:   sectionImages(d),
 	}
 }
 
@@ -371,14 +368,6 @@ func sectionImages(d *api.DiffResult) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// bareRef strips the kind from a "Kind ns/name" label, leaving "ns/name".
-func bareRef(label string) string {
-	if _, rest, ok := strings.Cut(label, " "); ok {
-		return rest
-	}
-	return label
-}
-
 // upstreamCell renders the image table's "upstream" column — the registry's
 // verdict on the new reference as one icon: ✅ found, ❌ not found (the row's
 // image raised a blocker), ❔ unverified when the head ref was never confirmed
@@ -396,44 +385,6 @@ func upstreamCell(im api.ImageChange) string {
 	default:
 		return "❔"
 	}
-}
-
-// writeBlastRadius renders the blast-radius block: for each changed/failed app,
-// how many downstream apps declare a transitive spec.dependsOn on it — the
-// headline number a raw file diff can't show. Informational (like the image
-// table), so plain bold in both flavours. It names a sample of direct
-// dependents; the count and the sample add up to the headline
-// ("12 dependents (a, b, c +9 more)"). No-op when nothing depends on anything.
-func sectionBlastRadius(d *api.DiffResult) string {
-	if len(d.BlastRadius) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("**Blast radius**\n")
-	for _, br := range d.BlastRadius {
-		fmt.Fprintf(&b, "- `%s`: %d %s", mdCode(br.Parent), br.Transitive, plural(br.Transitive, "dependent", "dependents"))
-		shown := br.Direct
-		if len(shown) == 0 {
-			b.WriteString("\n")
-			continue
-		}
-		const sample = 3
-		if len(shown) > sample {
-			shown = shown[:sample]
-		}
-		// Flux dependsOn is same-kind, so the parent's kind already names the
-		// dependents' kind; list them as bare ns/name (as the review does).
-		names := make([]string, len(shown))
-		for i, s := range shown {
-			names[i] = mdInline(bareRef(s))
-		}
-		fmt.Fprintf(&b, " (%s", strings.Join(names, ", "))
-		if more := br.Transitive - len(shown); more > 0 {
-			fmt.Fprintf(&b, " +%d more", more)
-		}
-		b.WriteString(")\n")
-	}
-	return strings.TrimRight(b.String(), "\n")
 }
 
 func plural(n int, one, many string) string {

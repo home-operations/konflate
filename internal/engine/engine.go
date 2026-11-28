@@ -15,17 +15,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
 	"time"
 
-	flatediff "github.com/home-operations/flate/pkg/diff"
-	"github.com/home-operations/flate/pkg/helm"
 	"github.com/home-operations/flate/pkg/manifest"
 	"github.com/home-operations/flate/pkg/orchestrator"
-	sourcecache "github.com/home-operations/flate/pkg/source/cache"
-	"github.com/home-operations/flate/pkg/store"
 
 	"github.com/home-operations/konflate/internal/api"
 	"github.com/home-operations/konflate/internal/config"
@@ -61,7 +58,7 @@ type flateEngine struct {
 	// source retry defaults to flate's own CLI values; the reconcile
 	// concurrency is bounded so a fan-out PR can't oversubscribe.
 	concurrency      int
-	sourceRetry      sourcecache.RetryConfig
+	sourceRetry      orchestrator.RetryConfig
 	diffTimeout      time.Duration
 	maxDiffResources int
 	// kubeVersion overrides .Capabilities.KubeVersion for every chart rendered;
@@ -96,7 +93,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 		mirror:      gitclone.NewMirror(cfg.RepoCacheDir, cfg.CloneDir, cfg.Forge.CloneURL(), gitToken, cfg.FetchTimeout),
 		pullHeadRef: cfg.Forge.PullHeadRef,
 		concurrency: conc,
-		sourceRetry: sourcecache.RetryConfig{
+		sourceRetry: orchestrator.RetryConfig{
 			Attempts: cfg.SourceRetryAttempts,
 			MinWait:  200 * time.Millisecond,
 			MaxWait:  3 * time.Second,
@@ -114,7 +111,7 @@ func New(cfg *config.Config, gitToken gitclone.TokenFunc) Engine {
 // whole operation is bounded by diffTimeout (when set) so one PR can't hold a
 // render slot indefinitely — the deadline flows into the git fetch and both
 // flate renders via ctx.
-func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, error) {
+func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (_ api.DiffResult, err error) {
 	if e.diffTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, e.diffTimeout)
@@ -142,17 +139,17 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 	// flate can't infer the root, and a repo-root-relative spec.path
 	// (./kubernetes/...) would otherwise double under the entry-point subdir.
 	// selfURLs lets a self-referential GitRepository alias to the tree. The
-	// tree IDs name the comparison side; the returned runs are sorted by
+	// tree IDs name the comparison side; the run's results are sorted by
 	// cluster and side and looked up per side (see collectSide) after
 	// clusterIDs has confirmed the entry point holds a single cluster.
 	//
-	// Per flate's contract the returned err is advisory: a side loses its
-	// Orchestrator only on a fatal discovery/bootstrap error, whereas
-	// per-resource reconcile failures keep it and ARE the diff's render
+	// Per flate's contract the returned err is advisory: a side is incomplete
+	// only on a fatal discovery/bootstrap error, whereas per-resource
+	// reconcile failures leave it complete and ARE the diff's render
 	// failures — they must flow to renderFailures below, not abort the whole
 	// diff (a PR that breaks a chart is exactly the one a reviewer needs to
 	// see). renderUsable gates on that.
-	runs, err := orchestrator.RenderTrees(ctx, []orchestrator.Tree{
+	run, err := orchestrator.RenderTrees(ctx, []orchestrator.Tree{
 		{
 			ID:       manifest.TreeID{Cluster: ".", Side: manifest.TreeBase},
 			RepoRoot: clone.BaseDir, Path: joinPath(clone.BaseDir, e.clusterPath), SelfURLs: e.selfURLs,
@@ -162,20 +159,29 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 			RepoRoot: clone.HeadDir, Path: joinPath(clone.HeadDir, e.clusterPath), SelfURLs: e.selfURLs,
 		},
 	}, e.renderCfg())
-	defer func() {
-		for _, run := range runs {
-			run.Result.Close()
-		}
-	}()
-	if !renderUsable(runs, err) {
+	if run == nil {
 		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
 	}
-	if clusters := clusterIDs(runs); len(clusters) > 1 {
+	// The run lends its documents and objects until Close, so it stays open
+	// until the diff below has copied everything it keeps.
+	defer func() {
+		if closeErr := run.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("engine: close the render of PR #%d: %w", pr.Number, closeErr))
+		}
+	}()
+	if !renderUsable(run.Results, err) {
+		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
+	}
+	if clusters := clusterIDs(run.Results); len(clusters) > 1 {
 		return api.DiffResult{}, fmt.Errorf(
 			"engine: render PR #%d: cluster path %q holds %d clusters (%s); set KONFLATE_CLUSTER_PATH to one cluster's directory",
 			pr.Number, e.clusterPath, len(clusters), strings.Join(clusters, ", "))
 	}
-	base, head := collectSide(runs, manifest.TreeBase), collectSide(runs, manifest.TreeHead)
+	base, head := collectSide(run.Results, manifest.TreeBase), collectSide(run.Results, manifest.TreeHead)
+	headDependsOn, err := headDependsOnGraph(run)
+	if err != nil {
+		return api.DiffResult{}, fmt.Errorf("engine: render PR #%d: %w", pr.Number, err)
+	}
 
 	// A parent (HelmRelease/Kustomization) whose render failed on a side produced
 	// no manifests there, so pairing it against the other side reads as a wholesale
@@ -200,16 +206,12 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 		return api.DiffResult{}, err
 	}
 
-	// Attach the dependsOn-graph signals: the blast radius of each
-	// changed/failed parent, and a caution for any parent this PR removes that
-	// surviving resources still dependOn. Both are derived here (not in
-	// diff.Render) because only the engine holds the two flate runs and the
-	// declared graph their stores carry (see dependsOnGraph).
-	labelToParent := parentLabels(base.manifests, head.manifests)
-	seeds := blastSeeds(changes, labelToParent, base.failed, head.failed)
-	result.BlastRadius = blastRadius(seeds, head.dependsOn)
+	// Attach the dependsOn-graph signal: a caution for any parent this PR
+	// removes that surviving resources still dependOn. It is derived here (not
+	// in diff.Render) because only the engine holds the flate run and the
+	// declared graph it carries (see headDependsOnGraph).
 	result.Warnings = append(result.Warnings, danglingDependsOn(
-		parentSet(base.manifests), parentSet(head.manifests), head.dependsOn)...)
+		parentSet(base.manifests), parentSet(head.manifests), headDependsOn)...)
 	// Surface HelmReleases whose values the bumped chart no longer defines (flate's
 	// WarnStaleValues), newly stranded by this PR — see staleValues.
 	result.Warnings = append(result.Warnings, staleValues(base.warnings, head.warnings)...)
@@ -219,7 +221,7 @@ func (e *flateEngine) Diff(ctx context.Context, pr api.PR) (api.DiffResult, erro
 // renderUsable reports whether a RenderTrees outcome yields a diff worth
 // returning. flate's err is advisory (see RenderTrees), so this gates on what's
 // actually usable rather than on err being nil:
-//   - A run without an Orchestrator (or without a Result) failed fatally in
+//   - A run that is not Complete (or has no Result) failed fatally in
 //     discovery/bootstrap — that side never rendered, so there is no diff to
 //     show. A run flate marks Absent is the exception: it stands in for a
 //     cluster present on only one side and carries an empty Result by design.
@@ -233,7 +235,7 @@ func renderUsable(runs []orchestrator.Rendered, err error) bool {
 		return false
 	}
 	for _, run := range runs {
-		if run.Result == nil || (run.Orchestrator == nil && !run.Absent) {
+		if run.Result == nil || (!run.Complete && !run.Absent) {
 			return false
 		}
 	}
@@ -260,11 +262,8 @@ type side struct {
 	// manifests is the rendered output keyed by the producing parent — every
 	// Kustomization/HelmRelease that rendered on this side, even to zero docs.
 	manifests map[manifest.NamedResource][]map[string]any
-	failed    map[manifest.NamedResource]store.StatusInfo
+	failed    map[manifest.NamedResource]orchestrator.StatusInfo
 	warnings  []manifest.Warning
-	// dependsOn is the declared spec.dependsOn graph (dependent → its
-	// dependencies) of every cluster on this side — see dependsOnGraph.
-	dependsOn map[manifest.NamedResource][]manifest.NamedResource
 }
 
 // collectSide gathers the run of one comparison side (one per side once
@@ -272,8 +271,7 @@ type side struct {
 func collectSide(runs []orchestrator.Rendered, which manifest.TreeSide) side {
 	out := side{
 		manifests: map[manifest.NamedResource][]map[string]any{},
-		failed:    map[manifest.NamedResource]store.StatusInfo{},
-		dependsOn: map[manifest.NamedResource][]manifest.NamedResource{},
+		failed:    map[manifest.NamedResource]orchestrator.StatusInfo{},
 	}
 	for _, run := range runs {
 		if run.ID.Side != which {
@@ -288,9 +286,6 @@ func collectSide(runs []orchestrator.Rendered, which manifest.TreeSide) side {
 		}
 		maps.Copy(out.failed, run.Result.Failed)
 		out.warnings = append(out.warnings, run.Result.Warnings...)
-		if run.Orchestrator != nil {
-			maps.Copy(out.dependsOn, dependsOnGraph(run.Store()))
-		}
 	}
 	return out
 }
@@ -319,13 +314,14 @@ func collectSide(runs []orchestrator.Rendered, which manifest.TreeSide) side {
 // so it survives restarts. flate opens the cache per RenderTrees call and
 // concurrent diffs share one open owner, so the head render reuses what the
 // base render fetched and a second PR reuses what the first did; it stays
-// closed between diffs so RunCacheGC can take the store's exclusive lock.
+// closed between diffs, which is when an operator's `flate cache gc` can take
+// the store's exclusive lock.
 func (e *flateEngine) renderCfg() orchestrator.Config {
 	return orchestrator.Config{
 		CacheDir:          e.cacheDir,
 		AllowMissingKinds: []string{manifest.KindSecret},
 		GitDepth:          1,
-		HelmOptions:       helm.Options{KubeVersion: e.kubeVersion, APIVersions: e.helmAPIVersions},
+		HelmOptions:       orchestrator.HelmOptions{KubeVersion: e.kubeVersion, APIVersions: e.helmAPIVersions},
 		Concurrency:       e.concurrency,
 		SourceRetry:       e.sourceRetry,
 		RestrictEgress:    e.restrictEgress,
@@ -339,60 +335,113 @@ func joinPath(dir, sub string) string {
 	return dir + "/" + sub
 }
 
+// stripAttrs are the label/annotation keys removed from both sides before
+// pairing: chart and checksum metadata whose values rotate on every chart bump
+// and only duplicate the version or content change shown elsewhere. A trailing
+// slash matches a prefix.
+var stripAttrs = []string{"helm.sh/chart", "checksum/", "app.kubernetes.io/version", "chart"}
+
 // pairChanges diffs two flate render outputs (each keyed by producing
-// parent) into konflate's resource-level changes. The pairing,
-// normalization, equality drop, and chart-label capture are flate's
-// diff.Changes; konflate layers only its secret/cert scrub (the redact
-// hook) on top of flate's default strip lists. flate.Change maps 1:1 onto
-// our diff.Change (Parent struct → "Kind ns/name" label), already sorted
-// by parent then identity.
+// parent) into konflate's resource-level changes. Each document is paired
+// with the document of the same identity under the same parent on the other
+// side — so a resource moved between parents reads as a removal plus an
+// addition, and a Deployment from one HelmRelease never matches the
+// same-named Deployment of another. Both sides are compared on normalized
+// copies (see normalize); the "helm.sh/chart" label is captured first, since
+// normalization strips it. A later document shadows an earlier one of the
+// same identity under one parent. Identity is exact, so a resource whose name
+// carries a kustomize generator hash reads as a removal plus an addition when
+// its content changes. The result is sorted by parent then identity.
 //
-// flate's equality is typed (reflect.DeepEqual over the normalized values),
-// not byte equality, so a pair differing only by Go type — replicas: 3 (int)
-// vs 3.0 (float64) — survives as "changed" even though it marshals to the same
-// YAML. diff.Render collapses those type-only no-ops after marshaling, so they
+// Equality is typed (reflect.DeepEqual over the normalized values), not byte
+// equality, so a pair differing only by Go type — replicas: 3 (int) vs 3.0
+// (float64) — survives as "changed" even though it marshals to the same YAML.
+// diff.Render collapses those type-only no-ops after marshaling, so they
 // don't show as empty changed resources.
 func pairChanges(base, head map[manifest.NamedResource][]map[string]any) []diff.Change {
-	// The shadowed-document warnings flate returns alongside (two docs of one
-	// identity under a parent) are a render-authoring diagnostic, not a review
-	// signal konflate surfaces.
-	fc, _ := flatediff.Changes(
-		attributedDocs(base),
-		attributedDocs(head),
-		flatediff.Options{
-			StripAttrs:  flatediff.DefaultStripAttrs,
-			StripFields: flatediff.DefaultStripFields,
-			Normalize:   redact,
-		},
-	)
-	out := make([]diff.Change, len(fc))
-	for i, c := range fc {
-		out[i] = diff.Change{
-			Status:    string(c.Status),
-			Kind:      c.Kind,
-			Namespace: c.Namespace,
-			Name:      c.Name,
-			Parent:    parentLabel(c.Parent.NamedResource),
-			Old:       c.Old,
-			New:       c.New,
-			OldChart:  c.OldChart,
-			NewChart:  c.NewChart,
+	type key struct{ parent, resource manifest.NamedResource }
+	pairs := map[key]*diff.Change{}
+	for i, side := range [...]map[manifest.NamedResource][]map[string]any{base, head} {
+		for parent, docs := range side {
+			for _, doc := range docs {
+				normalized := normalize(doc)
+				k := key{parent: parent, resource: manifest.DocIdentity(normalized)}
+				c := pairs[k]
+				if c == nil {
+					c = &diff.Change{}
+					pairs[k] = c
+				}
+				if i == 0 {
+					c.Old, c.OldChart = normalized, chartLabel(doc)
+				} else {
+					c.New, c.NewChart = normalized, chartLabel(doc)
+				}
+			}
 		}
+	}
+	keys := slices.SortedFunc(maps.Keys(pairs), func(a, b key) int {
+		return cmp.Or(a.parent.Compare(b.parent), a.resource.Compare(b.resource))
+	})
+	out := make([]diff.Change, 0, len(keys))
+	for _, k := range keys {
+		c := pairs[k]
+		switch {
+		case c.Old == nil:
+			c.Status = "added"
+		case c.New == nil:
+			c.Status = "removed"
+		case reflect.DeepEqual(c.Old, c.New):
+			continue
+		default:
+			c.Status = "changed"
+		}
+		c.Kind, c.Namespace, c.Name = k.resource.Kind, k.resource.Namespace, k.resource.Name
+		c.Parent = parentLabel(k.parent)
+		out = append(out, *c)
 	}
 	return out
 }
 
-// attributedDocs flattens a side's parent-keyed render output into the
-// parent-attributed documents flate's diff pairs on. Parent.Path is display
-// metadata flate doesn't pair on, so it is left unset.
-func attributedDocs(side map[manifest.NamedResource][]map[string]any) []flatediff.Doc {
-	var out []flatediff.Doc
-	for parent, docs := range side {
-		for _, doc := range docs {
-			out = append(out, flatediff.Doc{Parent: flatediff.Parent{NamedResource: parent}, Manifest: doc})
+// normalize returns the copy of a rendered document that pairChanges
+// compares: stripAttrs removed, ConfigMap binaryData summarized, and
+// konflate's secret/cert scrub (redact) applied. The copy also detaches the
+// change from the document flate lends for the lifetime of the run.
+func normalize(doc map[string]any) map[string]any {
+	c := manifest.DeepCopyMap(doc)
+	manifest.StripResourceAttributes(c, stripAttrs)
+	if manifest.DocKind(c) == manifest.KindConfigMap {
+		if binaryData, ok := c["binaryData"].(map[string]any); ok {
+			for k, v := range binaryData {
+				binaryData[k] = binaryDataSummary(v)
+			}
 		}
 	}
-	return out
+	redact(c)
+	return c
+}
+
+// binaryDataSummary replaces a ConfigMap binaryData value with its size and a
+// content hash, so a changed blob still reads as a change without the diff
+// carrying the base64 payload.
+func binaryDataSummary(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return "<redacted binary data>"
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
+	if err != nil {
+		return fmt.Sprintf("<redacted binary data: %d base64 chars sha256:%s>", len(s), manifest.SHA256Hex([]byte(s))[:16])
+	}
+	return fmt.Sprintf("<redacted binary data: %d bytes sha256:%s>", len(decoded), manifest.SHA256Hex(decoded)[:16])
+}
+
+// chartLabel returns a document's "helm.sh/chart" label ("<name>-<version>"),
+// or "" when absent.
+func chartLabel(doc map[string]any) string {
+	meta, _ := doc["metadata"].(map[string]any)
+	labels, _ := meta["labels"].(map[string]any)
+	chart, _ := labels["helm.sh/chart"].(string)
+	return chart
 }
 
 // unionKeys returns the deduplicated keys present across the given maps.
@@ -410,13 +459,9 @@ func unionKeys[K comparable, V any](ms ...map[K]V) []K {
 	return out
 }
 
-// redact is the konflate-specific scrub passed to flate's diff.Changes as
-// Options.Normalize. flate already strips the chart-bump attributes and
-// render-clock spec fields (via DefaultStripAttrs / DefaultStripFields)
-// and summarizes ConfigMap binaryData; this adds the two scrubs flate
-// leaves to the consumer's policy, run on the deep copy before flate's
-// equality check so they never read as a change (nor reach a
-// response):
+// redact is the secret/cert scrub normalize applies last. Both scrubs run
+// on the deep copy before the equality check so they never read as a change
+// (nor reach a response):
 //
 //   - Secret data/stringData values — opaque and often render-random or
 //     sensitive; whether keys were added/removed still shows. This is the
@@ -518,7 +563,7 @@ func pemToken(pem string) (string, bool) {
 // deduping a parent that failed on both (first side's message wins). konflate
 // also drops the failed parents' resources from the diff (see dropFailedParents),
 // so this list is the only place such a parent surfaces.
-func renderFailures(sides ...map[manifest.NamedResource]store.StatusInfo) []api.RenderFailure {
+func renderFailures(sides ...map[manifest.NamedResource]orchestrator.StatusInfo) []api.RenderFailure {
 	msgByParent := map[string]string{}
 	for _, failed := range sides {
 		for nr, info := range failed {

@@ -92,10 +92,9 @@ func run() error {
 		stop() // re-arm default termination for a second signal
 	}()
 
-	// Best-effort background GC of flate's on-disk source cache so it doesn't
-	// grow without bound across the process lifetime. Stops with ctx; disabled
-	// when CacheTTL <= 0.
-	go engine.RunCacheGC(ctx, cfg.CacheDir, cfg.CacheTTL, logger)
+	// Removes the cache layouts earlier flate versions left on the cache
+	// volume. In the background: the trees can be large.
+	go engine.RemoveLegacyCacheLayout(cfg.CacheDir, logger)
 
 	return srv.Run(ctx)
 }
