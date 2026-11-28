@@ -1351,11 +1351,11 @@ button.sum-pill:hover {
   font-weight: 600;
   color: var(--warn);
 }
-/* Four columns — render failures, cautions, blast radius, image changes. Explicit
-   4 / 2 / 1 breakpoints rather than auto-fit, which packs three then orphans the
-   fourth onto a lonely second row: wide → four across, medium → a balanced 2×2,
-   narrow → a single stack. Always a balanced grid, never a 3+1. The queries read
-   .overview's width (the pane), so they're right with or without the tree rail.
+/* Three columns — render failures, cautions, image changes. One explicit 3 / 1
+   breakpoint rather than auto-fit, which packs two then orphans the third onto
+   a lonely second row: wide → three across, narrow → a single stack. Always a
+   balanced grid, never a 2+1. The query reads .overview's width (the pane), so
+   it's right with or without the tree rail.
    No max-width: the columns (and their content) widen with the pane rather than
    leaving dead space on the right of a wide viewport. */
 .ov-grid {
@@ -1364,14 +1364,9 @@ button.sum-pill:hover {
   gap: 24px;
   align-items: start;
 }
-@container (min-width: 440px) {
+@container (min-width: 620px) {
   .ov-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@container (min-width: 820px) {
-  .ov-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 /* One section per column. min-width lets the track shrink below its content's
@@ -1415,7 +1410,7 @@ button.sum-pill:hover {
 }
 /* An empty section's placeholder — same flat left-rule row as a flag, but green:
    the absence is reassuring, the colour matches the red/amber rules on real flags
-   so the four columns read as one family whether or not they have content. */
+   so the three columns read as one family whether or not they have content. */
 .ov-empty {
   padding-left: 12px;
   border-left: 2px solid var(--ok);
@@ -1483,37 +1478,6 @@ button.sum-pill:hover {
   white-space: pre-wrap;
   /* A render-failure message can carry a long unbroken URL/registry path; break
      it within the column instead of letting it overflow into the next one. */
-  overflow-wrap: anywhere;
-}
-/* One row per changed app: the app, a quiet "N dependents" count, then the
-   named direct dependents wrapping below. Same flat shape as a flag but a
-   neutral rule — blast radius is informational, not something to act on. */
-.blast {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  padding-left: 12px;
-  border-left: 2px solid var(--border);
-  margin-bottom: 12px;
-}
-.blast:last-child {
-  margin-bottom: 0;
-}
-.blast-parent {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.blast-count {
-  font-size: 11px;
-  color: var(--muted);
-}
-.blast-deps {
-  flex-basis: 100%;
-  color: var(--muted);
-  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .img-list {

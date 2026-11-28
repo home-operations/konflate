@@ -3,20 +3,15 @@ package engine
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
 	"github.com/home-operations/flate/pkg/manifest"
-	"github.com/home-operations/flate/pkg/store"
+	"github.com/home-operations/flate/pkg/orchestrator"
 
 	"github.com/home-operations/konflate/internal/api"
-	"github.com/home-operations/konflate/internal/diff"
 )
-
-// blastRadiusTopN bounds how many parents the blast-radius block ranks, so a
-// sweeping PR that touches a whole storage layer doesn't emit an unbounded list.
-// The highest-impact parents (most transitive dependents) are kept.
-const blastRadiusTopN = 10
 
 // parentSet returns the producing parents on one side (the keys of a render's
 // Manifests map: every Kustomization/HelmRelease that rendered, even to zero
@@ -29,132 +24,55 @@ func parentSet(manifests map[manifest.NamedResource][]map[string]any) map[manife
 	return out
 }
 
-// parentLabels maps each rendered parent's "Kind ns/name" label back to its
-// flate id, so changes (which carry only the label) can be joined against the
-// NamedResource-keyed dependsOn graph without parsing labels.
-func parentLabels(sides ...map[manifest.NamedResource][]map[string]any) map[string]manifest.NamedResource {
-	out := map[string]manifest.NamedResource{}
-	for _, m := range sides {
-		for id := range m {
-			out[parentLabel(id)] = id
+// headDependsOnGraph returns the dependsOnGraph of the run's head side. The
+// Kustomizations and HelmReleases come from flate's selection of the head
+// tree, which lends them until the run closes. When flate renders
+// changed-only, the selection holds only the parents in the namespaces the
+// change touches, so the graph lacks the dependsOn of parents elsewhere, and
+// of an unchanged HelmRelease flate did not load. Selection restates the render
+// error for the selected resources; those failures already reach the diff as
+// render failures, so only a selection flate could not make at all is an error.
+func headDependsOnGraph(run *orchestrator.Run) (map[manifest.NamedResource][]manifest.NamedResource, error) {
+	out := map[manifest.NamedResource][]manifest.NamedResource{}
+	for _, rendered := range run.Results {
+		if rendered.ID.Side != manifest.TreeHead {
+			continue
+		}
+		selected, projection := run.Select([]manifest.TreeID{rendered.ID}, []manifest.NamedResource{
+			{Group: manifest.FluxKustomizeDomain, Kind: manifest.KindKustomization},
+			{Group: manifest.HelmReleaseDomain, Kind: manifest.KindHelmRelease},
+		}, nil)
+		if selected == nil {
+			return nil, fmt.Errorf("select the head parents: %w", projection.Selected)
+		}
+		for _, selection := range selected {
+			maps.Copy(out, dependsOnGraph(selection.Objects))
 		}
 	}
-	return out
-}
-
-// blastSeeds returns the parents whose reconciliation a reviewer cares about for
-// blast-radius: those whose rendered output changed (a distinct Parent in the
-// paired changes) plus those that failed to render on either side. labelToParent
-// maps a change's "Kind ns/name" parent label back to the flate id.
-func blastSeeds(
-	changes []diff.Change,
-	labelToParent map[string]manifest.NamedResource,
-	failed ...map[manifest.NamedResource]store.StatusInfo,
-) map[manifest.NamedResource]struct{} {
-	seeds := map[manifest.NamedResource]struct{}{}
-	for _, c := range changes {
-		if id, ok := labelToParent[c.Parent]; ok {
-			seeds[id] = struct{}{}
-		}
-	}
-	for _, side := range failed {
-		for id := range side {
-			seeds[id] = struct{}{}
-		}
-	}
-	return seeds
+	return out, nil
 }
 
 // dependsOnGraph rebuilds the declared spec.dependsOn graph (dependent → its
-// dependencies) from a rendered tree's store. flate's discovery admits every
-// Kustomization and HelmRelease declared in the tree's files into the store,
-// changed by this PR or not, so the graph covers the declared cluster even
-// though flate renders changed-only; a parent that only exists in another
-// producer's rendered output appears once that producer rendered, as with the
-// graph flate <= 0.6 exposed from the same store. flate resolves a
-// reference's omitted namespace to the dependent's own (Flux's default), and
-// dependsOn is same-kind only (KS→KS, HR→HR per the Flux spec); implicit
-// coupling (healthChecks, shared CRDs, service DNS) is not represented.
-// Nodes with no declared dependencies are omitted. The graph is the declared
-// one verbatim: cycle members and self-edges are retained (flate reports cycles
-// as render failures), so a consumer walking it must tolerate them.
-func dependsOnGraph(st *store.Store) map[manifest.NamedResource][]manifest.NamedResource {
+// dependencies) from the Kustomizations and HelmReleases of a rendered tree.
+// flate resolves a reference's omitted namespace to the dependent's own
+// (Flux's default), and dependsOn is same-kind only (KS→KS, HR→HR per the
+// Flux spec); implicit coupling (healthChecks, shared CRDs, service DNS) is
+// not represented. Nodes with no declared dependencies are omitted. The graph
+// is the declared one verbatim: cycle members and self-edges are retained
+// (flate reports cycles as render failures), so a consumer walking it must
+// tolerate them.
+func dependsOnGraph(objects []manifest.BaseManifest) map[manifest.NamedResource][]manifest.NamedResource {
 	out := map[manifest.NamedResource][]manifest.NamedResource{}
-	for _, kind := range [...]manifest.NamedResource{
-		{Group: manifest.FluxKustomizeDomain, Kind: manifest.KindKustomization},
-		{Group: manifest.HelmReleaseDomain, Kind: manifest.KindHelmRelease},
-	} {
-		for _, obj := range st.ListObjects(kind.Group, kind.Kind) {
-			var deps []manifest.NamedResource
-			for ref := range manifest.References(obj, manifest.ReferenceRelations) {
-				if ref.Use == "dependsOn" {
-					deps = append(deps, ref.NamedResource)
-				}
-			}
-			if len(deps) > 0 {
-				out[obj.Named()] = deps
+	for _, obj := range objects {
+		var deps []manifest.NamedResource
+		for ref := range manifest.References(obj, manifest.ReferenceRelations) {
+			if ref.Use == "dependsOn" {
+				deps = append(deps, ref.NamedResource)
 			}
 		}
-	}
-	return out
-}
-
-// blastRadius ranks seeds by their downstream dependents in the post-merge
-// (head) declared dependsOn graph. dependsOn is the head side's dependsOnGraph
-// (dependent → its dependencies, same-kind only). It inverts the graph into a
-// dependents adjacency list, then for each seed counts the direct dependents and
-// the full transitive closure (BFS over reverse edges, cycle-safe via a visited
-// set — flate also pre-validates dependsOn cycles). Only seeds with at least one
-// dependent are returned; sorted by transitive count desc (then parent label)
-// and capped to blastRadiusTopN.
-func blastRadius(
-	seeds map[manifest.NamedResource]struct{},
-	dependsOn map[manifest.NamedResource][]manifest.NamedResource,
-) []api.BlastRadiusEntry {
-	if len(seeds) == 0 || len(dependsOn) == 0 {
-		return nil
-	}
-	dependents := make(map[manifest.NamedResource][]manifest.NamedResource, len(dependsOn))
-	for dependent, deps := range dependsOn {
-		for _, dep := range deps {
-			dependents[dep] = append(dependents[dep], dependent)
+		if len(deps) > 0 {
+			out[obj.Named()] = deps
 		}
-	}
-
-	var out []api.BlastRadiusEntry
-	for seed := range seeds {
-		direct := dependents[seed]
-		if len(direct) == 0 {
-			continue
-		}
-		visited := map[manifest.NamedResource]struct{}{seed: {}}
-		queue := slices.Clone(direct)
-		for len(queue) > 0 {
-			n := queue[0]
-			queue = queue[1:]
-			if _, seen := visited[n]; seen {
-				continue
-			}
-			visited[n] = struct{}{}
-			queue = append(queue, dependents[n]...)
-		}
-		labels := make([]string, 0, len(direct))
-		for _, d := range direct {
-			labels = append(labels, parentLabel(d))
-		}
-		slices.Sort(labels)
-		labels = slices.Compact(labels)
-		out = append(out, api.BlastRadiusEntry{
-			Parent:     parentLabel(seed),
-			Direct:     labels,
-			Transitive: len(visited) - 1, // exclude the seed itself
-		})
-	}
-	slices.SortFunc(out, func(a, b api.BlastRadiusEntry) int {
-		return cmp.Or(cmp.Compare(b.Transitive, a.Transitive), cmp.Compare(a.Parent, b.Parent))
-	})
-	if len(out) > blastRadiusTopN {
-		out = out[:blastRadiusTopN]
 	}
 	return out
 }
@@ -172,7 +90,8 @@ func sortByResource(w []api.Warning) {
 // dependencies).
 // A dependency that never rendered (a typo / always-missing target) is out of
 // scope — only genuine removals are flagged. One caution per removed-and-still-
-// referenced parent.
+// referenced parent. A dependent missing from the graph (see
+// headDependsOnGraph) is not counted, so the caution can under-report.
 func danglingDependsOn(
 	baseParents, headParents map[manifest.NamedResource]struct{},
 	headDependsOn map[manifest.NamedResource][]manifest.NamedResource,

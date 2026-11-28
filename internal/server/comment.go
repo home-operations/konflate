@@ -35,7 +35,7 @@ type commentTemplateData struct {
 	// template can wrap or extend the default with `{{ .Summary }}`.
 	Summary string
 	// Sections are the summary's individual blocks (.Sections.Impact, .Cautions,
-	// .Failures, .Images, .BlastRadius) as rendered Markdown, to place à la carte
+	// .Failures, .Images) as rendered Markdown, to place à la carte
 	// instead of the whole `{{ .Summary }}`. Empty fields when a block is absent.
 	Sections summarySections
 }

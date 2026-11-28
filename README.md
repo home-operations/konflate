@@ -15,8 +15,8 @@ A one-line bump to a Flux resource — a `HelmRelease` chart version, an
 of rendered Kubernetes resources. The git diff shows the line; it doesn't show
 that. konflate does: it renders the Flux cluster at the PR's **merge-base** and
 at its **head** using [flate](https://github.com/home-operations/flate), diffs
-the two, and presents the result as a GitHub-style review UI with the blast
-radius, image changes, render failures, and heuristic danger flags surfaced up
+the two, and presents the result as a GitHub-style review UI with the impact,
+image changes, render failures, and heuristic danger flags surfaced up
 front.
 
 ## How it works
@@ -31,7 +31,7 @@ front.
 4. It produces a `DiffResult`: per-resource YAML diffs with server-side syntax
    highlighting (with word-level intra-line highlighting and expandable folded
    context), a navigation tree (`HelmRelease`/`Kustomization` → kind →
-   resource), plus the review signals — **impact** (blast radius), **image
+   resource), plus the review signals — **impact**, **image
    changes**, **render failures**, and **danger lint** (data-loss, privilege,
    RBAC, availability, and immutable-field changes — a StatefulSet
    `volumeClaimTemplates` bump, a workload selector edit, a PVC storage-class
@@ -271,7 +271,7 @@ limit (60 req/hour on GitHub). So an anonymous instance **disables forge CI-stat
 checks** entirely — polling every open PR's status is two forge calls per PR per
 refresh, which would blow that limit and start failing the PR list itself — and
 the red/amber/green check pill is hidden in the UI. Everything else (rendered
-diffs, blast radius, image changes, cautions) is unaffected. Configure a token or
+diffs, image changes, cautions) is unaffected. Configure a token or
 GitHub App and the checks come back, on the raised rate limit. The active feature
 gates are surfaced on `/api/meta` (see `api.Features`) so the UI shows only what
 the backend feeds.
@@ -351,7 +351,7 @@ review; without it they're still posted, just without a link.
 
 With `KONFLATE_STATUS_CHECKS` on, a **GitHub App** that holds the **Checks**
 permission posts a **Check Run** — a pass / neutral / fail conclusion plus the
-rendered summary (blockers, cautions, render failures, blast radius, image
+rendered summary (blockers, cautions, render failures, image
 changes) in the PR's Checks tab, which you can require as a merge gate (cautions
 are a non-blocking _neutral_; a blocker or render failure is a _failure_). A write PAT, GitLab, Forgejo, or an App without
 `checks:write` posts a plain commit status instead; konflate detects the missing
@@ -437,13 +437,13 @@ _Rendered `{{ .PR.HeadSHA }}` · [review →]({{ .ReviewURL }})_
 
 It renders against:
 
-| Field        | What                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.PR`        | the pull request — `.PR.Number`, `.PR.Title`, `.PR.Author`, `.PR.HeadRef`, `.PR.HeadSHA`, `.PR.BaseRef`, `.PR.URL`                                                                                                                                                                                                                                                               |
-| `.Diff`      | the rendered diff — `.Diff.Impact.Resources`, `.Diff.Warnings`, `.Diff.Images`, `.Diff.Failures`, …                                                                                                                                                                                                                                                                              |
-| `.ReviewURL` | konflate's review link (from `KONFLATE_PUBLIC_URL`), or empty                                                                                                                                                                                                                                                                                                                    |
-| `.Summary`   | konflate's default summary body, so you can wrap or extend it with `{{ .Summary }}`                                                                                                                                                                                                                                                                                              |
-| `.Sections`  | the summary's blocks _individually_, as rendered Markdown — `.Sections.Impact`, `.Sections.Failing` (blockers + render failures, one red box on GitHub), `.Sections.Blocking`, `.Sections.Cautions`, `.Sections.Failures`, `.Sections.Images`, `.Sections.BlastRadius` — to place à la carte instead of the whole `.Summary`. Each is empty when that block has nothing to show. |
+| Field        | What                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.PR`        | the pull request — `.PR.Number`, `.PR.Title`, `.PR.Author`, `.PR.HeadRef`, `.PR.HeadSHA`, `.PR.BaseRef`, `.PR.URL`                                                                                                                                                                                                                                      |
+| `.Diff`      | the rendered diff — `.Diff.Impact.Resources`, `.Diff.Warnings`, `.Diff.Images`, `.Diff.Failures`, …                                                                                                                                                                                                                                                     |
+| `.ReviewURL` | konflate's review link (from `KONFLATE_PUBLIC_URL`), or empty                                                                                                                                                                                                                                                                                           |
+| `.Summary`   | konflate's default summary body, so you can wrap or extend it with `{{ .Summary }}`                                                                                                                                                                                                                                                                     |
+| `.Sections`  | the summary's blocks _individually_, as rendered Markdown — `.Sections.Impact`, `.Sections.Failing` (blockers + render failures, one red box on GitHub), `.Sections.Blocking`, `.Sections.Cautions`, `.Sections.Failures`, `.Sections.Images` — to place à la carte instead of the whole `.Summary`. Each is empty when that block has nothing to show. |
 
 So you can drop the cautions and image changes wherever you like and skip the rest:
 
@@ -491,7 +491,7 @@ Metrics server (`KONFLATE_METRICS_PORT`, default `8081`, disable with `KONFLATE_
 (streamable HTTP) exposing three tools — `list_pull_requests` (paginated, newest
 first), `get_pr_summary`, and `get_pr_diff` (the rendered YAML as a plain-text
 diff, per resource) — so an AI reviewer (Claude Code, an editor, Claude Desktop)
-can pull konflate's rendered blast radius, cautions, and image changes for a Flux
+can pull konflate's rendered cautions and image changes for a Flux
 PR instead of guessing from the raw git diff. Each PR's full diff is also an MCP
 resource (`konflate://pr/<number>/diff`) that `get_pr_summary` links to, so a
 client can fetch it on demand rather than inlining it. It serves the same data as
